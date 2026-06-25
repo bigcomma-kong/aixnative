@@ -1,0 +1,18 @@
+# Local-run profile — boots the app with H2 in-memory (PostgreSQL compatibility mode),
+# so you can run it with no PostgreSQL install and no API keys.
+# Activate with: --spring.profiles.active=h2  (IntelliJ run config "Active profiles: h2")
+# Not for production — H2 is only on the dev/test classpath.
+spring:
+  datasource:
+    url: jdbc:h2:mem:underwriteai;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+# JWT secret + free-credit count fall back to the dev defaults in application.yml.

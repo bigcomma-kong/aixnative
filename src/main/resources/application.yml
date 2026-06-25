@@ -1,0 +1,71 @@
+spring:
+  application:
+    name: underwrite-ai
+
+  # dev default = PostgreSQL. Override via env (DB_URL/DB_USER/DB_PASSWORD).
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/underwriteai}
+    username: ${DB_USER:underwriteai}
+    password: ${DB_PASSWORD:}
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Flyway owns the schema (single source of truth). Hibernate never alters it.
+      ddl-auto: none
+    properties:
+      hibernate.jdbc.time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  # --- Email (가입 인증/알림) — 신규 키 확보 후 연결. Phase 1 범위 밖. ---
+  # mail:
+  #   host: ${MAIL_HOST:}
+  #   port: ${MAIL_PORT:587}
+  #   username: ${MAIL_USERNAME:}
+  #   password: ${MAIL_PASSWORD:}
+
+  # --- 소셜 로그인 (구글/카카오) — 신규 client-id/secret 확보 후 연결. Phase 1 범위 밖. ---
+  # security:
+  #   oauth2:
+  #     client:
+  #       registration:
+  #         google:
+  #           client-id: ${GOOGLE_CLIENT_ID:}
+  #           client-secret: ${GOOGLE_CLIENT_SECRET:}
+  #         kakao:
+  #           client-id: ${KAKAO_CLIENT_ID:}
+  #           client-secret: ${KAKAO_CLIENT_SECRET:}
+
+# Stateless JWT signing. SECRET must be >= 32 bytes (HS256). Override in prod.
+security:
+  jwt:
+    secret: ${JWT_SECRET:dev-only-change-me-please-32bytes-minimum-secret-0123}
+    access-ttl-minutes: ${JWT_ACCESS_TTL_MINUTES:120}
+
+# AI router (ported from MASTERN AiServiceManager). New keys only — never copy legacy values.
+ai:
+  service:
+    auto-fallback: ${AI_AUTO_FALLBACK:true}
+    provider-timeout-ms: ${AI_PROVIDER_TIMEOUT_MS:75000}
+    overall-deadline-ms: ${AI_OVERALL_DEADLINE_MS:90000}
+
+claude:
+  api:
+    key: ${CLAUDE_API_KEY:}
+    url: ${CLAUDE_API_URL:https://api.anthropic.com/v1/messages}
+    model: ${CLAUDE_API_MODEL:claude-opus-4-8}
+    max-tokens: ${CLAUDE_MAX_TOKENS:4096}
+  priority: ${CLAUDE_PRIORITY:0}
+
+# Freemium: free AI-analysis credits granted at signup.
+billing:
+  free-signup-credits: ${FREE_SIGNUP_CREDITS:5}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

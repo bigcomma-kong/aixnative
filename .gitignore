@@ -1,0 +1,34 @@
+# Build
+/build/
+/out/
+**/build/
+.gradle/
+
+# IntelliJ / Eclipse
+.idea/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+bin/
+
+# Kotlin / Gradle
+.kotlin/
+
+# Secrets / local config — NEVER commit keys
+.env
+.env.*
+*.local.properties
+application-local.yml
+application-local.properties
+src/main/resources/secrets/
+
+# Logs
+*.log
+/logs/
+
+# OS
+.DS_Store
+Thumbs.db
