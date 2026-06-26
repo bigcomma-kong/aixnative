@@ -1,0 +1,43 @@
+# 로컬에서 "단일 컨테이너 앱 + 관리형 Postgres" 구조를 GCP(Cloud Run + Cloud SQL)와
+# 동일하게 재현. 시크릿은 셸 env 또는 .env 파일로 주입(하드코딩 금지).
+#
+#   DB_PASSWORD=... CLAUDE_OAUTH_TOKEN=... docker compose up --build
+#   → http://localhost:8080  (로그인 admin@aixnative.com / admin123)
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: aixnative
+      POSTGRES_USER: aixnative
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-aixnative_dev_pw}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aixnative -d aixnative"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # h2 기본 프로필을 끄고 base(Postgres) 설정 사용. DB 는 env 로 주입.
+      SPRING_PROFILES_ACTIVE: postgres
+      DB_URL: jdbc:postgresql://db:5432/aixnative
+      DB_USER: aixnative
+      DB_PASSWORD: ${DB_PASSWORD:-aixnative_dev_pw}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-please-32bytes-minimum-secret-0123}
+      # AI 자격증명 — 둘 중 하나(상업 전환 시 CLAUDE_API_KEY). 없으면 분석은 503.
+      CLAUDE_OAUTH_TOKEN: ${CLAUDE_OAUTH_TOKEN:-}
+      CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
+      # SPA 가 같은 오리진에서 서빙되므로 CORS 불필요(동일 오리진 기본 허용).
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:

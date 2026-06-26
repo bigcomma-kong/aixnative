@@ -4,6 +4,7 @@ import com.aixnative.common.security.JwtAuthFilter
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.http.HttpMethod
 import org.springframework.http.HttpStatus
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
@@ -36,6 +37,13 @@ class SecurityConfig(private val jwtAuthFilter: JwtAuthFilter) {
                     "/actuator/health",
                     "/actuator/health/**",
                     "/error",
+                ).permitAll()
+                // 단일 컨테이너 배포: Spring 이 Vite SPA(index.html + /assets/**)를 서빙한다.
+                // SPA 셸·정적 자산은 공개(GET). 보호 대상은 /api/** (인증) 뿐.
+                it.requestMatchers(
+                    HttpMethod.GET,
+                    "/", "/index.html", "/assets/**",
+                    "/*.svg", "/*.ico", "/*.png", "/*.json", "/*.txt", "/*.webmanifest",
                 ).permitAll()
                 it.requestMatchers("/api/admin/**").hasRole("ADMIN")
                 it.anyRequest().authenticated()

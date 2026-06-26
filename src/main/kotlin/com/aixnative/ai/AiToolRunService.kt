@@ -48,6 +48,28 @@ class AiToolRunService(private val repository: AiToolRunRepository) {
         )
     }
 
+    /**
+     * 같은 딜의 단계별 최신 성공 결과 JSON 맵(tool → resultJson). 테넌트/유저 스코프.
+     * IC 메모 등 후행 단계가 앞 단계(스크리닝·시장조사·언더라이팅) 결과를 종합(체이닝)하는 데 사용.
+     */
+    @Transactional(readOnly = true)
+    fun latestSuccessResultsByTool(dealName: String): Map<String, String> {
+        val current = TenantContext.require()
+        val runs = repository.findByTenantIdAndOwnerUserIdAndDealNameAndDeletedAtIsNullOrderByIdDesc(
+            current.tenantId,
+            current.userId,
+            dealName,
+        )
+        val latest = LinkedHashMap<String, String>()
+        for (run in runs) {
+            val json = run.resultJson ?: continue
+            if (run.status == RunStatus.SUCCESS && !latest.containsKey(run.tool)) {
+                latest[run.tool] = json
+            }
+        }
+        return latest
+    }
+
     /** Tenant-scoped fetch. Returns 404 for a missing row OR one owned by another tenant. */
     @Transactional(readOnly = true)
     fun get(id: Long): AiToolRun {

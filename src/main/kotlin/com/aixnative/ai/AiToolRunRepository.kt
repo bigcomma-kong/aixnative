@@ -12,4 +12,14 @@ interface AiToolRunRepository : JpaRepository<AiToolRun, Long> {
         tenantId: Long,
         ownerUserId: Long,
     ): List<AiToolRun>
+
+    /**
+     * Active runs for one deal (tenant/user scoped), newest first.
+     * IC 메모 등 후행 단계가 같은 딜의 앞 단계 결과를 종합(체이닝)할 때 사용.
+     */
+    fun findByTenantIdAndOwnerUserIdAndDealNameAndDeletedAtIsNullOrderByIdDesc(
+        tenantId: Long,
+        ownerUserId: Long,
+        dealName: String,
+    ): List<AiToolRun>
 }

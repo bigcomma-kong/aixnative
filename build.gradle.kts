@@ -36,6 +36,9 @@ dependencies {
 	runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
 	runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
 	runtimeOnly("org.postgresql:postgresql")
+	// GCP Cloud Run → Cloud SQL(PostgreSQL) JDBC 연결용 소켓 팩토리.
+	// DB_URL 에 ?cloudSqlInstance=...&socketFactory=com.google.cloud.sql.postgres.SocketFactory 사용 시 필요.
+	runtimeOnly("com.google.cloud.sql:postgres-socket-factory:1.21.0")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
 	testImplementation("org.springframework.security:spring-security-test")

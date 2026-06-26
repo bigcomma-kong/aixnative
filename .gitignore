@@ -38,5 +38,8 @@ Thumbs.db
 *.mv.db
 *.trace.db
 
+# 빌드된 SPA 정적 산출물(Docker/로컬 단일 컨테이너 검증 시 생성) — 소스 아님
+/src/main/resources/static/
+
 # Claude Code local config / hooks
 .claude/

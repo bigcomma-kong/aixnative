@@ -68,7 +68,7 @@ class UnderwritingService(
             AnalysisType.MARKET_STUDY ->
                 UnderwritingPrompts.marketStudy(assetFacts, req.dealName)
             AnalysisType.IC_MEMO ->
-                UnderwritingPrompts.icMemo(facts + "\n\n" + assetFacts, req.dealName)
+                UnderwritingPrompts.icMemo(buildIcMemoFacts(facts, assetFacts, req.dealName), req.dealName)
         }
 
         // 크레딧 게이트: 잔액 확인 → AI 호출 → 성공 시에만 1 크레딧 차감.
@@ -141,6 +141,24 @@ class UnderwritingService(
             request = r.requestJson?.let { objectMapper.readTree(it) },
             result = r.resultJson?.let { objectMapper.readTree(it) },
         )
+    }
+
+    /**
+     * IC 메모 <FACTS> 조립 — 같은 딜의 앞 단계(스크리닝·시장조사·언더라이팅) 실제 AI 결과 JSON을
+     * 종합하고, 결정론적 Pro Forma 수치를 재무 베이스로 덧붙인다. 앞 단계가 있을수록 종합이 깊어진다.
+     * (앞 단계가 없어도 ProForma·자산 facts 만으로 독립 동작.)
+     */
+    private fun buildIcMemoFacts(facts: String, assetFacts: String, dealName: String?): String {
+        val priors = dealName?.takeIf { it.isNotBlank() }
+            ?.let { aiToolRunService.latestSuccessResultsByTool(it) }
+            ?: emptyMap()
+        val sb = StringBuilder()
+        priors[AnalysisType.SCREENING.tool]?.let { sb.append("[스크리닝 결과]\n").append(it).append("\n\n") }
+        priors[AnalysisType.MARKET_STUDY.tool]?.let { sb.append("[시장조사 결과]\n").append(it).append("\n\n") }
+        priors[AnalysisType.UNDERWRITING.tool]?.let { sb.append("[언더라이팅 결과]\n").append(it).append("\n\n") }
+        sb.append("[자산·매입 가정]\n").append(assetFacts).append("\n\n")
+        sb.append("[Pro Forma 확정 수치]\n").append(facts)
+        return sb.toString()
     }
 
     /** 모델이 코드펜스/잡설을 섞어도 첫 JSON 객체를 추출해 파싱. 실패하면 null (원문은 호출부가 보존). */

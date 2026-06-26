@@ -1,0 +1,27 @@
+# 빌드 컨텍스트에서 제외 — 빌드 산출물/의존성/로컬 데이터/IDE/시크릿
+.git
+.gitignore
+.idea
+.vscode
+
+# Gradle / Java 빌드 산출물 (컨테이너 안에서 재빌드)
+build
+.gradle
+out
+
+# 프론트 의존성/산출물 (Dockerfile stage 1 에서 npm ci + build 로 재생성)
+frontend/node_modules
+frontend/dist
+
+# Spring 에 동봉되는 SPA 는 빌드 시 복사됨 — 소스 트리의 정적 산출물 제외
+src/main/resources/static
+
+# 로컬 H2 파일 DB / 런타임 데이터
+data
+*.log
+
+# 문서/스크래치
+*.md
+docs
+http
+scratchpad

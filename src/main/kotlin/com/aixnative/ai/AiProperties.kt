@@ -13,7 +13,7 @@ data class ClaudeProperties(
         val key: String = "",
         val url: String = "https://api.anthropic.com/v1/messages",
         val model: String = "claude-opus-4-8",
-        val maxTokens: Int = 4096,
+        val maxTokens: Int = 8192,
     )
 
     /**

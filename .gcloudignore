@@ -1,0 +1,16 @@
+# Cloud Build 업로드 컨텍스트에서 제외(빌드 산출물/의존성/로컬데이터/IDE).
+# Dockerfile·src·frontend(소스)·gradle 래퍼는 업로드되어야 하므로 제외하지 않음.
+.git
+.gitignore
+.idea
+.vscode
+build
+.gradle
+out
+frontend/node_modules
+frontend/dist
+src/main/resources/static
+data
+*.log
+docs
+http
