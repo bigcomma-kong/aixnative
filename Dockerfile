@@ -10,9 +10,12 @@
 # ── Stage 1: 프론트엔드(Vite/React) 빌드 → /fe/dist ────────────────────────────
 FROM node:22-alpine AS frontend
 WORKDIR /fe
-# 의존성 레이어 캐시: 매니페스트 먼저 복사 후 설치
+# 의존성 레이어 캐시: 매니페스트 먼저 복사 후 설치.
+# npm ci 대신 npm install — lockfile 이 Windows 에서 생성돼 Linux 전용 optional
+# 네이티브 패키지(@emnapi/*, @rollup/rollup-linux-*)의 실제 노드가 빠져 있어,
+# 컨테이너(Linux)에서 lock 을 치유하며 올바른 바이너리를 설치한다.
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+RUN npm install --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
 
