@@ -404,6 +404,7 @@ td.warn { color: var(--no); font-weight: 600; }
 .plan-pill { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; padding: 0.12rem 0.4rem; border-radius: 999px; }
 .plan-pill.free { background: var(--accent); color: oklch(99% 0 0); }
 .plan-pill.paid { background: var(--go); color: oklch(99% 0 0); }
+.plan-pill.admin { background: oklch(55% 0.18 290); color: oklch(99% 0 0); }
 
 /* ============================================================
    Paywall (Phase 3 stub — 결제 도입 전)
@@ -460,6 +461,31 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 .stage-label { font-size: 0.92rem; font-weight: 600; }
 .stage-hint { font-size: 0.7rem; opacity: 0.8; font-weight: 500; }
 
+.doc-type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.85rem; }
+.doc-type-btn {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem;
+  padding: 0.55rem 0.7rem; text-align: left; cursor: pointer;
+  background: transparent; border: 1px solid oklch(90% 0.02 264); border-radius: 10px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.doc-type-btn:hover { border-color: var(--accent); }
+.doc-type-btn[aria-pressed='true'] { border-color: var(--accent); background: var(--accent-tint); }
+.dt-label { font-size: 0.85rem; font-weight: 650; }
+.dt-hint { font-size: 0.67rem; opacity: 0.72; }
+
+/* 코드 계산 입력 그리드(BOV·개발타당성) */
+.calc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem 0.7rem; }
+.calc-field { display: flex; flex-direction: column; gap: 0.2rem; }
+.calc-field label { font-size: 0.72rem; font-weight: 600; color: var(--ink-faint); }
+.calc-field input { width: 100%; }
+.calc-hint { font-size: 0.64rem; opacity: 0.66; }
+
+/* 코드 확정 수치 카드 — AI 서술 위에 결정론적 수치 강조 */
+.calc-card { border: 1px solid var(--accent); border-radius: 12px; padding: 0.9rem 1rem; background: linear-gradient(180deg, var(--accent-tint), var(--surface)); margin-bottom: 0.5rem; }
+.calc-badge { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 0.06rem 0.4rem; margin-left: 0.4rem; vertical-align: middle; }
+.metric.hl { background: linear-gradient(180deg, var(--accent-tint), var(--surface)); }
+.metric.hl .v { color: var(--accent); }
+
 .result-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
 .stage-pill {
   display: inline-block; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.03em;
@@ -470,4 +496,48 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
+}
+
+/* ── 분석 진행 모달 (AI 호출 30~60초 동안 진행 표시) ───────────────── */
+.analyze-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: oklch(24% 0.012 65 / 0.42);
+  backdrop-filter: blur(6px) saturate(1.2);
+  animation: overlay-in var(--dur) var(--ease);
+}
+.analyze-modal {
+  width: min(90vw, 360px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 2rem 1.75rem;
+  display: grid;
+  justify-items: center;
+  gap: 0.85rem;
+  text-align: center;
+  animation: modal-in var(--dur) var(--ease);
+}
+.analyze-spinner {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 3px solid var(--accent-tint);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+.analyze-modal-title { font-size: 1.05rem; color: var(--ink); }
+.analyze-modal-sub { font-size: 0.9rem; color: var(--ink-soft); margin: 0; line-height: 1.5; }
+
+@keyframes overlay-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(0.98) } to { opacity: 1; transform: none } }
+@keyframes spin { to { transform: rotate(360deg) } }
+
+@media (prefers-reduced-motion: reduce) {
+  .analyze-overlay, .analyze-modal { animation: none; }
+  .analyze-spinner { animation-duration: 1.8s; }
 }

@@ -233,6 +233,22 @@ export function UnderwriteView({ onCreditBalance }: UnderwriteViewProps) {
       </div>
 
       <HistoryPanel version={historyVersion} onOpen={(r, runId) => setResults({ ...r, runId })} />
+
+      {busy !== 'none' && (
+        <div className="analyze-overlay" role="alertdialog" aria-busy="true" aria-live="assertive" aria-label="분석 진행 중">
+          <div className="analyze-modal">
+            <div className="analyze-spinner" aria-hidden="true" />
+            <strong className="analyze-modal-title">
+              {busy === 'proforma' ? 'ProForma 계산 중…' : `${STAGE_LABEL[busy] ?? 'AI'} 분석 중…`}
+            </strong>
+            <p className="analyze-modal-sub">
+              {busy === 'proforma'
+                ? '순수 계산이라 곧 끝납니다.'
+                : 'AI가 딜을 분석하고 있습니다 · 보통 30~60초 걸립니다. 창을 닫지 마세요.'}
+            </p>
+          </div>
+        </div>
+      )}
     </>
   )
 }
