@@ -1,1 +1,1 @@
-rootProject.name = "underwrite-ai"
+rootProject.name = "aixnative"

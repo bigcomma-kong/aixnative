@@ -6,7 +6,7 @@ plugins {
 	kotlin("plugin.jpa") version "1.9.25"
 }
 
-group = "com.underwriteai"
+group = "com.aixnative"
 version = "0.0.1-SNAPSHOT"
 
 java {
@@ -60,4 +60,11 @@ allOpen {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+	jvmArgs("-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8")
+}
+
+// 콘솔 한글 깨짐 방지: main() / bootRun 등 JVM 실행 출력을 UTF-8 로 고정.
+// (Windows 기본 콘솔 코드페이지 MS949 → UTF-8 로 통일)
+tasks.withType<JavaExec>().configureEach {
+	jvmArgs("-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8")
 }

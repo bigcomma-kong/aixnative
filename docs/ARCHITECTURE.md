@@ -1,7 +1,7 @@
-# ARCHITECTURE — underwrite-ai
+# ARCHITECTURE — aixnative
 
 ## 패키지 (도메인/바운디드 컨텍스트별, flat 아님)
-베이스 `com.underwriteai`(제안):
+베이스 `com.aixnative`(제안):
 - `account` — 가입·이메일인증·비번재설정·소셜로그인·테넌트·사용자
 - `billing` — `credit_ledger`·plan(FREE/PAID)·크레딧 차감/충전·(나중)결제
 - `ai` — AI 라우터(`AiServiceManager` 이식)·provider 클라이언트·프롬프트·tool-run 이력·미터링

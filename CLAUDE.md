@@ -1,4 +1,4 @@
-# underwrite-ai — AI 부동산 딜 언더라이팅 SaaS (상업판)
+# aixnative — AI 부동산 딜 언더라이팅 SaaS (상업판)
 
 > 새 세션 시작 시 컨텍스트로 로드됩니다. **먼저 `NEXT-SESSION-START-HERE.md` 를 읽으세요.**
 
@@ -24,8 +24,8 @@
 
 ## 네이밍 원칙 (엄수)
 - **"MASTERN" / "Mastern AI Hub" 명칭을 완전히 버린다.** 제품명·브랜드·UI 문구·패키지·설정 키·이메일 발신명·도메인 어디에도 mastern 을 쓰지 않는다.
-- 제품 정체성 = **underwrite-ai**(독립 상업 제품). 사내 도구와 무관함을 외부에 드러낸다.
-- 베이스 패키지 `com.underwriteai`(또는 다른 중립 네임), **`com.mastern` 금지**.
+- 제품 정체성 = **aixnative**(독립 상업 제품). 사내 도구와 무관함을 외부에 드러낸다.
+- 베이스 패키지 `com.aixnative`(또는 다른 중립 네임), **`com.mastern` 금지**.
 - 'MASTERN' 은 **오직 개발 문서의 "코드 이식 출처"(내부 레거시)** 로만 등장한다. 제품 산출물엔 흔적 없음.
 
 ## 보안 원칙 (엄수)
@@ -39,7 +39,7 @@
 - 작업은 오직 이 디렉터리 안에서.
 
 ## 다음 할 일
-1. 빌드툴/베이스 패키지 확정(`com.underwriteai` 제안) → Phase 1 스캐폴딩.
+1. 빌드툴/베이스 패키지 확정(`com.aixnative` 제안) → Phase 1 스캐폴딩.
 2. Phase 1: Kotlin SB3 + JPA/Flyway(PG) + 멀티테넌트 계정/인증(JWT+소셜) + 크레딧 원장 + AI 라우터 이식.
 3. Phase 2: 언더라이팅 도메인 이식(ProForma·CreGuidelines·AiPromptBuilder) + 크레딧 게이트 end-to-end.
 

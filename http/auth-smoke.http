@@ -1,0 +1,118 @@
+### aixnative — 로컬 스모크 테스트 (앱을 h2 프로파일로 띄운 상태에서 실행)
+### 각 요청 왼쪽의 ▶ 아이콘을 눌러 실행하세요. (IntelliJ 내장 HTTP Client)
+
+### 1) 헬스 체크
+GET http://localhost:8080/actuator/health
+
+### 2) 회원가입 — 성공 시 토큰을 캡처해 둠 (아래 /me 에서 자동 사용)
+POST http://localhost:8080/api/auth/signup
+Content-Type: application/json
+
+{
+  "email": "demo@example.com",
+  "password": "password123"
+}
+
+> {%
+    client.global.set("token", response.body.data.token);
+    client.test("가입 성공 + 무료 크레딧 5", function() {
+        client.assert(response.status === 201, "status != 201");
+        client.assert(response.body.data.creditBalance === 5, "creditBalance != 5");
+    });
+%}
+
+### 3) 로그인 — 같은 계정으로 (토큰 갱신)
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "demo@example.com",
+  "password": "password123"
+}
+
+> {% client.global.set("token", response.body.data.token); %}
+
+### 4) 내 정보 — 위에서 받은 토큰 사용 (인증 필요 엔드포인트)
+GET http://localhost:8080/api/auth/me
+Authorization: Bearer {{token}}
+
+### 5) 토큰 없이 호출 → 401 이어야 정상 (인증 차단 확인)
+GET http://localhost:8080/api/auth/me
+
+### 6) ProForma 계산 (무료 — 크레딧 미소비). IRR·EM·DSCR·민감도·시나리오 산출
+POST http://localhost:8080/api/underwriting/proforma
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "dealName": "샘플딜",
+  "assetType": "오피스",
+  "askingPriceEok": 1000,
+  "noiEok": 55,
+  "ltvPct": 50,
+  "loanRatePct": 3.5,
+  "exitCapPct": 5.0
+}
+
+### 7) AI 언더라이팅 분석 (1 크레딧 차감). CLAUDE_API_KEY 미설정 시 503 (크레딧 미차감)
+POST http://localhost:8080/api/underwriting/analyze
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "dealName": "샘플딜",
+  "assetType": "오피스",
+  "askingPriceEok": 1000,
+  "noiEok": 55,
+  "ltvPct": 50,
+  "loanRatePct": 3.5,
+  "exitCapPct": 5.0
+}
+
+### 7-1) 시장조사 단계 (1 크레딧). 같은 딜명으로 단계를 쌓으면 보고서에 합본됨
+POST http://localhost:8080/api/underwriting/analyze/MARKET_STUDY
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "dealName": "샘플딜",
+  "assetType": "오피스",
+  "location": "서울 GBD",
+  "notes": "핵심 임차인 2026년 만기, 최근 리모델링 완료",
+  "askingPriceEok": 1000,
+  "noiEok": 55,
+  "ltvPct": 50,
+  "loanRatePct": 3.5,
+  "exitCapPct": 5.0
+}
+
+### 7-2) 투심 메모 단계 (1 크레딧)
+POST http://localhost:8080/api/underwriting/analyze/IC_MEMO
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "dealName": "샘플딜",
+  "assetType": "오피스",
+  "askingPriceEok": 1000,
+  "noiEok": 55,
+  "ltvPct": 50,
+  "loanRatePct": 3.5,
+  "exitCapPct": 5.0
+}
+
+### 8) 내 분석 이력 목록 (저장된 딜)
+GET http://localhost:8080/api/underwriting/runs
+Authorization: Bearer {{token}}
+
+### 8-1) 투자 보고서(HTML) — runId 는 위 분석 응답의 runId. 같은 딜의 단계들을 합본
+GET http://localhost:8080/api/underwriting/report/1
+Authorization: Bearer {{token}}
+
+### 9) 분석 이력 상세 (id 는 7)번 응답의 runId 로 교체)
+GET http://localhost:8080/api/underwriting/runs/1
+Authorization: Bearer {{token}}
+
+### 10) (어드민) 전체 사용자 — admin@aixnative.com 로 가입/로그인한 토큰이어야 200, 아니면 403
+GET http://localhost:8080/api/admin/users
+Authorization: Bearer {{token}}

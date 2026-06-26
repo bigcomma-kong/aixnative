@@ -1,6 +1,6 @@
 # 여기서 시작하세요 (다음 세션)
 
-이 디렉터리는 **underwrite-ai** — MASTERN 투자 기능의 상업판(AI 딜 언더라이팅 SaaS) 신규 프로젝트입니다.
+이 디렉터리는 **aixnative** — MASTERN 투자 기능의 상업판(AI 딜 언더라이팅 SaaS) 신규 프로젝트입니다.
 아직 **코드는 없고 기획/핸드오프 문서만** 있습니다. 이전 세션에서 설계를 확정하고 기록만 남긴 상태입니다.
 
 ## 읽는 순서
@@ -15,7 +15,7 @@
 - 스택: **Kotlin + Spring Boot 3 + JPA/Flyway(PostgreSQL)**, JWT+소셜 인증, 멀티테넌트(`tenant_id`), 개인 격리, freemium(무료 N회→구매), 결제는 나중.
 
 ## 시작 전 남은 결정 2가지
-1. **빌드툴/베이스 패키지** — Gradle Kotlin DSL + `com.underwriteai` 제안 → 확정?
+1. **빌드툴/베이스 패키지** — Gradle Kotlin DSL + `com.aixnative` 제안 → 확정?
 2. **프론트 형태** — REST API + SPA(React/Vue) vs 서버템플릿, 모바일 반응형 범위
 
 ## 결정되면 → Phase 1 스캐폴딩 착수

@@ -2,7 +2,7 @@
 # Lets the full build + tests run green with no live PostgreSQL and no API keys.
 spring:
   datasource:
-    url: jdbc:h2:mem:underwriteai;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    url: jdbc:h2:mem:aixnative;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
     username: sa
     password: ""
     driver-class-name: org.h2.Driver

@@ -32,3 +32,11 @@ src/main/resources/secrets/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local runtime DB (H2 dev) — never commit
+/data/
+*.mv.db
+*.trace.db
+
+# Claude Code local config / hooks
+.claude/

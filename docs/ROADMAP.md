@@ -1,7 +1,7 @@
-# ROADMAP — underwrite-ai
+# ROADMAP — aixnative
 
 ## Phase 0 — 결정·관문
-- 빌드툴/베이스 패키지 확정(Gradle Kotlin DSL + `com.underwriteai`).
+- 빌드툴/베이스 패키지 확정(Gradle Kotlin DSL + `com.aixnative`).
 - 프론트 형태 결정(SPA vs 서버템플릿, 모바일 범위).
 - 신규 API 키: **v1 최소 = Claude + 이메일(가입)**. (언더라이팅은 외부 데이터 거의 불필요.)
 - 도메인/클라우드/DB(PostgreSQL) 확정.

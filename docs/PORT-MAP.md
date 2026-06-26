@@ -1,4 +1,4 @@
-# PORT-MAP — MASTERN → underwrite-ai
+# PORT-MAP — MASTERN → aixnative
 
 출처 루트: `C:\eGovFrame-4.9.5\eclipse-workspace\MASTERN\src\main\java\com\mastern\…` (읽기 전용 참조)
 

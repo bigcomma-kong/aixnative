@@ -4,7 +4,9 @@
 # Not for production — H2 is only on the dev/test classpath.
 spring:
   datasource:
-    url: jdbc:h2:mem:underwriteai;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    # 파일 기반 H2 — 재시작에도 계정·분석 이력이 유지됩니다(인메모리는 매번 초기화됨).
+    # 초기화하려면 프로젝트 루트의 ./data/ 폴더를 지우세요. (gitignore 처리됨)
+    url: jdbc:h2:file:./data/aixnative-dev;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;AUTO_SERVER=TRUE
     username: sa
     password: ""
     driver-class-name: org.h2.Driver

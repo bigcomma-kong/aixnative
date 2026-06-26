@@ -1,4 +1,4 @@
-# underwrite-ai
+# aixnative
 
 AI 부동산 **딜 언더라이팅** SaaS (상업판). 사내 도구 MASTERN 의 투자 기능을 개인 가입형 freemium 서비스로 재구성한 신규 프로젝트.
 

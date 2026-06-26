@@ -1,4 +1,4 @@
--- underwrite-ai — Phase 1 foundation schema.
+-- aixnative — Phase 1 foundation schema.
 -- DB-agnostic: no Oracle-specific syntax (no SEQ.NEXTVAL / ROWNUM / SYSDATE / MERGE).
 -- PK uses identity columns supported by both PostgreSQL 10+ and H2 (test).
 -- Every domain table carries tenant_id day-one for multi-tenant isolation.
