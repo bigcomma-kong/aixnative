@@ -57,7 +57,8 @@ gcloud sql instances create "$SQL_INSTANCE" \
 gcloud sql databases describe "$DB_NAME" --instance="$SQL_INSTANCE" >/dev/null 2>&1 || \
 gcloud sql databases create "$DB_NAME" --instance="$SQL_INSTANCE"
 
-[ -z "$DB_PASSWORD" ] && DB_PASSWORD="$(openssl rand -base64 24 | tr -d '/+=')"
+# Cloud SQL 비밀번호 정책(대문자·소문자·숫자·특수문자 각 1+) 충족: 랜덤 본문 + 고정 보장 접미사.
+[ -z "$DB_PASSWORD" ] && DB_PASSWORD="$(openssl rand -base64 24 | tr -d '/+=')Aa1!"
 if gcloud sql users describe "$DB_USER" --instance="$SQL_INSTANCE" >/dev/null 2>&1; then
   gcloud sql users set-password "$DB_USER" --instance="$SQL_INSTANCE" --password="$DB_PASSWORD"
 else
