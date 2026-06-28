@@ -20,7 +20,8 @@ DB_NAME="${DB_NAME:-aixnative}"
 DB_USER="${DB_USER:-aixnative}"
 SQL_TIER="${SQL_TIER:-db-f1-micro}"           # 최저가. 상용 트래픽 시 상향
 IMAGE_TAG="${IMAGE_TAG:-v1}"
-ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-https://aixnative.com,https://www.aixnative.com}"
+# 운영 도메인 + 현재 Cloud Run URL(도메인 매핑 전 브라우저 접속용). 도메인 연결 후엔 run.app 제거 가능.
+ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-https://aixnative.com,https://www.aixnative.com,https://aixnative-310112011265.asia-northeast3.run.app,http://localhost:5173}"
 
 # 시크릿 — env 로 주입(미설정 시 자동 생성). 절대 깃 커밋 금지.
 DB_PASSWORD="${DB_PASSWORD:-}"
@@ -92,8 +93,10 @@ done
 DB_URL="jdbc:postgresql:///${DB_NAME}?cloudSqlInstance=${ICN}&socketFactory=com.google.cloud.sql.postgres.SocketFactory"
 
 SECRET_MAP="DB_PASSWORD=DB_PASSWORD:latest,JWT_SECRET=JWT_SECRET:latest"
-[ -n "$CLAUDE_OAUTH_TOKEN" ] && SECRET_MAP="${SECRET_MAP},CLAUDE_OAUTH_TOKEN=CLAUDE_OAUTH_TOKEN:latest"
-[ -n "$CLAUDE_API_KEY" ]     && SECRET_MAP="${SECRET_MAP},CLAUDE_API_KEY=CLAUDE_API_KEY:latest"
+# Claude 시크릿은 Secret Manager 에 존재하면 매핑 유지 — env 로 토큰을 다시 안 줘도
+# 재배포 시 Cloud Run 에서 누락되지 않도록(누락되면 AI 분석이 503).
+gcloud secrets describe CLAUDE_OAUTH_TOKEN >/dev/null 2>&1 && SECRET_MAP="${SECRET_MAP},CLAUDE_OAUTH_TOKEN=CLAUDE_OAUTH_TOKEN:latest"
+gcloud secrets describe CLAUDE_API_KEY     >/dev/null 2>&1 && SECRET_MAP="${SECRET_MAP},CLAUDE_API_KEY=CLAUDE_API_KEY:latest"
 
 # env-vars 에 콤마(ALLOWED_ORIGINS) 가 있어 '@' 구분자(^@^) 사용
 gcloud run deploy "$SERVICE" \
