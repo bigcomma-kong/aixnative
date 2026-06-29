@@ -13,4 +13,7 @@ enum class CreditReason {
 
     /** Purchased top-up (+M) — Phase 5. */
     PURCHASE,
+
+    /** 관리자 수동 조정(+N/-N). 어드민 패널에서 자유 가감. */
+    ADMIN_ADJUST,
 }

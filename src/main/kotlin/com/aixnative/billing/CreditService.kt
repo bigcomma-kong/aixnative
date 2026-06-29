@@ -23,6 +23,17 @@ class CreditService( private val ledger: CreditLedgerRepository, @Value("\${bill
     fun balance(tenantId: Long, userId: Long): Int = ledger.balance(tenantId, userId)
 
     /**
+     * 관리자 수동 조정. delta(+/-)를 원장에 기록하고 갱신 잔액을 반환.
+     * 어드민 패널 전용 — 호출부(AdminController)가 ADMIN 권한을 보장한다.
+     */
+    @Transactional
+    fun adminAdjust(tenantId: Long, userId: Long, delta: Int): Int {
+        require(delta != 0) { "조정 수량은 0이 아니어야 합니다." }
+        record(tenantId, userId, delta, CreditReason.ADMIN_ADJUST)
+        return ledger.balance(tenantId, userId)
+    }
+
+    /**
      * Consume one credit. Throws [InsufficientCreditsException] (→402) when the
      * balance is empty so the caller renders the paywall.
      *

@@ -34,6 +34,8 @@ class SecurityConfig(private val jwtAuthFilter: JwtAuthFilter) {
             .authorizeHttpRequests {
                 it.requestMatchers(
                     "/api/auth/**",
+                    // 시장 데이터 자동 수집 트리거(Cloud Scheduler). 공개 경로지만 컨트롤러에서 공유 토큰 검증.
+                    "/api/ingest/**",
                     "/actuator/health",
                     "/actuator/health/**",
                     "/error",

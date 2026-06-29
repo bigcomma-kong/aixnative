@@ -21,6 +21,7 @@ class AuthController(
     private val creditService: CreditService,
     private val users: UserRepository,
     private val emailVerification: EmailVerificationService,
+    private val passwordReset: PasswordResetService,
 ) {
 
     @PostMapping("/signup")
@@ -55,6 +56,28 @@ class AuthController(
         val current = TenantContext.require()
         authService.resendVerification(current.userId)
         return ApiResponse.ok(mapOf("sent" to true))
+    }
+
+    /**
+     * Request a password-reset link. Always returns the same success response —
+     * never reveals whether the email exists (anti-enumeration). Public + throttled.
+     */
+    @PostMapping("/forgot-password")
+    fun forgotPassword(@Valid @RequestBody req: ForgotPasswordRequest): ApiResponse<Map<String, Boolean>> {
+        passwordReset.requestReset(req.email)
+        return ApiResponse.ok(mapOf("sent" to true))
+    }
+
+    /** Consume a reset token and set a new password. Public auth endpoint. */
+    @PostMapping("/reset-password")
+    fun resetPassword(@Valid @RequestBody req: ResetPasswordRequest): ApiResponse<Map<String, Boolean>> {
+        return when (passwordReset.reset(req.token, req.newPassword)) {
+            ResetOutcome.OK -> ApiResponse.ok(mapOf("reset" to true))
+            ResetOutcome.EXPIRED ->
+                throw com.aixnative.common.web.BadRequestException("재설정 링크가 만료되었습니다. 다시 요청해 주세요.")
+            ResetOutcome.INVALID ->
+                throw com.aixnative.common.web.BadRequestException("유효하지 않은 재설정 링크입니다. 다시 요청해 주세요.")
+        }
     }
 
     /**

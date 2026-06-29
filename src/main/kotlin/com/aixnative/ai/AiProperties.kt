@@ -26,6 +26,24 @@ data class ClaudeProperties(
     )
 }
 
+/**
+ * Mistral provider config — 무료 티어 대상(신규 키만, env). 스케줄 배치 수집의 보강용으로 직접 호출되며
+ * (Claude 폴백 격리), 키 미설정 시 graceful 하게 건너뛴다. priority 가 Claude(0)보다 높아(=뒤)
+ * 일반 라우터에선 Claude 가 우선 — 과금 분석은 Claude, 무료 배치는 Mistral.
+ */
+@ConfigurationProperties(prefix = "mistral")
+data class MistralProperties(
+    val api: Api = Api(),
+    val priority: Int = 5,
+) {
+    data class Api(
+        val key: String = "",
+        val url: String = "https://api.mistral.ai/v1/chat/completions",
+        val model: String = "mistral-small-latest",
+        val maxTokens: Int = 4096,
+    )
+}
+
 /** AI router behaviour (priority/fallback/timeout). */
 @ConfigurationProperties(prefix = "ai.service")
 data class AiServiceProperties(

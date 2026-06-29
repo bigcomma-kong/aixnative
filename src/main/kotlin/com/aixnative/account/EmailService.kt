@@ -31,10 +31,28 @@ class EmailService(
             appendLine("본인이 요청하지 않았다면 이 메일을 무시하셔도 됩니다.")
         }
 
+        send(toEmail, subject, body, "인증")
+    }
+
+    fun sendPasswordReset(toEmail: String, resetUrl: String) {
+        val subject = "[aixnative] 비밀번호 재설정 안내"
+        val body = buildString {
+            appendLine("비밀번호 재설정을 요청하셨습니다. 아래 링크를 클릭해 새 비밀번호를 설정해 주세요.")
+            appendLine()
+            appendLine(resetUrl)
+            appendLine()
+            appendLine("링크는 일정 시간 후 만료되며 한 번만 사용할 수 있습니다.")
+            appendLine("본인이 요청하지 않았다면 이 메일을 무시하셔도 됩니다. 비밀번호는 변경되지 않습니다.")
+        }
+        send(toEmail, subject, body, "비밀번호 재설정")
+    }
+
+    /** SMTP 미설정 시 링크를 로그로 남기고, 설정 시 발송. 어떤 경우에도 호출자에게 예외를 던지지 않는다. */
+    private fun send(toEmail: String, subject: String, body: String, kind: String) {
         val sender = mailSenderProvider.ifAvailable
         if (sender == null) {
-            // SMTP 미설정 — 운영 전이거나 dev. 링크를 로그로 남겨 수동 인증/디버깅 가능.
-            log.warn("[email] SMTP 미설정 — 인증 링크 로그 출력 (to={}): {}", toEmail, verifyUrl)
+            // SMTP 미설정 — 운영 전이거나 dev. 링크를 로그로 남겨 수동 처리/디버깅 가능.
+            log.warn("[email] SMTP 미설정 — {} 메일 본문 로그 출력 (to={}):\n{}", kind, toEmail, body)
             return
         }
         val msg = SimpleMailMessage().apply {
@@ -44,6 +62,6 @@ class EmailService(
             setText(body)
         }
         runCatching { sender.send(msg) }
-            .onFailure { log.error("[email] 인증 메일 발송 실패 (to={}): {}", toEmail, it.message) }
+            .onFailure { log.error("[email] {} 메일 발송 실패 (to={}): {}", kind, toEmail, it.message) }
     }
 }

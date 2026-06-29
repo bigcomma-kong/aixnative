@@ -6,6 +6,7 @@ const REASON_LABEL: Record<CreditReason, string> = {
   SIGNUP_GRANT: '가입 무료 지급',
   AI_ANALYSIS: 'AI 분석',
   PURCHASE: '크레딧 충전',
+  ADMIN_ADJUST: '관리자 조정',
 }
 
 interface CreditHistoryViewProps {

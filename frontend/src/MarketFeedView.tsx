@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
-import { api, ApiError, type MarketFeedItem, type MarketFeedInput } from './api'
+import {
+  api, ApiError,
+  type IngestReport, type MarketBriefing, type MarketFeedItem, type MarketFeedInput,
+} from './api'
 
 interface MarketFeedViewProps {
   isAdmin: boolean
@@ -8,19 +11,25 @@ interface MarketFeedViewProps {
 }
 
 /**
- * 시장 인텔리전스 피드 — 큐레이션된 거래/시장 다이제스트.
- * 사용자는 카드를 훑고 관심 딜을 'AI로 분석'으로 바로 진입. 관리자는 카드를 추가/삭제.
+ * 시장 인텔리전스 — 뉴스레터(마켓 브리핑) + 딜 모니터링(카드 피드)을 합친 surface.
+ * 사용자는 브리핑으로 큰 그림을 보고, 카드를 훑어 관심 딜을 바로 AI 분석으로 진입.
+ * 데이터는 스케줄러가 자동 수집(무료) — 관리자는 즉시 수집/카드 추가/삭제 가능.
  */
 export function MarketFeedView({ isAdmin, onAnalyzeDeal }: MarketFeedViewProps) {
   const [items, setItems] = useState<MarketFeedItem[]>([])
+  const [briefing, setBriefing] = useState<MarketBriefing | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [ingesting, setIngesting] = useState(false)
+  const [report, setReport] = useState<IngestReport | null>(null)
 
   async function load() {
     setLoading(true)
     setError(null)
     try {
-      setItems(await api.marketFeed())
+      const [feed, brief] = await Promise.all([api.marketFeed(), api.marketBriefing().catch(() => null)])
+      setItems(feed)
+      setBriefing(brief)
     } catch (err: unknown) {
       setError(err instanceof ApiError ? err.message : '피드를 불러오지 못했습니다.')
     } finally {
@@ -39,30 +48,117 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal }: MarketFeedViewProps) 
     }
   }
 
+  async function ingestNow() {
+    setIngesting(true)
+    setError(null)
+    setReport(null)
+    try {
+      const r = await api.marketFeedIngest()
+      setReport(r)
+      await load()
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.message : '수집에 실패했습니다.')
+    } finally {
+      setIngesting(false)
+    }
+  }
+
   return (
     <section className="feed-wrap">
       <div className="feed-head">
         <div>
           <h2 className="feed-title">시장 인텔리전스</h2>
-          <p className="feed-sub">최신 거래·시장 동향을 훑고, 관심 딜은 그 자리에서 AI 언더라이팅으로 진입하세요.</p>
+          <p className="feed-sub">AI 마켓 브리핑으로 큰 그림을 보고, 딜 카드는 그 자리에서 AI 언더라이팅으로 진입하세요.</p>
         </div>
-        <button className="btn-ghost" onClick={() => void load()} disabled={loading}>
-          {loading ? '불러오는 중…' : '새로고침'}
-        </button>
+        <div className="feed-head-actions">
+          {isAdmin && (
+            <button className="btn-primary" onClick={() => void ingestNow()} disabled={ingesting}>
+              {ingesting ? '수집 중…' : '지금 수집'}
+            </button>
+          )}
+          <button className="btn-ghost" onClick={() => void load()} disabled={loading}>
+            {loading ? '불러오는 중…' : '새로고침'}
+          </button>
+        </div>
       </div>
+
+      {report && (
+        <p className="ingest-report">
+          수집 완료 — 신규 {report.inserted}건 · 중복 {report.skippedDuplicate}건 · 수집 {report.fetched}건
+          {report.briefingGenerated ? ` · 브리핑 갱신(${report.briefingProvider})` : ' · 브리핑 생략(무료 AI 미설정)'}
+        </p>
+      )}
+
+      {briefing && <BriefingHero briefing={briefing} />}
 
       {isAdmin && <AdminFeedForm onCreated={(it) => setItems((list) => [it, ...list])} onError={setError} />}
 
       {error && <p className="form-error">{error}</p>}
 
       {!loading && items.length === 0 && (
-        <p className="feed-empty">아직 등록된 피드가 없습니다.{isAdmin ? ' 위에서 첫 카드를 추가하세요.' : ''}</p>
+        <p className="feed-empty">
+          아직 수집된 딜이 없습니다.{isAdmin ? ' ‘지금 수집’을 눌러 시장 데이터를 채우세요.' : ' 곧 자동 수집됩니다.'}
+        </p>
       )}
 
       <div className="feed-grid">
         {items.map((it) => (
           <FeedCard key={it.id} item={it} isAdmin={isAdmin} onAnalyze={onAnalyzeDeal} onDelete={remove} />
         ))}
+      </div>
+    </section>
+  )
+}
+
+/** 마켓 브리핑 히어로 — 헤드라인·전망 + 토픽/워치리스트/리스크 요약(뉴스레터 강점). */
+function BriefingHero({ briefing }: { briefing: MarketBriefing }) {
+  const date = briefing.generatedAt ? new Date(briefing.generatedAt).toLocaleString('ko-KR') : briefing.briefingDate
+  return (
+    <section className="briefing" aria-label="마켓 브리핑">
+      <div className="briefing-top">
+        <span className="briefing-tag">AI 마켓 브리핑</span>
+        {date && <span className="briefing-date">{date}</span>}
+      </div>
+      {briefing.headline && <h3 className="briefing-headline">{briefing.headline}</h3>}
+      {briefing.outlook && <p className="briefing-outlook">{briefing.outlook}</p>}
+
+      <div className="briefing-cols">
+        {briefing.sections.length > 0 && (
+          <div className="briefing-block">
+            <h4>주요 동향</h4>
+            <ul>
+              {briefing.sections.map((s, i) => (
+                <li key={i}>
+                  <strong>{s.topic}</strong>{s.summary ? ` — ${s.summary}` : ''}
+                  {s.impact && <span className="briefing-impact"> · {s.impact}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {briefing.watchlist.length > 0 && (
+          <div className="briefing-block">
+            <h4>워치리스트</h4>
+            <ul>
+              {briefing.watchlist.map((w, i) => (
+                <li key={i}><strong>{w.item}</strong>{w.why ? ` — ${w.why}` : ''}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {briefing.risks.length > 0 && (
+          <div className="briefing-block">
+            <h4>리스크</h4>
+            <ul>
+              {briefing.risks.map((r, i) => (
+                <li key={i}>
+                  {r.severity && <span className={`risk-sev ${r.severity.toLowerCase()}`}>{r.severity}</span>}
+                  <strong>{r.signal}</strong>{r.mitigation ? ` — ${r.mitigation}` : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </section>
   )
@@ -78,12 +174,14 @@ function FeedCard({
 }) {
   const seed = item.sourceText?.trim() || item.summary?.trim() || item.title
   const dateLabel = item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('ko-KR') : null
+  const sourceLabel = originLabel(item.origin)
 
   return (
     <article className="feed-card">
       <div className="fc-meta">
         {item.assetType && <span className="fc-chip">{item.assetType}</span>}
         {item.location && <span className="fc-chip muted">{item.location}</span>}
+        {sourceLabel && <span className="fc-source">{sourceLabel}</span>}
         {dateLabel && <span className="fc-date">{dateLabel}</span>}
       </div>
       <h3 className="fc-title">{item.title}</h3>
@@ -101,6 +199,15 @@ function FeedCard({
       </div>
     </article>
   )
+}
+
+/** 출처 코드 → 짧은 표시 라벨. 'RSS:한국경제'→'한국경제', 'GOOGLE_NEWS'→'구글뉴스', 'ADMIN'→'직접등록'. */
+function originLabel(origin: string | null): string | null {
+  if (!origin) return null
+  if (origin.startsWith('RSS:')) return origin.slice(4)
+  if (origin === 'GOOGLE_NEWS') return '구글뉴스'
+  if (origin === 'ADMIN') return '직접등록'
+  return origin
 }
 
 const ASSET_TYPES = ['', '오피스', '물류', '호텔', '리테일']

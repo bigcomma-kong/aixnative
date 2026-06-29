@@ -39,9 +39,9 @@ function DealMock() {
         <div className="mock-head">
           <div>
             <span className="mock-eyebrow">딜 언더라이팅</span>
-            <strong className="mock-name">강남 오피스 · Core</strong>
+            <strong className="mock-name">강남 오피스 - Core</strong>
           </div>
-          <span className="mock-verdict">GO · 투자 적격</span>
+          <span className="mock-verdict">GO - 투자 적격</span>
         </div>
 
         <div className="mock-metrics">
@@ -77,15 +77,27 @@ function DealMock() {
 }
 
 const FEATURES = [
-  { title: 'ProForma 지표', desc: 'IRR · Equity Multiple · DSCR · 민감도까지 순수 계산 로직으로 즉시 산출. 입력만 하면 끝.' },
-  { title: 'AI 언더라이팅', desc: '매입가·NOI·Cap·자본구조를 읽고 스크리닝 판정과 투자 내러티브, 리스크 플래그를 생성.' },
-  { title: '심화 분석 9종', desc: 'BOV 가치평가 · 개발 타당성 · 세무 진단 · 시장조사 · 거래상대방 실사를 한 화면에서.' },
+  {
+    title: 'ProForma 지표',
+    desc: '입력 한 번이면 핵심 수익성 지표를 순수 계산 로직으로 즉시 산출합니다.',
+    tags: ['IRR', 'Equity Multiple', 'DSCR', '민감도'],
+  },
+  {
+    title: 'AI 언더라이팅',
+    desc: '매입가와 자본구조를 읽고 투자 판단을 문장과 신호로 정리합니다.',
+    tags: ['스크리닝 판정', '투자 내러티브', '리스크 플래그'],
+  },
+  {
+    title: '심화 분석 9종',
+    desc: '딜 한 건을 다각도로 검증하는 전문 분석 도구를 한 화면에서.',
+    tags: ['BOV 가치평가', '개발 타당성', '세무 진단', '시장조사', '거래상대방 실사'],
+  },
 ] as const
 
 const STEPS = [
-  { n: '01', title: '딜 입력', desc: '매입가 · NOI · Cap · LTV · 금리 · 출구 Cap 한 번 입력.' },
+  { n: '01', title: '딜 입력', desc: '매입가 - NOI - Cap - LTV - 금리 - 출구 Cap 한 번 입력.' },
   { n: '02', title: '1클릭 분석', desc: 'ProForma는 무료, AI 심사는 버튼 한 번 = 1크레딧.' },
-  { n: '03', title: '보고서 확보', desc: '지표 · 차트 · AI 내러티브 · 투심 메모를 즉시 확인 · 공유.' },
+  { n: '03', title: '보고서 확보', desc: '지표 - 차트 - AI 내러티브 - 투심 메모를 즉시 확인하고 공유.' },
 ] as const
 
 const STATS = [
@@ -122,7 +134,7 @@ export function LandingView({ onAuthed }: LandingViewProps) {
             매물 한 건,<br /><em>1분 심사.</em>
           </h1>
           <p className="hero-sub">
-            매입가와 자본구조만 넣으면 ProForma 지표 계산과 AI 투자 심사·리스크 플래그를
+            매입가와 자본구조만 넣으면 ProForma 지표 계산과 AI 투자 심사, 리스크 플래그를
             한 번에. 스프레드시트 없이, 투자 의사결정을 더 빠르게.
           </p>
           <div className="hero-cta">
@@ -133,7 +145,7 @@ export function LandingView({ onAuthed }: LandingViewProps) {
             <div className="avatar-stack">
               <span className="av">K</span><span className="av">L</span><span className="av">P</span>
             </div>
-            <span className="hero-proof-text">카드 등록 없이 · 가입 즉시 무료 분석</span>
+            <span className="hero-proof-text">카드 등록 없이 - 가입 즉시 무료 분석</span>
           </div>
         </div>
 
@@ -164,11 +176,17 @@ export function LandingView({ onAuthed }: LandingViewProps) {
           <h2 id="feat-h" className="feat-h">계산과 판단을 한 번에</h2>
         </div>
         <div className="feat-grid">
-          {FEATURES.map((f) => (
+          {FEATURES.map((f, i) => (
             <article className="feat-card" key={f.title}>
-              <span className="feat-ico"><Spark /></span>
+              <div className="feat-card-top">
+                <span className="feat-ico"><Spark /></span>
+                <span className="feat-n num">{String(i + 1).padStart(2, '0')}</span>
+              </div>
               <h3 className="feat-title">{f.title}</h3>
               <p className="feat-desc">{f.desc}</p>
+              <ul className="feat-tags">
+                {f.tags.map((t) => <li className="feat-tag" key={t}>{t}</li>)}
+              </ul>
             </article>
           ))}
         </div>
@@ -197,7 +215,7 @@ export function LandingView({ onAuthed }: LandingViewProps) {
           <ul className="auth-bullets">
             <li><Check /> ProForma 지표는 언제나 무료</li>
             <li><Check /> AI 분석 = 버튼 한 번, 1크레딧</li>
-            <li><Check /> 보고서 즉시 확인 · 공유</li>
+            <li><Check /> 보고서 즉시 확인하고 공유</li>
           </ul>
         </div>
         <div className="hero-auth">
@@ -209,6 +227,9 @@ export function LandingView({ onAuthed }: LandingViewProps) {
         <div className="brand">aix<span>native</span></div>
         <p className="landing-disc">
           * 본 서비스는 정보 제공 목적이며 투자자문이 아닙니다. 모든 투자 판단의 책임은 이용자에게 있습니다.
+        </p>
+        <p className="landing-contact">
+          문의는 <a href="mailto:admin@aixnative.com">admin@aixnative.com</a> 로 연락해 주세요.
         </p>
         <p className="landing-copy">© aixnative</p>
       </footer>

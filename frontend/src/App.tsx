@@ -5,10 +5,18 @@ import { UnderwriteView } from './UnderwriteView'
 import { DocAnalysisView } from './DocAnalysisView'
 import { MarketFeedView } from './MarketFeedView'
 import { CreditHistoryView } from './CreditHistoryView'
+import { AdminView } from './AdminView'
+import { ResetPasswordView } from './ResetPasswordView'
 import { Paywall } from './Paywall'
 
+/** 메일의 `/?reset=<token>` 링크로 진입했는지 — 부팅 시 한 번 읽는다. */
+function readResetToken(): string | null {
+  const t = new URLSearchParams(window.location.search).get('reset')
+  return t && t.trim() ? t : null
+}
+
 type Plan = 'FREE' | 'PAID'
-type Tab = 'feed' | 'underwrite' | 'advanced' | 'credits'
+type Tab = 'feed' | 'underwrite' | 'advanced' | 'credits' | 'admin'
 
 interface Session {
   email: string
@@ -22,6 +30,8 @@ function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [booting, setBooting] = useState(true)
   const [tab, setTab] = useState<Tab>('feed')
+  // 메일의 비밀번호 재설정 링크로 들어온 경우, 인증 상태와 무관하게 재설정 화면을 띄운다.
+  const [resetToken, setResetToken] = useState<string | null>(() => readResetToken())
   // 시장 피드 '이 딜 분석하기' → 심화 분석으로 넘길 딜 원문(진입 신호).
   const [dealSeed, setDealSeed] = useState<string | undefined>(undefined)
 
@@ -62,6 +72,13 @@ function App() {
     setSession((s) => (s ? { ...s, ...patch } : s))
   }
 
+  // 재설정 화면을 닫을 때: URL 의 ?reset= 쿼리를 제거하고 일반 흐름으로 복귀.
+  function closeReset() {
+    setResetToken(null)
+    window.history.replaceState(null, '', window.location.pathname)
+  }
+
+  if (resetToken) return <ResetPasswordView token={resetToken} onDone={closeReset} />
   if (booting) return <div className="spinner">불러오는 중…</div>
   if (!session) return <LandingView onAuthed={onAuthed} />
 
@@ -77,6 +94,9 @@ function App() {
           <button aria-current={tab === 'underwrite'} onClick={() => setTab('underwrite')}>언더라이팅</button>
           <button aria-current={tab === 'advanced'} onClick={() => setTab('advanced')}>심화 분석</button>
           <button aria-current={tab === 'credits'} onClick={() => setTab('credits')}>사용 내역</button>
+          {isAdmin && (
+            <button aria-current={tab === 'admin'} onClick={() => setTab('admin')}>관리자</button>
+          )}
         </nav>
         <div className="topbar-right">
           <span className="credits">
@@ -125,6 +145,9 @@ function App() {
         )}
         {tab === 'credits' && (
           <CreditHistoryView onSync={(plan, creditBalance) => patchSession({ plan, creditBalance })} />
+        )}
+        {tab === 'admin' && isAdmin && (
+          <AdminView currentEmail={session.email} />
         )}
       </main>
     </>

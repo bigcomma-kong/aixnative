@@ -70,6 +70,15 @@ class AiToolRunService(private val repository: AiToolRunRepository) {
         return latest
     }
 
+    /** 어드민 전용 — 전 테넌트 활성 런(테넌트 격리 의도적 우회). 호출부가 ADMIN 가드. */
+    @Transactional(readOnly = true)
+    fun listAllAdmin(): List<AiToolRun> = repository.findByDeletedAtIsNullOrderByIdDesc()
+
+    /** 어드민 전용 — 테넌트 무관 단건 조회(데이터 점검용). */
+    @Transactional(readOnly = true)
+    fun getAdmin(id: Long): AiToolRun =
+        repository.findById(id).orElseThrow { NotFoundException("분석 이력을 찾을 수 없습니다.") }
+
     /** Tenant-scoped fetch. Returns 404 for a missing row OR one owned by another tenant. */
     @Transactional(readOnly = true)
     fun get(id: Long): AiToolRun {

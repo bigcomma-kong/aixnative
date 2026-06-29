@@ -70,6 +70,26 @@ claude:
     token: ${CLAUDE_OAUTH_TOKEN:}
   priority: ${CLAUDE_PRIORITY:0}
 
+# 무료 AI(Mistral) — 신규 키만(env). 스케줄 배치 수집 보강(마켓 브리핑)에 직접 사용 → Claude 과금 격리.
+# 미설정 시 브리핑은 자동 생략(딜 카드 수집은 그대로). priority 가 Claude(0)보다 높아 일반 라우터는 Claude 우선.
+mistral:
+  api:
+    key: ${MISTRAL_API_KEY:}
+    url: ${MISTRAL_API_URL:https://api.mistral.ai/v1/chat/completions}
+    model: ${MISTRAL_API_MODEL:mistral-small-latest}
+    max-tokens: ${MISTRAL_MAX_TOKENS:4096}
+  priority: ${MISTRAL_PRIORITY:5}
+
+# 시장 인텔리전스 자동 수집. 수집(RSS·구글뉴스)은 키 0개로 동작, 브리핑만 무료 Mistral 필요(graceful).
+# 트리거: Cloud Scheduler → POST /api/ingest/market-feed (헤더 X-Ingest-Token). 토큰 미설정 시 인입 비활성.
+marketfeed:
+  ingest-token: ${MARKETFEED_INGEST_TOKEN:}
+  recent-hours: ${MARKETFEED_RECENT_HOURS:48}
+  max-per-source: ${MARKETFEED_MAX_PER_SOURCE:8}
+  max-cards: ${MARKETFEED_MAX_CARDS:40}
+  google-news-enabled: ${MARKETFEED_GOOGLE_NEWS:true}
+  briefing-enabled: ${MARKETFEED_BRIEFING:true}
+
 # Freemium: free AI-analysis credits granted at signup.
 billing:
   free-signup-credits: ${FREE_SIGNUP_CREDITS:5}
@@ -105,9 +125,12 @@ app:
   base-url: ${APP_BASE_URL:http://localhost:8080}
   # 인증 발신자 표기. 실제 발송은 SMTP(SPRING_MAIL_HOST 등) 설정 시에만 — 미설정이면 링크를 로그로 출력.
   mail:
-    from: ${MAIL_FROM:no-reply@aixnative.com}
+    from: ${MAIL_FROM:admin@aixnative.com}
   verification:
     token-ttl-hours: ${VERIFICATION_TTL_HOURS:24}
+  # 비밀번호 재설정 링크 만료(보안상 인증보다 짧게). 1회용.
+  password-reset:
+    token-ttl-hours: ${PASSWORD_RESET_TTL_HOURS:2}
   # 가입/재발송 IP당 시간 한도(무료 크레딧 어뷰징·봇 가입 방어). 너무 빡빡하지 않게 기본 5.
   signup-rate-limit:
     max-per-hour: ${SIGNUP_RATE_LIMIT_PER_HOUR:5}

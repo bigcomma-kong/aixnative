@@ -7,6 +7,9 @@ interface AiToolRunRepository : JpaRepository<AiToolRun, Long> {
     /** Tenant-scoped lookup — never load a row from another tenant (IDOR 차단). */
     fun findByIdAndTenantId(id: Long, tenantId: Long): AiToolRun?
 
+    /** 전 테넌트 활성 런(어드민 전용 — 운영 감독). newest first. */
+    fun findByDeletedAtIsNullOrderByIdDesc(): List<AiToolRun>
+
     /** Active (non-deleted) runs for one tenant/user, newest first. */
     fun findByTenantIdAndOwnerUserIdAndDeletedAtIsNullOrderByIdDesc(
         tenantId: Long,

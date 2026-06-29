@@ -14,6 +14,7 @@ data class MarketFeedItemView(
     val sourceText: String?,
     val sourceUrl: String?,
     val publishedAt: Instant?,
+    val origin: String?,
 )
 
 /** 관리자 생성 요청(쓰기, ADMIN). */
@@ -51,4 +52,23 @@ fun MarketFeedItem.toView(): MarketFeedItemView =
         sourceText = sourceText,
         sourceUrl = sourceUrl,
         publishedAt = publishedAt,
+        origin = origin,
     )
+
+/** 마켓 브리핑(뉴스레터 강점) 응답 — sections/watchlist/risks 는 파싱된 배열로 반환. */
+data class BriefingSection(val topic: String? = null, val summary: String? = null, val impact: String? = null)
+data class BriefingWatch(val item: String? = null, val why: String? = null)
+data class BriefingRisk(val signal: String? = null, val severity: String? = null, val mitigation: String? = null)
+
+data class MarketBriefingView(
+    val id: Long,
+    val briefingDate: String?,
+    val headline: String?,
+    val outlook: String?,
+    val sections: List<BriefingSection>,
+    val watchlist: List<BriefingWatch>,
+    val risks: List<BriefingRisk>,
+    val articleCount: Int?,
+    val provider: String?,
+    val generatedAt: Instant?,
+)

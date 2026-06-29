@@ -41,6 +41,14 @@ class MarketFeedItem(
 
     @Column(name = "published_at")
     var publishedAt: Instant? = null,
+
+    /** 출처: 'ADMIN'(수동) | 'RSS:<매체>' | 'GOOGLE_NEWS' 등. */
+    @Column(length = 40)
+    var origin: String? = null,
+
+    /** 중복제거 키 — 정규화된 기사 링크. 자동 수집 시 재삽입 차단용(수동 등록은 null). */
+    @Column(name = "dedup_key", length = 300)
+    var dedupKey: String? = null,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

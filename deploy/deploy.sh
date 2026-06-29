@@ -30,6 +30,12 @@ DB_PASSWORD="${DB_PASSWORD:-}"
 JWT_SECRET="${JWT_SECRET:-}"
 CLAUDE_OAUTH_TOKEN="${CLAUDE_OAUTH_TOKEN:-}"
 CLAUDE_API_KEY="${CLAUDE_API_KEY:-}"
+# 무료 AI(Mistral) — 시장 브리핑 합성용. 미설정 시 브리핑만 생략(딜 카드 수집은 동작).
+MISTRAL_API_KEY="${MISTRAL_API_KEY:-}"
+# 시장 데이터 자동수집 트리거 토큰(Cloud Scheduler ↔ /api/ingest/market-feed). 미설정 시 자동 생성.
+MARKETFEED_INGEST_TOKEN="${MARKETFEED_INGEST_TOKEN:-}"
+# 자동수집 크론(서울 시간). 기본 평일 06:30. Cloud Scheduler 잡으로 등록.
+INGEST_CRON="${INGEST_CRON:-30 6 * * 1-5}"
 
 # SMTP(이메일 인증 발송) — 설정 시 인증 메일 실제 발송, 미설정 시 링크 로그 폴백.
 # MAIL_PASSWORD 는 Secret Manager(SPRING_MAIL_PASSWORD)로, 나머지는 env 로 주입.
@@ -37,7 +43,9 @@ MAIL_HOST="${MAIL_HOST:-}"
 MAIL_PORT="${MAIL_PORT:-587}"
 MAIL_USERNAME="${MAIL_USERNAME:-}"
 MAIL_PASSWORD="${MAIL_PASSWORD:-}"
-MAIL_FROM="${MAIL_FROM:-no-reply@aixnative.com}"
+# 발신 표기. admin@aixnative.com — Cloudflare Email Routing 으로 개인 Gmail 에 수신 전달.
+# Gmail SMTP 사용 시 실제 발신도 이 주소로 나가려면 Gmail '다른 주소에서 메일 보내기' 별칭 등록 필요.
+MAIL_FROM="${MAIL_FROM:-admin@aixnative.com}"
 
 [ -z "$PROJECT_ID" ] && { echo "❌ PROJECT_ID 를 설정하세요: export PROJECT_ID=..."; exit 1; }
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/${SERVICE}:${IMAGE_TAG}"
@@ -85,11 +93,15 @@ put_secret () {  # $1=name $2=value(빈 값이면 skip)
     gcloud secrets create "$name" --replication-policy=automatic
   printf '%s' "$val" | gcloud secrets versions add "$name" --data-file=-
 }
-put_secret DB_PASSWORD          "$DB_PASSWORD"
-put_secret JWT_SECRET           "$JWT_SECRET"
-put_secret CLAUDE_OAUTH_TOKEN   "$CLAUDE_OAUTH_TOKEN"
-put_secret CLAUDE_API_KEY       "$CLAUDE_API_KEY"
-put_secret SPRING_MAIL_PASSWORD "$MAIL_PASSWORD"
+# 자동수집 토큰 자동 생성(미지정 시) — 스케줄러와 앱이 공유.
+[ -z "$MARKETFEED_INGEST_TOKEN" ] && MARKETFEED_INGEST_TOKEN="$(openssl rand -hex 24)"
+put_secret DB_PASSWORD             "$DB_PASSWORD"
+put_secret JWT_SECRET              "$JWT_SECRET"
+put_secret CLAUDE_OAUTH_TOKEN      "$CLAUDE_OAUTH_TOKEN"
+put_secret CLAUDE_API_KEY          "$CLAUDE_API_KEY"
+put_secret SPRING_MAIL_PASSWORD    "$MAIL_PASSWORD"
+put_secret MISTRAL_API_KEY         "$MISTRAL_API_KEY"
+put_secret MARKETFEED_INGEST_TOKEN "$MARKETFEED_INGEST_TOKEN"
 
 ### ── 6. Cloud Run 서비스 계정 권한 (Cloud SQL + 시크릿) ──────────
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
@@ -110,6 +122,9 @@ gcloud secrets describe CLAUDE_OAUTH_TOKEN >/dev/null 2>&1 && SECRET_MAP="${SECR
 gcloud secrets describe CLAUDE_API_KEY     >/dev/null 2>&1 && SECRET_MAP="${SECRET_MAP},CLAUDE_API_KEY=CLAUDE_API_KEY:latest"
 # SMTP 비밀번호 시크릿이 있으면 매핑(SMTP 미설정이면 메일은 로그 폴백).
 gcloud secrets describe SPRING_MAIL_PASSWORD >/dev/null 2>&1 && SECRET_MAP="${SECRET_MAP},SPRING_MAIL_PASSWORD=SPRING_MAIL_PASSWORD:latest"
+# 무료 AI(Mistral) + 자동수집 토큰 — 존재하면 매핑.
+gcloud secrets describe MISTRAL_API_KEY >/dev/null 2>&1 && SECRET_MAP="${SECRET_MAP},MISTRAL_API_KEY=MISTRAL_API_KEY:latest"
+gcloud secrets describe MARKETFEED_INGEST_TOKEN >/dev/null 2>&1 && SECRET_MAP="${SECRET_MAP},MARKETFEED_INGEST_TOKEN=MARKETFEED_INGEST_TOKEN:latest"
 
 # env-vars 조립 ('|' 구분자 ^|^ — ALLOWED_ORIGINS 의 콤마 + MAIL_FROM 의 '@' 회피). 메일 호스트가 주어졌을 때만 SMTP env 추가.
 ENV_VARS="SPRING_PROFILES_ACTIVE=postgres|DB_URL=${DB_URL}|DB_USER=${DB_USER}|ALLOWED_ORIGINS=${ALLOWED_ORIGINS}|APP_BASE_URL=${APP_BASE_URL}|MAIL_FROM=${MAIL_FROM}"
@@ -126,7 +141,30 @@ gcloud run deploy "$SERVICE" \
   --cpu=1 --memory=1Gi --min-instances=0 --max-instances=4 --port=8080
 
 URL="$(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"
+
+### ── 8. Cloud Scheduler (시장 데이터 자동 수집 트리거) ────────────
+# min-instances=0 이라 @Scheduled 대신 스케줄러가 토큰 보호 엔드포인트를 깨워 수집을 돌린다.
+gcloud services enable cloudscheduler.googleapis.com >/dev/null
+SCHED_JOB="${SCHED_JOB:-aixnative-market-feed}"
+INGEST_URI="${URL}/api/ingest/market-feed"
+if gcloud scheduler jobs describe "$SCHED_JOB" --location="$REGION" >/dev/null 2>&1; then
+  gcloud scheduler jobs update http "$SCHED_JOB" --location="$REGION" \
+    --schedule="$INGEST_CRON" --time-zone="Asia/Seoul" \
+    --uri="$INGEST_URI" --http-method=POST \
+    --update-headers="X-Ingest-Token=${MARKETFEED_INGEST_TOKEN}" \
+    --attempt-deadline=300s >/dev/null
+else
+  gcloud scheduler jobs create http "$SCHED_JOB" --location="$REGION" \
+    --schedule="$INGEST_CRON" --time-zone="Asia/Seoul" \
+    --uri="$INGEST_URI" --http-method=POST \
+    --headers="X-Ingest-Token=${MARKETFEED_INGEST_TOKEN}" \
+    --attempt-deadline=300s >/dev/null
+fi
+
 echo ""
 echo "✅ 배포 완료: $URL"
 echo "→ 첫 관리자: $URL 접속 후 admin@aixnative.com 으로 회원가입하면 자동 ADMIN 권한."
+echo "→ 시장 자동수집: '${SCHED_JOB}' 스케줄러 등록(${INGEST_CRON}, Asia/Seoul). 관리자 '지금 수집'으로 즉시 실행 가능."
+gcloud secrets describe MISTRAL_API_KEY >/dev/null 2>&1 || \
+  echo "ℹ️  MISTRAL_API_KEY 미설정 — 마켓 브리핑은 생략(딜 카드 수집은 동작). 무료 키 발급 후 MISTRAL_API_KEY 로 재배포 시 활성화."
 echo "→ 도메인 연결: deploy/README.md 의 '도메인 매핑' 참고."

@@ -14,8 +14,9 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Per-IP fixed-window rate limit on account creation. Light defense against
- * signup flooding / free-credit farming — only `POST /api/auth/signup` and
- * `/api/auth/resend-verification` are throttled; everything else passes through.
+ * signup flooding / free-credit farming and reset-mail spam — `POST /api/auth/signup`,
+ * `/api/auth/resend-verification`, and `/api/auth/forgot-password` are throttled;
+ * everything else passes through.
  *
  * In-memory per instance (Cloud Run min=0/max=4) — good enough for v1; a shared
  * store (Redis) can replace the map if horizontal abuse appears.
@@ -51,7 +52,9 @@ class SignupRateLimitFilter(
     private fun isThrottled(req: HttpServletRequest): Boolean {
         if (req.method != "POST") return false
         val p = req.requestURI
-        return p == "/api/auth/signup" || p == "/api/auth/resend-verification"
+        return p == "/api/auth/signup" ||
+            p == "/api/auth/resend-verification" ||
+            p == "/api/auth/forgot-password"
     }
 
     private fun allow(ip: String, now: Long): Boolean {

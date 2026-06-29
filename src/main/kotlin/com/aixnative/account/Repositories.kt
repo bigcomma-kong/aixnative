@@ -12,3 +12,7 @@ interface UserRepository : JpaRepository<User, Long> {
 interface EmailVerificationTokenRepository : JpaRepository<EmailVerificationToken, Long> {
     fun findByToken(token: String): EmailVerificationToken?
 }
+
+interface PasswordResetTokenRepository : JpaRepository<PasswordResetToken, Long> {
+    fun findByToken(token: String): PasswordResetToken?
+}

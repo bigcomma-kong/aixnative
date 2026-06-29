@@ -55,8 +55,42 @@
 
 > same-origin 배포(SPA + API 모두 aixnative.com, API 는 `/api`)면 `VITE_API_BASE` 비워두고 `ALLOWED_ORIGINS` 도 신경 쓸 필요 없습니다. API 를 `api.aixnative.com` 으로 분리할 때만 둘 다 설정하세요.
 
+## 이메일 인증/발송 (SMTP) — 어뷰징 방어 1단계
+가입 시 무료 크레딧은 **이메일 인증 후** 지급(미인증=크레딧 0). 인증 메일은 SMTP 로 발송한다.
+앱은 순수 SMTP 클라이언트(`JavaMailSender`)라 **어떤 SMTP 서버든** 값만 바꾸면 동작(코드 변경 0).
+
+> ⚠️ **Cloud Run 은 아웃바운드 25번 포트 차단** → 반드시 **587(STARTTLS)** 또는 **465(implicit TLS)** 인증 릴레이 사용.
+> `deploy/deploy.sh` 는 587/STARTTLS 로 배선. 465 사용 시 `SPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE=true`(+포트 465) 로 교체.
+
+| ENV | 예시 | 용도 |
+|---|---|---|
+| `SPRING_MAIL_HOST` | `smtp.gmail.com` | SMTP 호스트 (미설정 시 발송 안 하고 **인증 링크를 로그로 출력**) |
+| `SPRING_MAIL_PORT` | `587` | 587(STARTTLS) 또는 465(SSL) |
+| `SPRING_MAIL_USERNAME` | (Gmail 주소) | SMTP 계정 |
+| `SPRING_MAIL_PASSWORD` | (앱 비밀번호) | **시크릿** — Secret Manager `SPRING_MAIL_PASSWORD` 로 주입 |
+| `MAIL_FROM` | `admin@aixnative.com` | 발신 표기. 인증 계정과 다르면 Gmail 이 계정 주소로 재작성 → **발신 계정과 일치시킬 것** |
+| `APP_BASE_URL` | `https://aixnative-…run.app` | 인증/재설정 링크 베이스 URL(도메인 연결 후 교체) |
+| `VERIFICATION_TTL_HOURS` | `24` | 이메일 인증 토큰 만료(시간) |
+| `PASSWORD_RESET_TTL_HOURS` | `2` | 비밀번호 재설정 토큰 만료(시간, 1회용) |
+| `SIGNUP_RATE_LIMIT_PER_HOUR` | `5` | IP당 가입/재발송/비번찾기 시간 한도 |
+
+> **비밀번호 찾기**: 가입 이메일로 `${APP_BASE_URL}/?reset=<token>` 링크 발송 → SPA 가 재설정 화면 표시 → `POST /api/auth/reset-password`. 같은 SMTP 설정을 재사용한다(별도 키 불필요).
+
+### 현재 선택 (이력)
+- **2026-06-29 — 개인 Gmail 앱 비밀번호** 채택(초기 무료·저용량 ~수백통/일). `smtp.gmail.com:587`.
+  - 전제: Google 계정 **2단계 인증 ON** → [앱 비밀번호](https://myaccount.google.com/apppasswords) 발급(16자).
+  - 라이브 발신 계정 = `bigcomma16@gmail.com`. 따라서 `MAIL_FROM` 도 동일 주소 유지(스팸 회피). aixnative.com SPF 에 Google 미포함이라 `admin@aixnative.com` 으로 보내면 도달률 저하 위험.
+- **예정 — Google Workspace(`admin@aixnative.com`)** 로 전환:
+  - 진짜 계정이라 별칭 불필요 → 인증 주체=발신 주소 일치. DKIM/SPF 정식 서명(도달률 최상).
+  - 전환 시 env 만: `MAIL_USERNAME=admin@aixnative.com` + 그 계정 앱 비밀번호(`SPRING_MAIL_PASSWORD`) + `MAIL_FROM=admin@aixnative.com`.
+  - 도메인은 Cloudflare DNS — Workspace MX/SPF/DKIM 레코드를 Cloudflare 에 추가(Email Routing 은 끄거나 대체).
+- **추후 교체 가능(코드 변경 없음)** — 더 큰 볼륨/도달률 필요 시 **AWS SES·Brevo·Mailgun·본인 SMTP 서버** 등으로:
+  1. (있으면) 발신 도메인 SPF/DKIM 설정
+  2. `gcloud secrets versions add SPRING_MAIL_PASSWORD --data-file=<새키파일>`
+  3. `MAIL_HOST/PORT/USERNAME/FROM` env 만 바꿔 `deploy/deploy.sh` 재실행(또는 `gcloud run services update`)
+  - 자세한 배포 절차: `.claude/skills/aixnative-deploy/SKILL.md`
+
 ## 범위 밖(후속 — 키 확보 후 application.yml 주석 해제)
-- 이메일 발송: `MAIL_HOST/MAIL_PORT/MAIL_USERNAME/MAIL_PASSWORD`
 - 소셜 로그인: `GOOGLE_CLIENT_ID/SECRET`, `KAKAO_CLIENT_ID/SECRET`
 
 ## 로컬 실행 예 (PowerShell)

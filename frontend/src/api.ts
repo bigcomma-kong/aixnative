@@ -27,7 +27,34 @@ export interface Me {
   emailVerified: boolean
 }
 
-export type CreditReason = 'SIGNUP_GRANT' | 'AI_ANALYSIS' | 'PURCHASE'
+export type CreditReason = 'SIGNUP_GRANT' | 'AI_ANALYSIS' | 'PURCHASE' | 'ADMIN_ADJUST'
+
+export interface AdminUser {
+  id: number
+  email: string
+  tenantId: number
+  plan: 'FREE' | 'PAID'
+  role: UserRole
+  emailVerified: boolean
+  creditBalance: number
+  createdAt: string | null
+}
+
+export interface AdminRun {
+  id: number
+  tenantId: number
+  ownerUserId: number
+  ownerEmail: string | null
+  tool: string
+  status: string
+  dealName: string | null
+  createdAt: string | null
+}
+
+export interface AdminRunDetail extends AdminRun {
+  requestJson: string | null
+  resultJson: string | null
+}
 
 export interface CreditHistoryItem {
   id: number
@@ -261,6 +288,36 @@ export interface MarketFeedItem {
   sourceText: string | null
   sourceUrl: string | null
   publishedAt: string | null
+  /** 출처: 'ADMIN' | 'RSS:<매체>' | 'GOOGLE_NEWS'. */
+  origin: string | null
+}
+
+/** 마켓 브리핑(AI 다이제스트) — 뉴스레터 강점. */
+export interface BriefingSection { topic: string | null; summary: string | null; impact: string | null }
+export interface BriefingWatch { item: string | null; why: string | null }
+export interface BriefingRisk { signal: string | null; severity: string | null; mitigation: string | null }
+export interface MarketBriefing {
+  id: number
+  briefingDate: string | null
+  headline: string | null
+  outlook: string | null
+  sections: BriefingSection[]
+  watchlist: BriefingWatch[]
+  risks: BriefingRisk[]
+  articleCount: number | null
+  provider: string | null
+  generatedAt: string | null
+}
+
+/** 자동 수집 실행 결과. */
+export interface IngestReport {
+  fetched: number
+  afterFilter: number
+  inserted: number
+  skippedDuplicate: number
+  briefingGenerated: boolean
+  briefingProvider: string | null
+  errors: string[]
 }
 
 /** 관리자 피드 생성 입력. */
@@ -474,6 +531,14 @@ export const api = {
   resendVerification: (): Promise<{ sent: boolean }> =>
     request('/api/auth/resend-verification', { method: 'POST' }),
 
+  /** 비밀번호 찾기 — 가입 이메일로 재설정 링크 발송. 계정 존재 여부와 무관하게 동일 응답. */
+  forgotPassword: (email: string): Promise<{ sent: boolean }> =>
+    request('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+
+  /** 비밀번호 재설정 — 메일 링크의 토큰 + 새 비밀번호. */
+  resetPassword: (token: string, newPassword: string): Promise<{ reset: boolean }> =>
+    request('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, newPassword }) }),
+
   proforma: (input: UnderwriteInput): Promise<ProFormaResponse> =>
     request('/api/underwriting/proforma', { method: 'POST', body: JSON.stringify(input) }),
 
@@ -517,4 +582,28 @@ export const api = {
   /** 관리자 — 피드 카드 삭제. */
   marketFeedDelete: (id: number): Promise<{ deleted: boolean }> =>
     request(`/api/admin/market-feed/${id}`, { method: 'DELETE' }),
+
+  /** 최신 마켓 브리핑(AI 다이제스트). 아직 없으면 null. */
+  marketBriefing: (): Promise<MarketBriefing | null> => request('/api/market-feed/briefing'),
+
+  /** 관리자 — 즉시 수집(딜 카드 + 무료 브리핑). 스케줄러와 동일 경로. */
+  marketFeedIngest: (): Promise<IngestReport> =>
+    request('/api/admin/market-feed/ingest', { method: 'POST' }),
+
+  /** 관리자 — 전체 사용자 목록. */
+  adminUsers: (): Promise<AdminUser[]> => request('/api/admin/users'),
+
+  /** 관리자 — 사용자 권한 변경(USER/ADMIN). */
+  adminSetRole: (id: number, role: UserRole): Promise<AdminUser> =>
+    request(`/api/admin/users/${id}/role`, { method: 'POST', body: JSON.stringify({ role }) }),
+
+  /** 관리자 — 크레딧 가감(+/-). */
+  adminAdjustCredits: (id: number, delta: number): Promise<AdminUser> =>
+    request(`/api/admin/users/${id}/credits`, { method: 'POST', body: JSON.stringify({ delta }) }),
+
+  /** 관리자 — 전 테넌트 모든 분석 데이터. */
+  adminRuns: (): Promise<AdminRun[]> => request('/api/admin/runs'),
+
+  /** 관리자 — 분석 데이터 단건 상세(입력/결과 JSON). */
+  adminRunDetail: (id: number): Promise<AdminRunDetail> => request(`/api/admin/runs/${id}`),
 }
