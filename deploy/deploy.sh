@@ -111,17 +111,17 @@ gcloud secrets describe CLAUDE_API_KEY     >/dev/null 2>&1 && SECRET_MAP="${SECR
 # SMTP 비밀번호 시크릿이 있으면 매핑(SMTP 미설정이면 메일은 로그 폴백).
 gcloud secrets describe SPRING_MAIL_PASSWORD >/dev/null 2>&1 && SECRET_MAP="${SECRET_MAP},SPRING_MAIL_PASSWORD=SPRING_MAIL_PASSWORD:latest"
 
-# env-vars 조립 ('@' 구분자 ^@^ — ALLOWED_ORIGINS 의 콤마 회피). 메일 호스트가 주어졌을 때만 SMTP env 추가.
-ENV_VARS="SPRING_PROFILES_ACTIVE=postgres@DB_URL=${DB_URL}@DB_USER=${DB_USER}@ALLOWED_ORIGINS=${ALLOWED_ORIGINS}@APP_BASE_URL=${APP_BASE_URL}@MAIL_FROM=${MAIL_FROM}"
+# env-vars 조립 ('|' 구분자 ^|^ — ALLOWED_ORIGINS 의 콤마 + MAIL_FROM 의 '@' 회피). 메일 호스트가 주어졌을 때만 SMTP env 추가.
+ENV_VARS="SPRING_PROFILES_ACTIVE=postgres|DB_URL=${DB_URL}|DB_USER=${DB_USER}|ALLOWED_ORIGINS=${ALLOWED_ORIGINS}|APP_BASE_URL=${APP_BASE_URL}|MAIL_FROM=${MAIL_FROM}"
 if [ -n "$MAIL_HOST" ]; then
-  ENV_VARS="${ENV_VARS}@SPRING_MAIL_HOST=${MAIL_HOST}@SPRING_MAIL_PORT=${MAIL_PORT}@SPRING_MAIL_USERNAME=${MAIL_USERNAME}@SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true@SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true"
+  ENV_VARS="${ENV_VARS}|SPRING_MAIL_HOST=${MAIL_HOST}|SPRING_MAIL_PORT=${MAIL_PORT}|SPRING_MAIL_USERNAME=${MAIL_USERNAME}|SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true|SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true"
 fi
 
 gcloud run deploy "$SERVICE" \
   --image="$IMAGE" --region="$REGION" --platform=managed \
   --allow-unauthenticated \
   --add-cloudsql-instances="$ICN" \
-  --set-env-vars="^@^${ENV_VARS}" \
+  --set-env-vars="^|^${ENV_VARS}" \
   --set-secrets="$SECRET_MAP" \
   --cpu=1 --memory=1Gi --min-instances=0 --max-instances=4 --port=8080
 
