@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/api/auth")
-class AuthController(
+open class AuthController(
     private val authService: AuthService,
     private val creditService: CreditService,
     private val users: UserRepository,
