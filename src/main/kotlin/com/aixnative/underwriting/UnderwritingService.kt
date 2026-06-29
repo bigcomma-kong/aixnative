@@ -203,6 +203,32 @@ class UnderwritingService(
                 calc = r
                 UnderwritingPrompts.counterpartyDd(BizHealthFacts.summary(r), req.dealName)
             }
+            DocAnalysisType.PRICE_FORECAST -> {
+                val input = req.forecast ?: throw BadRequestException("가격 예측은 NOI 또는 연면적 입력이 필요합니다.")
+                val hasIncome = (input.noiEok ?: 0.0) > 0
+                val hasArea = (input.areaPyeong ?: 0.0) > 0
+                if (!hasIncome && !hasArea) {
+                    throw BadRequestException("가격 예측은 NOI(소득환원) 또는 연면적(거래사례) 중 하나는 입력해야 합니다.")
+                }
+                val marketCap = input.marketCapPct ?: CreGuidelines.bovDefaultExitCapPct(assetType)
+                val stats = marketDataService.compStats(req.location)
+                val r = PriceEstimator.compute(
+                    PriceEstimator.Inputs(
+                        noiEok = input.noiEok,
+                        marketCapPct = marketCap,
+                        areaPyeong = input.areaPyeong,
+                        compPyeongManwon = stats?.medianPyeongManwon?.toDouble(),
+                        compCount = stats?.count ?: 0,
+                    )
+                )
+                calc = r
+                UnderwritingPrompts.priceForecast(
+                    DocCalcFacts.priceFacts(input, marketCap, stats, r, req.documentText) +
+                        marketDataService.marketFacts(req.location, assetType) +
+                        marketDataService.landValuationFactLine(req.parcelAddress),
+                    req.dealName,
+                )
+            }
             else -> {
                 val doc = req.documentText?.takeIf { it.isNotBlank() }
                     ?: throw BadRequestException("분석 대상 정보(documentText)는 필수입니다.")
@@ -268,6 +294,31 @@ class UnderwritingService(
             provider = ai.provider,
             creditBalance = creditService.balance(current.tenantId, current.userId),
             disclaimer = Disclaimer.TEXT,
+        )
+    }
+
+    /**
+     * 딜 추출 — 기사/딜 텍스트를 구조화 필드로(분석 폼 프리필용). 진입 깔때기라 크레딧 미차감(인증·AI설정만).
+     * 파싱 실패 시 raw 원문 반환. 실제 분석(가격예측·언더라이팅)이 과금 단위.
+     */
+    fun extractDeal(req: DealExtractRequest): DealExtractResponse {
+        if (!aiServiceManager.hasConfiguredProvider()) {
+            throw ServiceUnavailableException("AI 분석 서비스가 설정되지 않았습니다(API 키 미설정).")
+        }
+        val text = req.text?.takeIf { it.isNotBlank() }
+            ?: throw BadRequestException("분석할 기사/딜 텍스트를 입력하세요.")
+        val ai = try {
+            aiServiceManager.complete(UnderwritingPrompts.dealExtract(text.take(MAX_EXTRACT_CHARS)))
+        } catch (e: Exception) {
+            log.error("[Underwriting] 딜 추출 실패", e)
+            throw ServiceUnavailableException("딜 추출 호출에 실패했습니다: ${rootMessage(e)}")
+        }
+        val parsed = tryParseJson(ai.text)
+        val extract = parsed?.let { runCatching { objectMapper.treeToValue(it, DealExtract::class.java) }.getOrNull() }
+        return DealExtractResponse(
+            extract = extract,
+            raw = if (extract == null) ai.text else null,
+            provider = ai.provider,
         )
     }
 
@@ -341,4 +392,9 @@ class UnderwritingService(
     private fun sha256(s: String): String =
         MessageDigest.getInstance("SHA-256").digest(s.toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
+
+    private companion object {
+        /** 딜 추출 입력 상한(프롬프트 비대·타임아웃 방지). */
+        const val MAX_EXTRACT_CHARS = 8000
+    }
 }

@@ -3,6 +3,9 @@ package com.aixnative.integration.marketdata
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 
+/** 상업 실거래 통계 — 중위 평당가(만원/평)와 표본 건수. 가격 예측 거래사례법 입력. */
+data class CompStats(val medianPyeongManwon: Long, val count: Int)
+
 /**
  * 실측 시장지표 오케스트레이터 — ECOS(매크로)·R-ONE(임대시장)·RTMS(실거래) 결과를
  * AI 프롬프트에 주입할 facts 블록으로 조립한다. 각 소스는 독립적으로 graceful degrade
@@ -117,6 +120,28 @@ class MarketDataService(
             ""
         }
     }
+
+    /** 상업 실거래 중위 평당가(만원/평) + 건수 — 가격 예측(거래사례법)용 구조화 통계. 없으면 null. */
+    fun compStats(location: String?): CompStats? {
+        if (location.isNullOrBlank()) return null
+        return try {
+            val lawdCd = LawdCode.resolve(location) ?: return null
+            val trades = rtmsClient.commercialTransactions(lawdCd, 2)
+            val pyeongPrices = trades.mapNotNull { t ->
+                val amt = numeric(t.amountManwon) ?: return@mapNotNull null
+                val sqm = numeric(t.areaSqm) ?: return@mapNotNull null
+                if (sqm <= 0) null else amt / (sqm / com.aixnative.underwriting.PriceEstimator.PYEONG_SQM)
+            }.sorted()
+            if (pyeongPrices.isEmpty()) return null
+            val median = pyeongPrices[pyeongPrices.size / 2]
+            CompStats(medianPyeongManwon = Math.round(median), count = pyeongPrices.size)
+        } catch (e: Exception) {
+            log.warn("[MarketData] compStats 실패: {}", e.message)
+            null
+        }
+    }
+
+    private fun numeric(s: String): Double? = s.replace("[^0-9.]".toRegex(), "").toDoubleOrNull()
 
     /** RTMS dealAmount(만원, 콤마 포함) → "N.N억". 파싱 실패 시 원문+만원. */
     private fun toEok(manwon: String): String {

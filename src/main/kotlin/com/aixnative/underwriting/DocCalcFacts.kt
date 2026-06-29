@@ -1,11 +1,36 @@
 package com.aixnative.underwriting
 
+import com.aixnative.integration.marketdata.CompStats
+
 /**
- * BOV·개발타당성의 코드 확정 수치(결정론적 계산)를 프롬프트 <DATA> 에 주입할 한국어 facts 블록으로
- * 변환한다. AI 는 이 수치를 인용만 하고 창작하지 않는다(환각 차단, 평가수치 신뢰).
+ * BOV·개발타당성·가격예측의 코드 확정 수치(결정론적 계산)를 프롬프트 <DATA> 에 주입할 한국어 facts
+ * 블록으로 변환한다. AI 는 이 수치를 인용만 하고 창작하지 않는다(환각 차단, 평가수치 신뢰).
  * 사용자 자유 텍스트(documentText)가 있으면 facts 뒤에 [추가 컨텍스트] 로 덧붙인다.
  */
 object DocCalcFacts {
+
+    /** 가격 예측(소득환원+거래사례) 결과 → facts. 매입/매각 밴드·신뢰도 포함. */
+    fun priceFacts(
+        input: PriceForecastInput,
+        marketCapPct: Double,
+        stats: CompStats?,
+        result: PriceEstimator.Result,
+        userText: String?,
+    ): String {
+        val sb = StringBuilder()
+        sb.appendLine("[코드 산출 가격 예측 — 확정 수치(억원/%), 창작 금지]")
+        sb.appendLine("· 입력: NOI ${input.noiEok ?: "미입력"} · 시장 Cap ${marketCapPct}% · 연면적 ${input.areaPyeong ?: "미입력"}평")
+        if (stats != null) sb.appendLine("· 실거래 중위 평당가: ${stats.medianPyeongManwon}만원/평 (상업 실거래 표본 ${stats.count}건)")
+        else sb.appendLine("· 실거래 평당가: 위치 미해석/사례 없음 → 거래사례법 미사용")
+        result.incomeValueEok?.let { sb.appendLine("· 소득환원가(NOI/Cap): $it") }
+        result.compValueEok?.let { sb.appendLine("· 거래사례가(중위 평당가×연면적): $it") }
+        sb.appendLine("· 추정가(가중): ${result.estimateEok} · Implied Cap ${result.impliedCapPct}%")
+        sb.appendLine("· 적정 매입가 밴드: ${result.buyLowEok} ~ ${result.buyHighEok} (추정가 이하 입찰)")
+        sb.appendLine("· 예상 매각가 밴드: ${result.sellLowEok} ~ ${result.sellHighEok}")
+        sb.appendLine("· 신뢰도(코드): ${result.confidence} — 표본·방법 수 기준")
+        appendUserText(sb, userText)
+        return sb.toString().trimEnd()
+    }
 
     /** BOV 3-Method 평가 결과 → facts. 사용된 가정(할인율·Exit Cap 보정값 포함)도 함께 표기. */
     fun bovFacts(input: BovInput, used: BovValuator.Inputs, result: BovValuator.Result, userText: String?): String {

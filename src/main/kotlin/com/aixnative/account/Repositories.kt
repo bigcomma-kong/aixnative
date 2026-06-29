@@ -8,3 +8,7 @@ interface UserRepository : JpaRepository<User, Long> {
     fun findByEmail(email: String): User?
     fun existsByEmail(email: String): Boolean
 }
+
+interface EmailVerificationTokenRepository : JpaRepository<EmailVerificationToken, Long> {
+    fun findByToken(token: String): EmailVerificationToken?
+}

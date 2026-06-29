@@ -19,12 +19,13 @@ class AuthServiceTest(
 ) {
 
     @Test
-    fun `signup creates tenant, grants free credits, and returns a token`() {
+    fun `signup returns a token but 0 credits until email is verified`() {
         val res = authService.signup(SignupRequest("alice@example.com", "password123"))
 
         assertTrue(res.token.isNotBlank())
         assertEquals("alice@example.com", res.email)
-        assertEquals(5, res.creditBalance) // free-signup-credits = 5 in test profile
+        assertEquals(false, res.emailVerified)
+        assertEquals(0, res.creditBalance) // 무료 크레딧은 이메일 인증 후 지급
     }
 
     @Test
@@ -40,6 +41,13 @@ class AuthServiceTest(
         authService.signup(SignupRequest("carol@example.com", "password123"))
         val res = authService.login(LoginRequest("carol@example.com", "password123"))
         assertTrue(res.token.isNotBlank())
+        assertEquals(0, res.creditBalance) // 미인증 상태 — 크레딧 0
+    }
+
+    @Test
+    fun `admin 이메일 가입은 즉시 인증되고 무료 크레딧을 받는다`() {
+        val res = authService.signup(SignupRequest("admin@aixnative.com", "password123"))
+        assertEquals(true, res.emailVerified)
         assertEquals(5, res.creditBalance)
     }
 

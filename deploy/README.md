@@ -1,4 +1,4 @@
-# aixnative — GCP 배포 가이드
+v# aixnative — GCP 배포 가이드
 
 **구조:** Cloud Run(단일 컨테이너: Spring + Vite SPA) + Cloud SQL(PostgreSQL) + Secret Manager + Artifact Registry.
 이미지는 **Cloud Build** 가 빌드하므로 **로컬 Docker 불필요**.

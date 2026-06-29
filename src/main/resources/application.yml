@@ -101,6 +101,16 @@ app:
   # SPA 허용 origin (CSV). 운영 도메인 = aixnative.com. 로컬 dev 는 Vite 프록시(same-origin)라 불필요하지만
   # 직접 호출/스테이징을 위해 localhost 도 기본 포함. 운영에선 ALLOWED_ORIGINS 로 좁히세요.
   allowed-origins: ${ALLOWED_ORIGINS:https://aixnative.com,https://www.aixnative.com,http://localhost:5173}
+  # 이메일 인증 링크의 베이스 URL(운영=Cloud Run/도메인). 미설정 시 localhost(개발).
+  base-url: ${APP_BASE_URL:http://localhost:8080}
+  # 인증 발신자 표기. 실제 발송은 SMTP(SPRING_MAIL_HOST 등) 설정 시에만 — 미설정이면 링크를 로그로 출력.
+  mail:
+    from: ${MAIL_FROM:no-reply@aixnative.com}
+  verification:
+    token-ttl-hours: ${VERIFICATION_TTL_HOURS:24}
+  # 가입/재발송 IP당 시간 한도(무료 크레딧 어뷰징·봇 가입 방어). 너무 빡빡하지 않게 기본 5.
+  signup-rate-limit:
+    max-per-hour: ${SIGNUP_RATE_LIMIT_PER_HOUR:5}
 
 # Cloud Run 등 컨테이너 플랫폼은 리슨 포트를 PORT 로 주입한다(기본 8080).
 server:

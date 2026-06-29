@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import {
-  api, ApiError, isBovCalc, isBizHealthCalc,
-  type BizHealthCalc, type BovInput, type DevFeasibilityInput, type DocAnalysisType, type DocAnalyzeInput,
-  type DocAnalyzeResponse, type DocCalc, type DocSection, type RunSummary, type TaxGuide,
+  api, ApiError, isBovCalc, isBizHealthCalc, isPriceForecastCalc,
+  type BizHealthCalc, type BovInput, type DealExtract, type DevFeasibilityInput, type DocAnalysisType, type DocAnalyzeInput,
+  type DocAnalyzeResponse, type DocCalc, type DocSection, type PriceForecastCalc, type PriceForecastInput,
+  type RunSummary, type TaxGuide,
 } from './api'
 
 interface DocAnalysisViewProps {
   onCreditBalance: (balance: number) => void
+  /** 시장 피드 '이 딜 분석하기'로 들어올 때 딜/기사 원문. 들어오면 자동으로 추출 실행. */
+  initialDealText?: string
 }
 
 interface DocTypeMeta {
@@ -38,6 +41,8 @@ const DOC_TYPES: DocTypeMeta[] = [
     placeholder: '예: 서울 GBD 오피스 시장. 향후 3년 공급, 금리 환경, 최근 거래 사례 기준 House View 요청.' },
   { type: 'COUNTERPARTY_DD', label: '거래상대방 실사', hint: '사업자상태·제재·규모',
     placeholder: '정성 정보(선택): 거래 맥락·우려사항 등. 핵심 사실은 사업자번호로 공공데이터가 확정합니다.' },
+  { type: 'PRICE_FORECAST', label: '매입·매각 가격 예측', hint: '소득환원+거래사례 밴드',
+    placeholder: '정성 정보(선택): 입찰 맥락·매도 우선순위 등. 핵심 수치는 아래 입력 + 실거래/공시지가로 확정합니다.' },
 ]
 
 const DOC_LABEL: Record<string, string> = Object.fromEntries(
@@ -46,7 +51,7 @@ const DOC_LABEL: Record<string, string> = Object.fromEntries(
     [['UNDERWRITING_GUIDE', '언더라이팅 입력가이드'], ['BUILDING_RESEARCH', '건물 검색(예비 IM)'],
      ['TAX_PRICE_DIAGNOSIS', '세무·가격 진단'], ['BOV_NARRATIVE', '매각 BOV'], ['AM_QUARTERLY', '분기 자산보고'],
      ['HOLD_SELL_REFI', '보유·매각·리파이'], ['DEV_FEASIBILITY', '개발 타당성'], ['MARKET_RESEARCH_DEEP', '심화 시장리서치'],
-     ['COUNTERPARTY_DD', '거래상대방 실사']] as [string, string][],
+     ['COUNTERPARTY_DD', '거래상대방 실사'], ['PRICE_FORECAST', '매입·매각 가격 예측']] as [string, string][],
   ),
 )
 
@@ -79,6 +84,12 @@ const DEV_FIELDS: CalcField[] = [
   { k: 'salesRevenueEok', label: '분양수입 (억)', hint: '분양형' },
 ]
 
+const FORECAST_FIELDS: CalcField[] = [
+  { k: 'noiEok', label: '안정화 NOI (억)', hint: '소득환원용 — 알면 입력' },
+  { k: 'areaPyeong', label: '연면적 (평)', hint: '거래사례용 — 알면 입력' },
+  { k: 'marketCapPct', label: '시장 Cap (%)', hint: '미입력 시 자산유형 기본값' },
+]
+
 function isCalcType(t: DocAnalysisType): boolean {
   return t === 'BOV' || t === 'DEV_FEASIBILITY'
 }
@@ -101,7 +112,7 @@ function verdictTone(verdict?: string): 'go' | 'no' | 'cond' {
   return 'cond'
 }
 
-export function DocAnalysisView({ onCreditBalance }: DocAnalysisViewProps) {
+export function DocAnalysisView({ onCreditBalance, initialDealText }: DocAnalysisViewProps) {
   const [type, setType] = useState<DocAnalysisType>('DEV_FEASIBILITY')
   const [dealName, setDealName] = useState('')
   const [assetType, setAssetType] = useState<string>('오피스')
@@ -115,11 +126,62 @@ export function DocAnalysisView({ onCreditBalance }: DocAnalysisViewProps) {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<DocAnalyzeResponse | null>(null)
   const [historyVersion, setHistoryVersion] = useState(0)
+  // 딜 기반 진입 — 기사/딜 텍스트 추출
+  const [dealText, setDealText] = useState('')
+  const [extracting, setExtracting] = useState(false)
+  const [extracted, setExtracted] = useState<DealExtract | null>(null)
+
+  // 시장 피드에서 딜 원문을 받고 들어오면 textarea 채우고 자동 추출.
+  useEffect(() => {
+    const seed = initialDealText?.trim()
+    if (!seed) return
+    setDealText(seed)
+    void extractDeal(seed)
+    // initialDealText 변경 시에만 실행(채우기는 1회성 진입 신호)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDealText])
+
+  /** 기사/딜 텍스트 → 구조화 추출(무료). 성공 시 추출 결과를 보여주고 '채우기'로 폼에 반영. */
+  async function extractDeal(textArg?: string) {
+    const text = (textArg ?? dealText).trim()
+    if (!text) { setError('기사/딜 텍스트를 붙여넣으세요.'); return }
+    setError(null)
+    setExtracting(true)
+    try {
+      const res = await api.extractDeal(text)
+      if (res.extract) setExtracted(res.extract)
+      else setError('구조화 추출에 실패했습니다. 텍스트를 더 구체적으로 넣어보세요.')
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.message : '딜 추출 중 오류가 발생했습니다.')
+    } finally {
+      setExtracting(false)
+    }
+  }
+
+  /** 추출된 딜을 분석 폼에 반영하고 가격 예측 단계로 전환. */
+  function applyExtract(e: DealExtract) {
+    if (e.dealName) setDealName(e.dealName)
+    if (e.location) setLocation(e.location)
+    if (e.parcelAddress) setParcelAddress(e.parcelAddress)
+    if (e.assetType && (ASSET_TYPES as readonly string[]).includes(e.assetType)) setAssetType(e.assetType)
+    const cv: Record<string, string> = {}
+    if (e.noiEok != null) cv.noiEok = String(e.noiEok)
+    if (e.areaPyeong != null) cv.areaPyeong = String(e.areaPyeong)
+    if (e.marketCapPct != null) cv.marketCapPct = String(e.marketCapPct)
+    setCalcValues(cv)
+    if (e.tenantSummary || e.summary) {
+      setDocumentText([e.summary, e.tenantSummary].filter(Boolean).join(' · '))
+    }
+    setType('PRICE_FORECAST')
+    setResult(null)
+    setError(null)
+  }
 
   const meta = DOC_TYPES.find((d) => d.type === type) ?? DOC_TYPES[0]
   const calcMode = isCalcType(type)
   const ddMode = type === 'COUNTERPARTY_DD'
-  const parcelMode = type === 'TAX_PRICE_DIAGNOSIS' || type === 'DEV_FEASIBILITY' // 공시지가·용도지역 선택 입력
+  const forecastMode = type === 'PRICE_FORECAST'
+  const parcelMode = type === 'TAX_PRICE_DIAGNOSIS' || type === 'DEV_FEASIBILITY' || type === 'PRICE_FORECAST' // 공시지가·용도지역 선택 입력
 
   function selectType(next: DocAnalysisType) {
     setType(next)
@@ -174,6 +236,16 @@ export function DocAnalysisView({ onCreditBalance }: DocAnalysisViewProps) {
       const built = buildCalcInput()
       if (typeof built === 'string') { setError(built); return }
       Object.assign(input, built)
+    } else if (forecastMode) {
+      const v = (k: string) => toNum(calcValues[k])
+      if (!v('noiEok') && !v('areaPyeong')) {
+        setError('NOI(소득환원) 또는 연면적(거래사례) 중 하나는 입력하세요.')
+        return
+      }
+      const forecast: PriceForecastInput = {
+        noiEok: v('noiEok'), marketCapPct: v('marketCapPct'), areaPyeong: v('areaPyeong'),
+      }
+      input.forecast = forecast
     } else if (!documentText.trim()) {
       setError('분석 대상 정보를 입력하세요.')
       return
@@ -209,6 +281,19 @@ export function DocAnalysisView({ onCreditBalance }: DocAnalysisViewProps) {
 
       <div className="layout">
         <form className="card input-panel" onSubmit={(e) => { e.preventDefault(); run() }}>
+          <div className="deal-ingest">
+            <label htmlFor="dealText">딜/기사로 시작 (선택) · 붙여넣으면 AI가 자동 정리</label>
+            <textarea id="dealText" rows={3} value={dealText} onChange={(e) => setDealText(e.target.value)}
+              placeholder="예: 신한카드 을지로 본사 사옥(파인에비뉴 A동) 매각, 우선협상대상자 MDM자산운용 선정. 8곳 입찰, PI 참여, 임차구조 안정성…" />
+            <div className="deal-ingest-actions">
+              <button type="button" className="btn-ghost" onClick={() => extractDeal()} disabled={extracting || !dealText.trim()}>
+                {extracting ? 'AI 정리 중…' : '딜 자동 정리'}
+              </button>
+              <span className="hint" style={{ margin: 0 }}>무료 · 정리 후 아래 폼에 자동 반영됩니다</span>
+            </div>
+            {extracted && <ExtractedDeal extract={extracted} onApply={() => applyExtract(extracted)} />}
+          </div>
+
           <div className="form-head">
             <span className="section-title" style={{ margin: 0 }}>분석 선택</span>
           </div>
@@ -279,10 +364,27 @@ export function DocAnalysisView({ onCreditBalance }: DocAnalysisViewProps) {
                 </div>
               </div>
             )}
+            {forecastMode && (
+              <div className="full">
+                <label>가격 예측 입력 (NOI·연면적 중 하나는 필수)</label>
+                <div className="calc-grid">
+                  {FORECAST_FIELDS.map((f) => (
+                    <div key={f.k} className="calc-field">
+                      <label htmlFor={`fc-${f.k}`}>{f.label}</label>
+                      <input id={`fc-${f.k}`} type="number" inputMode="decimal" step="any"
+                        value={calcValues[f.k] ?? ''} placeholder={f.hint ?? ''}
+                        onChange={(e) => setCalcValues((s) => ({ ...s, [f.k]: e.target.value }))} />
+                      {f.hint && <span className="calc-hint">{f.hint}</span>}
+                    </div>
+                  ))}
+                </div>
+                <span className="calc-hint">위치를 넣으면 상업 실거래 평당가가, 필지주소를 넣으면 공시지가가 자동 주입됩니다.</span>
+              </div>
+            )}
             <div className="full">
-              <label htmlFor="docText">{calcMode || ddMode ? '추가 컨텍스트 (선택)' : '분석 대상 정보 *'}</label>
-              <textarea id="docText" rows={calcMode || ddMode ? 3 : 6} value={documentText} onChange={(e) => setDocumentText(e.target.value)}
-                placeholder={calcMode || ddMode ? '정성 정보(포지셔닝·매도자 우선순위·인허가 상황 등)를 자유롭게 덧붙이면 서술 품질이 올라갑니다. 핵심 사실은 위 입력으로 확정합니다.' : meta.placeholder} />
+              <label htmlFor="docText">{calcMode || ddMode || forecastMode ? '추가 컨텍스트 (선택)' : '분석 대상 정보 *'}</label>
+              <textarea id="docText" rows={calcMode || ddMode || forecastMode ? 3 : 6} value={documentText} onChange={(e) => setDocumentText(e.target.value)}
+                placeholder={calcMode || ddMode || forecastMode ? '정성 정보(포지셔닝·매도자 우선순위·인허가 상황 등)를 자유롭게 덧붙이면 서술 품질이 올라갑니다. 핵심 사실은 위 입력으로 확정합니다.' : meta.placeholder} />
             </div>
           </div>
 
@@ -290,7 +392,7 @@ export function DocAnalysisView({ onCreditBalance }: DocAnalysisViewProps) {
             <button type="submit" className="btn-primary" disabled={busy}>
               {busy ? '분석 중…' : `${meta.label} 분석 · 1크레딧`}
             </button>
-            <p className="hint">{calcMode || ddMode
+            <p className="hint">{calcMode || ddMode || forecastMode
               ? '핵심 사실은 코드·공공데이터로 확정하고(환각 차단), AI 는 그 확정 사실을 근거로 서술·판정만 합니다. 같은 딜 이름으로 쌓으면 이력에서 함께 보입니다.'
               : '자유 텍스트로 자산·운영·토지 정보를 입력하면 단계별 전문 분석을 생성합니다. 같은 딜 이름으로 쌓으면 이력에서 함께 보입니다.'}</p>
           </div>
@@ -302,10 +404,25 @@ export function DocAnalysisView({ onCreditBalance }: DocAnalysisViewProps) {
             <DocResult res={result} label={DOC_LABEL[result.analysisType] ?? result.analysisType} />
           ) : (
             <div className="result-empty">
-              <div className="placeholder">
-                <div className="ph-mark">◇</div>
-                <strong>아직 결과가 없습니다.</strong>
-                분석을 선택하고 대상 정보를 입력해 실행하세요.
+              <div className="empty-state">
+                <div className="empty-ico" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <path d="M14 2v6h6M9 13h6M9 17h4" />
+                  </svg>
+                </div>
+                <h3>심화 분석 결과가 여기에 표시됩니다</h3>
+                <p>분석 유형을 선택하고 대상 정보를 입력해 실행하세요. BOV·개발 타당성·세무·시장조사·실사를 지원합니다.</p>
+                <div className="empty-preview" aria-hidden="true">
+                  <div className="empty-prev-metrics">
+                    {['가치평가', '판정', '근거'].map((k) => (
+                      <div className="epm" key={k}><span className="epm-k">{k}</span><span className="epm-bar" /></div>
+                    ))}
+                  </div>
+                  <div className="empty-prev-chart">
+                    {[52, 40, 66, 48, 72].map((h, i) => <i key={i} style={{ height: `${h}%` }} />)}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -356,8 +473,39 @@ function DocResult({ res, label }: { res: DocAnalyzeResponse; label: string }) {
 }
 
 /** 코드 확정 수치 카드 — BOV·개발수익성·거래상대방 실사(결정론적 공공데이터). AI 서술 위에 표기. */
+/** 추출된 딜 미리보기 — 핵심 필드 칩 + '이 값으로 채우기'. */
+function ExtractedDeal({ extract: e, onApply }: { extract: DealExtract; onApply: () => void }) {
+  const chips: [string, string][] = []
+  if (e.buildingName) chips.push(['건물', e.buildingName])
+  if (e.assetType) chips.push(['유형', e.assetType])
+  if (e.location) chips.push(['위치', e.location])
+  if (e.parcelAddress) chips.push(['필지', e.parcelAddress])
+  if (e.seller) chips.push(['매도', e.seller])
+  if (e.preferredBidder) chips.push(['우협', e.preferredBidder])
+  if (e.buyer) chips.push(['매수', e.buyer])
+  if (e.dealPriceEok != null) chips.push(['거래가', `${e.dealPriceEok.toLocaleString('ko-KR')}억`])
+  if (e.noiEok != null) chips.push(['NOI', `${e.noiEok}억`])
+  if (e.areaPyeong != null) chips.push(['연면적', `${e.areaPyeong.toLocaleString('ko-KR')}평`])
+  if (e.marketCapPct != null) chips.push(['Cap', `${e.marketCapPct}%`])
+  return (
+    <div className="extracted-deal">
+      <div className="ed-head">
+        <strong>{e.dealName ?? '추출된 딜'}</strong>
+        {e.confidence && <span className={`gl-badge ${e.confidence === 'HIGH' ? 'go' : e.confidence === 'LOW' ? 'no' : 'cond'}`}>{e.confidence}</span>}
+      </div>
+      {e.summary && <p className="muted" style={{ margin: '0 0 0.5rem' }}>{e.summary}</p>}
+      <div className="chips">{chips.map(([k, v]) => <span key={k} className="chip">{k} {v}</span>)}</div>
+      {e.tenantSummary && <p className="muted" style={{ margin: '0.5rem 0 0' }}>임차: {e.tenantSummary}</p>}
+      <button type="button" className="btn-primary" style={{ marginTop: '0.7rem' }} onClick={onApply}>
+        이 값으로 가격 예측 채우기 →
+      </button>
+    </div>
+  )
+}
+
 function CalcCard({ calc }: { calc: DocCalc }) {
   if (isBizHealthCalc(calc)) return <BizHealthCard calc={calc} />
+  if (isPriceForecastCalc(calc)) return <PriceForecastCard calc={calc} />
   if (isBovCalc(calc)) {
     const metrics: [string, string][] = [
       ['Direct Cap', `${calc.directCapValueEok} 억`],
@@ -411,6 +559,30 @@ function CalcCard({ calc }: { calc: DocCalc }) {
           </tbody>
         </table>
       )}
+    </section>
+  )
+}
+
+/** 매입·매각 가격 예측 — 코드 확정 밸류에이션 밴드 카드. */
+function PriceForecastCard({ calc }: { calc: PriceForecastCalc }) {
+  const confTone: Record<string, string> = { HIGH: 'go', MEDIUM: 'cond', LOW: 'no' }
+  const fmt = (n: number) => n.toLocaleString('ko-KR')
+  return (
+    <section className="calc-card">
+      <div className="section-title">
+        코드 확정 가격 예측 <span className="calc-badge">결정론적</span>
+        <span className={`gl-badge ${confTone[calc.confidence] ?? 'cond'}`} style={{ marginLeft: '0.5rem' }}>
+          신뢰도 {calc.confidence}
+        </span>
+      </div>
+      <div className="metrics">
+        <div className="metric hl"><span className="k">적정 매입가</span><span className="v">{fmt(calc.buyLowEok)} ~ {fmt(calc.buyHighEok)} 억</span></div>
+        <div className="metric hl"><span className="k">예상 매각가</span><span className="v">{fmt(calc.sellLowEok)} ~ {fmt(calc.sellHighEok)} 억</span></div>
+        <div className="metric"><span className="k">추정가</span><span className="v">{fmt(calc.estimateEok)} 억</span></div>
+        <div className="metric"><span className="k">Implied Cap</span><span className="v">{calc.impliedCapPct} %</span></div>
+        {calc.incomeValueEok != null && <div className="metric"><span className="k">소득환원</span><span className="v">{fmt(calc.incomeValueEok)} 억</span></div>}
+        {calc.compValueEok != null && <div className="metric"><span className="k">거래사례</span><span className="v">{fmt(calc.compValueEok)} 억</span></div>}
+      </div>
     </section>
   )
 }

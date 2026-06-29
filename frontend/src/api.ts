@@ -15,6 +15,7 @@ export interface AuthResult {
   plan: string
   role: UserRole
   creditBalance: number
+  emailVerified: boolean
 }
 
 export interface Me {
@@ -23,6 +24,7 @@ export interface Me {
   email: string
   role: UserRole
   creditBalance: number
+  emailVerified: boolean
 }
 
 export type CreditReason = 'SIGNUP_GRANT' | 'AI_ANALYSIS' | 'PURCHASE'
@@ -192,6 +194,7 @@ export type DocAnalysisType =
   | 'DEV_FEASIBILITY'
   | 'MARKET_RESEARCH_DEEP'
   | 'COUNTERPARTY_DD'
+  | 'PRICE_FORECAST'
 
 /** 매각 BOV 3-Method 평가 입력(코드 확정 계산). 할인율·Exit Cap 미입력 시 서버가 자산유형 기본값으로 보정. */
 export interface BovInput {
@@ -216,6 +219,61 @@ export interface DevFeasibilityInput {
   salesRevenueEok?: number
 }
 
+/** 가격 예측 입력 — NOI(소득환원) 또는 연면적(거래사례) 중 하나는 필요. 시장Cap 미입력 시 자산유형 기본값. */
+export interface PriceForecastInput {
+  noiEok?: number
+  marketCapPct?: number
+  areaPyeong?: number
+}
+
+/** 딜 추출 결과 — 기사/딜 텍스트에서 뽑은 구조화 필드(분석 폼 프리필용). 모르는 값은 null. */
+export interface DealExtract {
+  dealName: string | null
+  buildingName: string | null
+  assetType: string | null
+  location: string | null
+  parcelAddress: string | null
+  seller: string | null
+  buyer: string | null
+  preferredBidder: string | null
+  dealPriceEok: number | null
+  noiEok: number | null
+  areaPyeong: number | null
+  marketCapPct: number | null
+  tenantSummary: string | null
+  summary: string | null
+  confidence: string | null
+}
+
+export interface DealExtractResponse {
+  extract: DealExtract | null
+  raw: string | null
+  provider: string
+}
+
+/** 시장 인텔리전스 피드 카드. sourceText = '이 딜 분석하기' 진입용 원문. */
+export interface MarketFeedItem {
+  id: number
+  title: string
+  summary: string | null
+  assetType: string | null
+  location: string | null
+  sourceText: string | null
+  sourceUrl: string | null
+  publishedAt: string | null
+}
+
+/** 관리자 피드 생성 입력. */
+export interface MarketFeedInput {
+  title: string
+  summary?: string
+  assetType?: string
+  location?: string
+  sourceText?: string
+  sourceUrl?: string
+  publishedAt?: string
+}
+
 export interface DocAnalyzeInput {
   dealName?: string
   assetType?: string
@@ -223,6 +281,7 @@ export interface DocAnalyzeInput {
   documentText?: string
   bov?: BovInput
   dev?: DevFeasibilityInput
+  forecast?: PriceForecastInput
   bizNo?: string
   counterpartyName?: string
   parcelAddress?: string
@@ -274,7 +333,22 @@ export interface BizHealthCalc {
   pension: PensionInfoData
 }
 
-export type DocCalc = BovCalc | DevCalc | BizHealthCalc
+/** 코드 산출 가격 예측 결과(결정론적 밸류에이션 밴드). */
+export interface PriceMethod { name: string; valueEok: number }
+export interface PriceForecastCalc {
+  incomeValueEok: number | null
+  compValueEok: number | null
+  estimateEok: number
+  buyLowEok: number
+  buyHighEok: number
+  sellLowEok: number
+  sellHighEok: number
+  impliedCapPct: number
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW'
+  methods: PriceMethod[]
+}
+
+export type DocCalc = BovCalc | DevCalc | BizHealthCalc | PriceForecastCalc
 
 /** calc 가 BOV 결과인지 판별(렌더 분기용). */
 export function isBovCalc(c: DocCalc): c is BovCalc {
@@ -284,6 +358,11 @@ export function isBovCalc(c: DocCalc): c is BovCalc {
 /** calc 가 거래상대방 실사 결과인지 판별. */
 export function isBizHealthCalc(c: DocCalc): c is BizHealthCalc {
   return (c as BizHealthCalc).status !== undefined && (c as BizHealthCalc).sanctions !== undefined
+}
+
+/** calc 가 가격 예측 결과인지 판별. */
+export function isPriceForecastCalc(c: DocCalc): c is PriceForecastCalc {
+  return (c as PriceForecastCalc).estimateEok !== undefined && (c as PriceForecastCalc).buyLowEok !== undefined
 }
 
 export interface SectionTable {
@@ -391,6 +470,10 @@ export const api = {
 
   me: (): Promise<Me> => request('/api/auth/me'),
 
+  /** 미인증 사용자의 인증 메일 재발송. */
+  resendVerification: (): Promise<{ sent: boolean }> =>
+    request('/api/auth/resend-verification', { method: 'POST' }),
+
   proforma: (input: UnderwriteInput): Promise<ProFormaResponse> =>
     request('/api/underwriting/proforma', { method: 'POST', body: JSON.stringify(input) }),
 
@@ -402,6 +485,10 @@ export const api = {
 
   analyzeDoc: (type: DocAnalysisType, input: DocAnalyzeInput): Promise<DocAnalyzeResponse> =>
     request(`/api/underwriting/analyze-doc/${type}`, { method: 'POST', body: JSON.stringify(input) }),
+
+  /** 무료 — 기사/딜 텍스트 → 구조화 추출(분석 폼 프리필). 크레딧 미차감. */
+  extractDeal: (text: string): Promise<DealExtractResponse> =>
+    request('/api/underwriting/extract-deal', { method: 'POST', body: JSON.stringify({ text }) }),
 
   /** 투자 보고서 HTML(원문). 인증 헤더가 필요하므로 fetch 로 받아 새 창에 띄운다. */
   reportHtml: async (runId: number): Promise<string> => {
@@ -418,4 +505,16 @@ export const api = {
   run: (id: number): Promise<RunDetail> => request(`/api/underwriting/runs/${id}`),
 
   history: (): Promise<BillingHistory> => request('/api/billing/history'),
+
+  /** 시장 인텔리전스 피드 — 최신 카드(인증 사용자). */
+  marketFeed: (limit = 30): Promise<MarketFeedItem[]> =>
+    request(`/api/market-feed?limit=${limit}`),
+
+  /** 관리자 — 피드 카드 추가. */
+  marketFeedCreate: (input: MarketFeedInput): Promise<MarketFeedItem> =>
+    request('/api/admin/market-feed', { method: 'POST', body: JSON.stringify(input) }),
+
+  /** 관리자 — 피드 카드 삭제. */
+  marketFeedDelete: (id: number): Promise<{ deleted: boolean }> =>
+    request(`/api/admin/market-feed/${id}`, { method: 'DELETE' }),
 }

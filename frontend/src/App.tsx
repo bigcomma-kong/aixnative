@@ -3,23 +3,32 @@ import { api, tokenStore, type AuthResult, type UserRole } from './api'
 import { LandingView } from './LandingView'
 import { UnderwriteView } from './UnderwriteView'
 import { DocAnalysisView } from './DocAnalysisView'
+import { MarketFeedView } from './MarketFeedView'
 import { CreditHistoryView } from './CreditHistoryView'
 import { Paywall } from './Paywall'
 
 type Plan = 'FREE' | 'PAID'
-type Tab = 'underwrite' | 'advanced' | 'credits'
+type Tab = 'feed' | 'underwrite' | 'advanced' | 'credits'
 
 interface Session {
   email: string
   creditBalance: number
   plan: Plan
   role: UserRole
+  emailVerified: boolean
 }
 
 function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [booting, setBooting] = useState(true)
-  const [tab, setTab] = useState<Tab>('underwrite')
+  const [tab, setTab] = useState<Tab>('feed')
+  // 시장 피드 '이 딜 분석하기' → 심화 분석으로 넘길 딜 원문(진입 신호).
+  const [dealSeed, setDealSeed] = useState<string | undefined>(undefined)
+
+  function analyzeDeal(sourceText: string) {
+    setDealSeed(sourceText)
+    setTab('advanced')
+  }
 
   // 앱 시작 시 저장된 토큰이 있으면 세션 복원. (plan 은 결제 도입 전까지 FREE; 사용 내역에서 서버값으로 보정)
   useEffect(() => {
@@ -28,7 +37,7 @@ function App() {
       return
     }
     api.me()
-      .then((me) => setSession({ email: me.email, creditBalance: me.creditBalance, plan: 'FREE', role: me.role ?? 'USER' }))
+      .then((me) => setSession({ email: me.email, creditBalance: me.creditBalance, plan: 'FREE', role: me.role ?? 'USER', emailVerified: me.emailVerified }))
       .catch(() => tokenStore.clear())
       .finally(() => setBooting(false))
   }, [])
@@ -39,6 +48,7 @@ function App() {
       creditBalance: result.creditBalance,
       plan: (result.plan as Plan) ?? 'FREE',
       role: result.role ?? 'USER',
+      emailVerified: result.emailVerified,
     })
   }
 
@@ -63,6 +73,7 @@ function App() {
       <header className="topbar">
         <div className="brand">aix<span>native</span></div>
         <nav className="topnav" aria-label="주요 메뉴">
+          <button aria-current={tab === 'feed'} onClick={() => setTab('feed')}>시장</button>
           <button aria-current={tab === 'underwrite'} onClick={() => setTab('underwrite')}>언더라이팅</button>
           <button aria-current={tab === 'advanced'} onClick={() => setTab('advanced')}>심화 분석</button>
           <button aria-current={tab === 'credits'} onClick={() => setTab('credits')}>사용 내역</button>
@@ -89,24 +100,88 @@ function App() {
         </div>
       </header>
 
-      {!isAdmin && session.creditBalance <= 0 && (
+      {!isAdmin && !session.emailVerified && (
+        <VerifyBanner onVerified={(creditBalance) => patchSession({ emailVerified: true, creditBalance })} />
+      )}
+
+      {!isAdmin && session.emailVerified && session.creditBalance <= 0 && (
         <div className="paywall-bar">
           <Paywall creditBalance={0} variant="banner" />
         </div>
       )}
 
       <main>
+        {tab === 'feed' && (
+          <MarketFeedView isAdmin={isAdmin} onAnalyzeDeal={analyzeDeal} />
+        )}
         {tab === 'underwrite' && (
           <UnderwriteView onCreditBalance={(balance) => patchSession({ creditBalance: balance })} />
         )}
         {tab === 'advanced' && (
-          <DocAnalysisView onCreditBalance={(balance) => patchSession({ creditBalance: balance })} />
+          <DocAnalysisView
+            onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
+            initialDealText={dealSeed}
+          />
         )}
         {tab === 'credits' && (
           <CreditHistoryView onSync={(plan, creditBalance) => patchSession({ plan, creditBalance })} />
         )}
       </main>
     </>
+  )
+}
+
+/** 미인증 사용자 상단 배너 — 인증 메일 재전송 + 인증 완료 확인(새로고침). */
+function VerifyBanner({ onVerified }: { onVerified: (creditBalance: number) => void }) {
+  const [status, setStatus] = useState<'idle' | 'sending' | 'checking'>('idle')
+  const [msg, setMsg] = useState<string | null>(null)
+
+  async function resend() {
+    setStatus('sending')
+    setMsg(null)
+    try {
+      await api.resendVerification()
+      setMsg('인증 메일을 다시 보냈습니다. 메일함(스팸함 포함)을 확인하세요.')
+    } catch {
+      setMsg('재발송에 실패했습니다. 잠시 후 다시 시도하세요.')
+    } finally {
+      setStatus('idle')
+    }
+  }
+
+  async function check() {
+    setStatus('checking')
+    setMsg(null)
+    try {
+      const me = await api.me()
+      if (me.emailVerified) onVerified(me.creditBalance)
+      else setMsg('아직 인증이 확인되지 않았습니다. 메일의 링크를 클릭한 뒤 다시 눌러주세요.')
+    } catch {
+      setMsg('확인 중 오류가 발생했습니다.')
+    } finally {
+      setStatus('idle')
+    }
+  }
+
+  return (
+    <div className="paywall-bar">
+      <div className="verify-banner">
+        <div className="vb-main">
+          <strong className="vb-title">이메일 인증을 완료하면 무료 분석 크레딧이 지급됩니다</strong>
+          <p className="vb-sub">
+            가입하신 이메일로 보낸 인증 링크를 클릭한 뒤 ‘인증 완료’를 눌러주세요.{msg ? ` · ${msg}` : ''}
+          </p>
+        </div>
+        <div className="vb-actions">
+          <button className="btn-ghost" onClick={resend} disabled={status === 'sending'}>
+            {status === 'sending' ? '보내는 중…' : '인증 메일 재전송'}
+          </button>
+          <button className="btn-primary" onClick={check} disabled={status === 'checking'}>
+            {status === 'checking' ? '확인 중…' : '인증 완료'}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 

@@ -57,6 +57,14 @@ class UnderwritingController(
     ): ApiResponse<DocAnalyzeResponse> = ApiResponse.ok(service.analyzeDoc(type, req))
 
     /**
+     * 무료 — 딜/기사 텍스트를 구조화 추출(분석 폼 프리필용 진입점). AI 1회 호출이지만 크레딧 미차감.
+     * 인증 + AI 설정만 게이트. 실제 분석(가격예측·언더라이팅)이 과금 단위.
+     */
+    @PostMapping("/extract-deal")
+    fun extractDeal(@Valid @RequestBody req: DealExtractRequest): ApiResponse<DealExtractResponse> =
+        ApiResponse.ok(service.extractDeal(req))
+
+    /**
      * 투자 보고서(HTML). 주어진 run 이 속한 딜의 분석 단계들을 합본해 인쇄 친화 문서로 반환.
      * 무료(저장된 분석 결과 조립일 뿐 AI 미호출). 다른 테넌트의 run 이면 404.
      */

@@ -203,7 +203,7 @@ export function UnderwriteView({ onCreditBalance }: UnderwriteViewProps) {
           <div className="actions">
             <div className="stage-grid">
               {STAGES.map((s) => (
-                <button key={s.type} type="button" className="btn-primary stage-btn"
+                <button key={s.type} type="button" className="stage-btn"
                   onClick={() => runStage(s.type)} disabled={busy !== 'none'}>
                   <span className="stage-label">{busy === s.type ? '분석 중…' : s.label}</span>
                   <span className="stage-hint">{s.hint} · 1크레딧</span>
@@ -223,10 +223,25 @@ export function UnderwriteView({ onCreditBalance }: UnderwriteViewProps) {
             <ResultPanel results={results} onReport={openReport} reportBusy={reportBusy} />
           ) : (
             <div className="result-empty">
-              <div className="placeholder">
-                <div className="ph-mark">∿</div>
-                <strong>아직 결과가 없습니다.</strong>
-                좌측에 딜 정보를 입력하고 분석 단계를 실행하세요.
+              <div className="empty-state">
+                <div className="empty-ico" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 3v18h18" />
+                    <path d="M7 14l3.5-3.5L14 14l4-5" />
+                  </svg>
+                </div>
+                <h3>분석 결과가 여기에 표시됩니다</h3>
+                <p>좌측에 딜 정보를 입력하고 <b>ProForma 계산</b>(무료) 또는 <b>AI 분석 단계</b>를 실행하세요.</p>
+                <div className="empty-preview" aria-hidden="true">
+                  <div className="empty-prev-metrics">
+                    {['IRR', 'EQUITY MULTIPLE', 'DSCR'].map((k) => (
+                      <div className="epm" key={k}><span className="epm-k">{k}</span><span className="epm-bar" /></div>
+                    ))}
+                  </div>
+                  <div className="empty-prev-chart">
+                    {[40, 58, 52, 70, 84].map((h, i) => <i key={i} style={{ height: `${h}%` }} />)}
+                  </div>
+                </div>
               </div>
             </div>
           )}

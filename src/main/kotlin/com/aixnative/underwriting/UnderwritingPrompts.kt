@@ -331,4 +331,49 @@ object UnderwritingPrompts {
             SECTIONS_RULES + "\n" + SECTIONS_SCHEMA + "\n" +
             "[문서명] " + (docName ?: "(이름없음)") + "\n\n" +
             "<DATA>\n" + factsText + "\n</DATA>"
+
+    /**
+     * 딜 추출 — 기사/딜 텍스트에서 분석에 필요한 구조화 필드를 뽑는다. 모르는 값은 null(추정·창작 금지).
+     * 후속 분석 폼 프리필용이라 정확/보수적이어야 한다(틀린 수치는 잘못된 분석으로 전파).
+     */
+    fun dealExtract(text: String): String =
+        "당신은 상업용 부동산 딜 정보를 구조화하는 추출기입니다.\n" +
+            "아래 <TEXT>(기사·딜 요약 등)에서 분석에 필요한 필드를 뽑아 JSON 한 객체로만 출력하세요.\n" +
+            "규칙: 텍스트에 명시/명확히 추론되는 값만 채우고, 불확실하면 반드시 null. 새 숫자·당사자를 지어내지 마세요.\n" +
+            "단위 변환: 금액은 억원(예: '2,400억'→2400, '1조2천억'→12000), 면적은 평(㎡면 ÷3.305785), 비율은 %.\n" +
+            "assetType 은 오피스|물류|호텔|리테일 중 하나로 정규화(데이터센터→오피스, 그 외 불명확하면 null).\n" +
+            "parcelAddress 는 번지까지 명확할 때만(예: '서울 중구 을지로 51'). location 은 시군구/권역 수준.\n" +
+            "confidence 는 추출 확신도 HIGH|MEDIUM|LOW.\n\n" +
+            "[출력 스키마 — 단일 JSON 객체 하나만, 코드펜스(```)·주석 금지, 값 모르면 null]\n" +
+            "{\n" +
+            "  \"dealName\": \"딜 식별명 또는 null\",\n" +
+            "  \"buildingName\": \"건물명 또는 null\",\n" +
+            "  \"assetType\": \"오피스|물류|호텔|리테일 또는 null\",\n" +
+            "  \"location\": \"권역/시군구 또는 null\",\n" +
+            "  \"parcelAddress\": \"번지 포함 주소 또는 null\",\n" +
+            "  \"seller\": \"매도자 또는 null\",\n" +
+            "  \"buyer\": \"매수자 또는 null\",\n" +
+            "  \"preferredBidder\": \"우선협상대상자 또는 null\",\n" +
+            "  \"dealPriceEok\": 숫자(억) 또는 null,\n" +
+            "  \"noiEok\": 숫자(억) 또는 null,\n" +
+            "  \"areaPyeong\": 숫자(평) 또는 null,\n" +
+            "  \"marketCapPct\": 숫자(%) 또는 null,\n" +
+            "  \"tenantSummary\": \"임차구조 요약 또는 null\",\n" +
+            "  \"summary\": \"한 줄 딜 요약\",\n" +
+            "  \"confidence\": \"HIGH|MEDIUM|LOW\"\n" +
+            "}\n\n" +
+            "<TEXT>\n" + text + "\n</TEXT>"
+
+    /**
+     * 매입·매각 가격 예측 — 코드 산출 밸류에이션 밴드(<DATA>)를 근거로 매수 입찰가·매도 호가 전략을 sections 로.
+     * 밴드·평당가·Cap 등 수치는 코드 확정값이므로 창작 금지, AI 는 해석·전략만. verdict=매입/매각가 한 줄 권고.
+     */
+    fun priceForecast(factsText: String, docName: String?): String =
+        "당신은 부동산 가치평가·입찰전략(Valuation & Bid) 전문 애널리스트입니다.\n" +
+            "<DATA> 의 코드 산출 가격 예측(소득환원·거래사례·추정가·매입/매각 밴드)과 실측 시장지표(공시지가·실거래·Cap)를 근거로 가격 전략을 sections 로 작성하세요.\n" +
+            "권장 섹션: ① 가치 Snapshot(추정가·Implied Cap·신뢰도) ② 평가근거 해석(소득환원 vs 거래사례 정합성·괴리 원인) ③ 적정 매입가·입찰가 권고(밴드 인용·목표 수익률 관점) ④ 예상 매각가·출구 시나리오(보유 후 가치·시장 변동) ⑤ 가격 리스크(Cap 변동·표본 부족·입지 편차) ⑥ 협상 포인트.\n" +
+            "verdict 는 60자 이내 한 줄 권고(예: \"적정 매입가 2,180~2,420억(시장가 이하), 예상 매각가 2,500~2,750억\"). 모든 금액·밴드는 <DATA> 값만 인용하고 새 숫자를 만들지 마세요. 신뢰도가 LOW 면 그 사실을 명시하고 보수적으로 서술.\n\n" +
+            SECTIONS_RULES + "\n" + SECTIONS_SCHEMA + "\n" +
+            "[문서명] " + (docName ?: "(이름없음)") + "\n\n" +
+            "<DATA>\n" + factsText + "\n</DATA>"
 }

@@ -31,6 +31,7 @@ data class AuthResponse(
     val plan: Plan,
     val role: UserRole,
     val creditBalance: Int,
+    val emailVerified: Boolean,
 )
 
 data class MeResponse(
@@ -39,4 +40,5 @@ data class MeResponse(
     val email: String,
     val role: String,
     val creditBalance: Int,
+    val emailVerified: Boolean,
 )

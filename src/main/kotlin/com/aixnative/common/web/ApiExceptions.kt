@@ -36,5 +36,9 @@ class ConflictException(message: String) : ApiException(HttpStatus.CONFLICT, mes
 class InsufficientCreditsException(message: String = "남은 크레딧이 없습니다. 크레딧을 구매해 주세요.") :
     ApiException(HttpStatus.PAYMENT_REQUIRED, message)
 
+/** 429 — too many requests (e.g. signup flood from one IP). */
+class TooManyRequestsException(message: String = "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.") :
+    ApiException(HttpStatus.TOO_MANY_REQUESTS, message)
+
 /** 503 — a downstream dependency (e.g. the AI provider) is not configured/available. */
 class ServiceUnavailableException(message: String) : ApiException(HttpStatus.SERVICE_UNAVAILABLE, message)

@@ -40,6 +40,9 @@ enum class DocAnalysisType(
 
     /** 거래상대방 실사 — 사업자상태·제재·기업정보·규모(sections). 입력=사업자번호(+상호). */
     COUNTERPARTY_DD("COUNTERPARTY_DD", "거래상대방 실사", "DD", "sections"),
+
+    /** 매입·매각 가격 예측 — 소득환원+거래사례 밴드(sections). 입력=NOI/연면적/시장Cap(+위치). */
+    PRICE_FORECAST("PRICE_FORECAST", "매입·매각 가격 예측", "UNDERWRITING", "sections"),
     ;
 
     companion object {
@@ -60,6 +63,8 @@ data class DocAnalyzeRequest(
     val documentText: String? = null,
     @field:Valid val bov: BovInput? = null,
     @field:Valid val dev: DevFeasibilityInput? = null,
+    /** 가격 예측(PRICE_FORECAST) 입력 — NOI·연면적·시장Cap(선택). 위치는 location 사용. */
+    @field:Valid val forecast: PriceForecastInput? = null,
     /** 거래상대방 실사(COUNTERPARTY_DD) 입력 — 사업자번호(필수)·상호(선택). */
     val bizNo: String? = null,
     val counterpartyName: String? = null,
@@ -76,6 +81,16 @@ data class BovInput(
     val holdYears: Int = 5,
     val rentGrowthPct: Double = 3.0,
     val salesCompValueEok: Double = 0.0,
+)
+
+/**
+ * 가격 예측 입력. NOI+시장Cap → 소득환원, 연면적+실거래 → 거래사례. 둘 중 하나만 있어도 산출(신뢰도 차등).
+ * 시장Cap 미입력 시 자산유형 기본값(CreGuidelines)으로 보정. 거래사례 평당가는 위치(location)로 자동 조회.
+ */
+data class PriceForecastInput(
+    val noiEok: Double? = null,
+    val marketCapPct: Double? = null,
+    val areaPyeong: Double? = null,
 )
 
 /** 개발 타당성 수익성 입력. GDV = 분양수입(있으면) 또는 Stabilized Value(NOI/ExitCap). */
