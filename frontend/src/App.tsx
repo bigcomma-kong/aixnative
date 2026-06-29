@@ -52,6 +52,25 @@ function App() {
       .finally(() => setBooting(false))
   }, [])
 
+  // 인증 배너 자가 치유: 미인증 상태에서 탭으로 돌아오면(메일 링크 클릭 후 복귀 등) me() 를
+  // 다시 조회해 verified 면 배너를 자동으로 내린다. 수동 '인증 완료' 클릭에 의존하지 않음.
+  const needsVerifyRefresh = !!session && session.role !== 'ADMIN' && !session.emailVerified
+  useEffect(() => {
+    if (!needsVerifyRefresh) return
+    function refresh() {
+      if (document.visibilityState === 'hidden') return
+      api.me()
+        .then((me) => { if (me.emailVerified) patchSession({ emailVerified: true, creditBalance: me.creditBalance }) })
+        .catch(() => {})
+    }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [needsVerifyRefresh])
+
   function onAuthed(result: AuthResult) {
     setSession({
       email: result.email,

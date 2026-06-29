@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   api, ApiError,
   type IngestReport, type MarketBriefing, type MarketFeedItem, type MarketFeedInput,
@@ -10,10 +10,13 @@ interface MarketFeedViewProps {
   onAnalyzeDeal: (sourceText: string) => void
 }
 
+const ASSET_FILTERS = ['전체', '오피스', '물류', '호텔', '리테일'] as const
+type AssetFilter = (typeof ASSET_FILTERS)[number]
+
 /**
  * 시장 인텔리전스 — 뉴스레터(마켓 브리핑) + 딜 모니터링(카드 피드)을 합친 surface.
- * 사용자는 브리핑으로 큰 그림을 보고, 카드를 훑어 관심 딜을 바로 AI 분석으로 진입.
- * 데이터는 스케줄러가 자동 수집(무료) — 관리자는 즉시 수집/카드 추가/삭제 가능.
+ * 브리핑으로 큰 그림을 보고, 자산유형으로 딜을 좁혀 그 자리에서 AI 분석으로 진입.
+ * 데이터는 스케줄러가 매일 자동 수집(이력 누적) — 관리자는 즉시 수집/추가/삭제.
  */
 export function MarketFeedView({ isAdmin, onAnalyzeDeal }: MarketFeedViewProps) {
   const [items, setItems] = useState<MarketFeedItem[]>([])
@@ -22,12 +25,13 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal }: MarketFeedViewProps) 
   const [error, setError] = useState<string | null>(null)
   const [ingesting, setIngesting] = useState(false)
   const [report, setReport] = useState<IngestReport | null>(null)
+  const [filter, setFilter] = useState<AssetFilter>('전체')
 
   async function load() {
     setLoading(true)
     setError(null)
     try {
-      const [feed, brief] = await Promise.all([api.marketFeed(), api.marketBriefing().catch(() => null)])
+      const [feed, brief] = await Promise.all([api.marketFeed(60), api.marketBriefing().catch(() => null)])
       setItems(feed)
       setBriefing(brief)
     } catch (err: unknown) {
@@ -63,14 +67,23 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal }: MarketFeedViewProps) 
     }
   }
 
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { 전체: items.length }
+    for (const it of items) if (it.assetType) c[it.assetType] = (c[it.assetType] ?? 0) + 1
+    return c
+  }, [items])
+
+  const visible = filter === '전체' ? items : items.filter((it) => it.assetType === filter)
+
   return (
-    <section className="feed-wrap">
-      <div className="feed-head">
-        <div>
-          <h2 className="feed-title">시장 인텔리전스</h2>
-          <p className="feed-sub">AI 마켓 브리핑으로 큰 그림을 보고, 딜 카드는 그 자리에서 AI 언더라이팅으로 진입하세요.</p>
+    <section className="mi">
+      <header className="mi-head">
+        <div className="mi-head-text">
+          <span className="mi-eyebrow">AI MARKET INTELLIGENCE</span>
+          <h2 className="mi-title">시장 인텔리전스</h2>
+          <p className="mi-sub">매일 자동 수집되는 시장 브리핑과 딜 — 관심 딜은 그 자리에서 AI 언더라이팅으로.</p>
         </div>
-        <div className="feed-head-actions">
+        <div className="mi-actions">
           {isAdmin && (
             <button className="btn-primary" onClick={() => void ingestNow()} disabled={ingesting}>
               {ingesting ? '수집 중…' : '지금 수집'}
@@ -80,29 +93,49 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal }: MarketFeedViewProps) 
             {loading ? '불러오는 중…' : '새로고침'}
           </button>
         </div>
-      </div>
+      </header>
 
       {report && (
-        <p className="ingest-report">
-          수집 완료 — 신규 {report.inserted}건 · 중복 {report.skippedDuplicate}건 · 수집 {report.fetched}건
-          {report.briefingGenerated ? ` · 브리핑 갱신(${report.briefingProvider})` : ' · 브리핑 생략(무료 AI 미설정)'}
+        <p className="mi-report">
+          수집 완료 — 신규 <b>{report.inserted}</b> · 중복 {report.skippedDuplicate} · 분석 {report.fetched}건
+          {report.briefingGenerated ? ` · 브리핑 갱신(${report.briefingProvider})` : ' · 브리핑 생략'}
         </p>
       )}
+      {error && <p className="form-error">{error}</p>}
 
       {briefing && <BriefingHero briefing={briefing} />}
 
       {isAdmin && <AdminFeedForm onCreated={(it) => setItems((list) => [it, ...list])} onError={setError} />}
 
-      {error && <p className="form-error">{error}</p>}
+      <div className="mi-deals-head">
+        <h3 className="mi-section-title">오늘의 딜 <span className="mi-count">{items.length}</span></h3>
+        <div className="mi-filters" role="tablist" aria-label="자산유형 필터">
+          {ASSET_FILTERS.map((f) => (
+            <button
+              key={f}
+              role="tab"
+              aria-selected={filter === f}
+              className="mi-chip"
+              onClick={() => setFilter(f)}
+              disabled={f !== '전체' && !counts[f]}
+            >
+              {f}{counts[f] ? <span className="mi-chip-n">{counts[f]}</span> : null}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {!loading && items.length === 0 && (
         <p className="feed-empty">
           아직 수집된 딜이 없습니다.{isAdmin ? ' ‘지금 수집’을 눌러 시장 데이터를 채우세요.' : ' 곧 자동 수집됩니다.'}
         </p>
       )}
+      {!loading && items.length > 0 && visible.length === 0 && (
+        <p className="feed-empty">‘{filter}’ 유형의 딜이 없습니다.</p>
+      )}
 
       <div className="feed-grid">
-        {items.map((it) => (
+        {visible.map((it) => (
           <FeedCard key={it.id} item={it} isAdmin={isAdmin} onAnalyze={onAnalyzeDeal} onDelete={remove} />
         ))}
       </div>
@@ -110,50 +143,55 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal }: MarketFeedViewProps) 
   )
 }
 
-/** 마켓 브리핑 히어로 — 헤드라인·전망 + 토픽/워치리스트/리스크 요약(뉴스레터 강점). */
+/** 마켓 브리핑 — 프리미엄 다크 히어로(헤드라인·전망 + 동향/워치리스트/리스크). */
 function BriefingHero({ briefing }: { briefing: MarketBriefing }) {
-  const date = briefing.generatedAt ? new Date(briefing.generatedAt).toLocaleString('ko-KR') : briefing.briefingDate
+  const date = briefing.generatedAt
+    ? new Date(briefing.generatedAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })
+    : briefing.briefingDate
   return (
-    <section className="briefing" aria-label="마켓 브리핑">
-      <div className="briefing-top">
-        <span className="briefing-tag">AI 마켓 브리핑</span>
-        {date && <span className="briefing-date">{date}</span>}
+    <section className="brief" aria-label="마켓 브리핑">
+      <div className="brief-top">
+        <span className="brief-badge"><span className="brief-dot" />AI 마켓 브리핑</span>
+        <span className="brief-meta">
+          {briefing.articleCount ? `${briefing.articleCount}건 분석` : null}
+          {date ? ` · ${date}` : null}
+        </span>
       </div>
-      {briefing.headline && <h3 className="briefing-headline">{briefing.headline}</h3>}
-      {briefing.outlook && <p className="briefing-outlook">{briefing.outlook}</p>}
+      {briefing.headline && <h3 className="brief-headline">{briefing.headline}</h3>}
+      {briefing.outlook && <p className="brief-outlook">{briefing.outlook}</p>}
 
-      <div className="briefing-cols">
+      <div className="brief-cols">
         {briefing.sections.length > 0 && (
-          <div className="briefing-block">
+          <div className="brief-block">
             <h4>주요 동향</h4>
             <ul>
               {briefing.sections.map((s, i) => (
                 <li key={i}>
-                  <strong>{s.topic}</strong>{s.summary ? ` — ${s.summary}` : ''}
-                  {s.impact && <span className="briefing-impact"> · {s.impact}</span>}
+                  <strong>{s.topic}</strong>{s.summary ? <span className="brief-li-sum"> {s.summary}</span> : null}
+                  {s.impact && <span className="brief-impact">{s.impact}</span>}
                 </li>
               ))}
             </ul>
           </div>
         )}
         {briefing.watchlist.length > 0 && (
-          <div className="briefing-block">
+          <div className="brief-block">
             <h4>워치리스트</h4>
             <ul>
               {briefing.watchlist.map((w, i) => (
-                <li key={i}><strong>{w.item}</strong>{w.why ? ` — ${w.why}` : ''}</li>
+                <li key={i}><strong>{w.item}</strong>{w.why ? <span className="brief-li-sum"> {w.why}</span> : null}</li>
               ))}
             </ul>
           </div>
         )}
         {briefing.risks.length > 0 && (
-          <div className="briefing-block">
+          <div className="brief-block">
             <h4>리스크</h4>
             <ul>
               {briefing.risks.map((r, i) => (
                 <li key={i}>
                   {r.severity && <span className={`risk-sev ${r.severity.toLowerCase()}`}>{r.severity}</span>}
-                  <strong>{r.signal}</strong>{r.mitigation ? ` — ${r.mitigation}` : ''}
+                  <strong>{r.signal}</strong>{r.mitigation ? <span className="brief-li-sum"> {r.mitigation}</span> : null}
                 </li>
               ))}
             </ul>
@@ -173,35 +211,35 @@ function FeedCard({
   onDelete: (id: number) => void
 }) {
   const seed = item.sourceText?.trim() || item.summary?.trim() || item.title
-  const dateLabel = item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('ko-KR') : null
+  const dateLabel = item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) : null
   const sourceLabel = originLabel(item.origin)
 
   return (
-    <article className="feed-card">
-      <div className="fc-meta">
-        {item.assetType && <span className="fc-chip">{item.assetType}</span>}
-        {item.location && <span className="fc-chip muted">{item.location}</span>}
-        {sourceLabel && <span className="fc-source">{sourceLabel}</span>}
-        {dateLabel && <span className="fc-date">{dateLabel}</span>}
+    <article className="feed-card" data-asset={item.assetType ?? ''}>
+      <div className="fc-top">
+        {item.assetType && <span className="fc-asset">{item.assetType}</span>}
+        {item.location && <span className="fc-loc">{item.location}</span>}
       </div>
       <h3 className="fc-title">{item.title}</h3>
       {item.summary && <p className="fc-summary">{item.summary}</p>}
+      <div className="fc-foot">
+        {sourceLabel && <span className="fc-source">{sourceLabel}</span>}
+        {dateLabel && <span className="fc-date">{dateLabel}</span>}
+      </div>
       <div className="fc-actions">
-        <button className="btn-primary fc-analyze" onClick={() => onAnalyze(seed)}>
-          이 딜 분석하기 →
-        </button>
+        <button className="fc-analyze" onClick={() => onAnalyze(seed)}>이 딜 분석하기 →</button>
         {item.sourceUrl && (
-          <a className="btn-link" href={item.sourceUrl} target="_blank" rel="noreferrer">원문</a>
+          <a className="fc-link" href={item.sourceUrl} target="_blank" rel="noreferrer" title="원문 보기">원문</a>
         )}
         {isAdmin && (
-          <button className="btn-link danger" onClick={() => onDelete(item.id)}>삭제</button>
+          <button className="fc-del" onClick={() => onDelete(item.id)} title="삭제">×</button>
         )}
       </div>
     </article>
   )
 }
 
-/** 출처 코드 → 짧은 표시 라벨. 'RSS:한국경제'→'한국경제', 'GOOGLE_NEWS'→'구글뉴스', 'ADMIN'→'직접등록'. */
+/** 출처 코드 → 짧은 표시 라벨. */
 function originLabel(origin: string | null): string | null {
   if (!origin) return null
   if (origin.startsWith('RSS:')) return origin.slice(4)

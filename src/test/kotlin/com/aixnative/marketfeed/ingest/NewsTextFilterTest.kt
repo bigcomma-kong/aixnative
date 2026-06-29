@@ -48,6 +48,23 @@ class NewsTextFilterTest {
     }
 
     @Test
+    fun `japanese article is rejected by korean gate`() {
+        // 조선비즈 일본판 기사(가나 포함) — 한국어 게이트로 차단.
+        assertFalse(NewsTextFilter.isKorean("韓国バイオヘルス上場業績改善も二極化進む"))
+        assertFalse(NewsTextFilter.isRelevant(item("韓国バイオヘルス上場業績改善も二極化進む")))
+    }
+
+    @Test
+    fun `chinese only title without hangul is rejected`() {
+        assertFalse(NewsTextFilter.isKorean("韓国不動産市場分析報告"))
+    }
+
+    @Test
+    fun `korean title passes gate`() {
+        assertTrue(NewsTextFilter.isKorean("강남 프라임 오피스 매각"))
+    }
+
+    @Test
     fun `sector hint maps to canonical asset type`() {
         assertEquals("물류", NewsTextFilter.classifyAssetType(item("창고 거래", sector = "logistics")))
         assertEquals("호텔", NewsTextFilter.classifyAssetType(item("매각", sector = "hotel")))

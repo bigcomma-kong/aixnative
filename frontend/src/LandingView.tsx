@@ -226,7 +226,7 @@ export function LandingView({ onAuthed }: LandingViewProps) {
       <footer className="landing-footer">
         <div className="brand">aix<span>native</span></div>
         <p className="landing-disc">
-          * 본 서비스는 정보 제공 목적이며 투자자문이 아닙니다. 모든 투자 판단의 책임은 이용자에게 있습니다.
+          * 본 서비스는 정보 제공 목적이며 투자자문이 아닙니다.<br />모든 투자 판단의 책임은 이용자에게 있습니다.
         </p>
         <p className="landing-contact">
           문의는 <a href="mailto:admin@aixnative.com">admin@aixnative.com</a> 로 연락해 주세요.

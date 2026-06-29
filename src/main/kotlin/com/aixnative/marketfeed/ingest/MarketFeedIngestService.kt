@@ -26,9 +26,18 @@ class MarketFeedIngestService(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
+    /**
+     * @param purge true 면 자동 수집 카드를 모두 지우고 새로 채운다(오염 데이터 1회성 정리).
+     *   기본 false — 스케줄 실행은 누적(이력 보존). 수동 등록 ADMIN 카드는 purge 영향 없음.
+     */
     @Transactional
-    fun ingest(): IngestReport {
+    fun ingest(purge: Boolean = false): IngestReport {
         val errors = ArrayList<String>()
+
+        if (purge) {
+            val removed = repository.deleteByDedupKeyIsNotNull()
+            log.info("[ingest] purge=true — 자동 카드 {}건 삭제 후 재수집", removed)
+        }
 
         val raw = runCatching { collector.collect() }
             .onFailure { errors += "수집 실패: ${it.message}" }

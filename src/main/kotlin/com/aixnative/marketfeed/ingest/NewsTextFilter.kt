@@ -24,15 +24,20 @@ object NewsTextFilter {
             .trim()
 
     /**
-     * 부동산/딜 관련 기사인지. 신뢰 소스(RSS)는 통과, 느슨한 소스(구글뉴스)는
-     * 비부동산 노이즈 차단 + 부동산 앵커 1개 이상 필수(동음이의 게이트).
+     * 부동산/딜 관련 기사인지. 한국어 게이트 → 비부동산 노이즈 차단 → (느슨한 소스면) 부동산 앵커 필수.
+     * 조선비즈 등 일부 RSS 에 일본판/외신 기사가 섞여 들어와 한국어가 아닌 항목을 먼저 걸러낸다.
      */
     fun isRelevant(item: NewsItem): Boolean {
+        if (!isKorean(item.title)) return false
         val text = "${item.title} ${item.summary}"
         if (NON_RE_NOISE.any { text.contains(it) }) return false
         if (!item.loose) return true
         return RE_ANCHORS.any { text.contains(it) }
     }
+
+    /** 한국어 기사인가 — 한글(가-힣)이 있고 일본어 가나(히라가나·가타카나)가 없어야 통과. */
+    fun isKorean(title: String): Boolean =
+        HANGUL.containsMatchIn(title) && !KANA.containsMatchIn(title)
 
     /** 자산유형 추정(앱 표준: 오피스|물류|호텔|리테일). 불명확하면 null. 섹터 힌트 우선. */
     fun classifyAssetType(item: NewsItem): String? {
@@ -50,6 +55,9 @@ object NewsTextFilter {
             .find(text)?.let { return it.value.trim() }
         return null
     }
+
+    private val HANGUL = Regex("[가-힣]")
+    private val KANA = Regex("[\\u3040-\\u30ff]") // 히라가나 + 가타카나
 
     private val SECTOR_TO_ASSET = mapOf(
         "office" to "오피스", "logistics" to "물류", "hotel" to "호텔",

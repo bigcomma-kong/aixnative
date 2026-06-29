@@ -54,9 +54,11 @@ class MarketFeedAdminController(
         return ApiResponse.ok(mapOf("deleted" to true))
     }
 
-    /** 수동 수집 — 관리자가 즉시 한 번 수집·적재(+무료 브리핑). 스케줄러와 동일 경로. */
+    /** 수동 수집 — 관리자가 즉시 한 번 수집·적재(+무료 브리핑). purge=true 면 자동 카드 정리 후 재수집. */
     @PostMapping("/ingest")
-    fun ingest(): ApiResponse<IngestReport> = ApiResponse.ok(ingestService.ingest())
+    fun ingest(
+        @RequestParam(required = false, defaultValue = "false") purge: Boolean,
+    ): ApiResponse<IngestReport> = ApiResponse.ok(ingestService.ingest(purge))
 }
 
 /**
@@ -73,11 +75,12 @@ class MarketFeedIngestController(
     @PostMapping("/market-feed")
     fun trigger(
         @RequestHeader(name = "X-Ingest-Token", required = false) token: String?,
+        @RequestParam(required = false, defaultValue = "false") purge: Boolean,
     ): ResponseEntity<ApiResponse<IngestReport>> {
         if (!props.ingestEndpointEnabled || token.isNullOrBlank() || token != props.ingestToken) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiResponse.fail("수집 트리거가 비활성이거나 토큰이 올바르지 않습니다."))
         }
-        return ResponseEntity.ok(ApiResponse.ok(ingestService.ingest()))
+        return ResponseEntity.ok(ApiResponse.ok(ingestService.ingest(purge)))
     }
 }
