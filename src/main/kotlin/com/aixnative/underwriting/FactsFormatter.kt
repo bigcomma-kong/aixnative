@@ -32,6 +32,8 @@ object FactsFormatter {
             sb.append("  ${s.name}: 임대성장 ${s.rentGrowthPct}% · Exit Cap ${s.exitCapPct}% → IRR ${s.leveredIrrPct}% · EM ${s.equityMultiple}x · 최소 DSCR ${s.minDscr} · 매각가 ${s.exitValueEok}억\n")
         }
 
+        sb.append(GuidelineEvaluator.toFactsBlock(GuidelineEvaluator.evaluate(input, r)))
+
         return sb.toString().trimEnd()
     }
 
@@ -52,6 +54,11 @@ object FactsFormatter {
 
         sb.append("[코드 산출 지표] Levered IRR ${r.leveredIrrPct}% · Equity Multiple ${r.equityMultiple}x · ")
             .append("Yield-on-Cost ${r.yieldOnCostPct}%\n")
+
+        val gl = GuidelineEvaluator.evaluate(req.toInputs(), r)
+        sb.append("[가이드라인 적합성 — 코드 판정] PASS ${gl.pass} · WARN ${gl.warn} · FAIL ${gl.fail}")
+            .append(gl.checks.filter { it.status != GuidelineEvaluator.Status.PASS }
+                .joinToString("", prefix = "\n") { "  · ${it.metric} ${it.actual} → ${it.status}\n" })
 
         req.notes?.takeIf { it.isNotBlank() }?.let { sb.append("[메모]\n").append(it).append("\n") }
 

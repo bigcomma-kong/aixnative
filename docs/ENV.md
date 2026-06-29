@@ -28,6 +28,24 @@
 | `AI_PROVIDER_TIMEOUT_MS` | `75000` | provider 단건 타임아웃 |
 | `AI_OVERALL_DEADLINE_MS` | `90000` | AI 호출 전체 deadline |
 
+## 실측 시장데이터 (선택 — 미설정 시 graceful degrade, AI 추정 모드 유지)
+전부 **무료 공공 API**. 키 미설정이어도 분석은 동작하며, 설정 시 시장조사·심화리서치가
+추정 대신 **실측 인용**으로 바뀌고 신뢰도가 올라갑니다. 🔐 **MASTERN 키 복사 금지 — 전부 신규 발급.**
+
+| ENV | 발급처 | 용도 |
+|---|---|---|
+| `ECOS_API_KEY` | [ecos.bok.or.kr](https://ecos.bok.or.kr) (한국은행) | 기준금리·국고채 3y/10y → `[실측 매크로]` |
+| `REB_RONE_API_KEY` | [reb.or.kr R-ONE](https://www.reb.or.kr/r-one) (한국부동산원) | 권역 공실률·임대료·수익률 → `[실측 임대시장]` (오피스·리테일만) |
+| `DATA_GO_KR_API_KEY` | [data.go.kr](https://www.data.go.kr) (국토부 RTMS) | 상업업무용·토지 거래 comps → `[실거래가]`; 거래상대방 실사(사업자상태·제재·기업정보·연금) |
+| `VWORLD_API_KEY` | [api.vworld.kr](https://www.vworld.kr/dev/v4api.do) (국토정보) | **용도지역**(req/data LT_C_UQ111) + **개별공시지가**(ned/data) → `[실측 용도지역·공시지가]` (개발·세무). |
+| `VWORLD_DOMAIN` | (V-World 키에 등록한 운영 도메인, 예: `aixnative.com`) | ⚠️ **필수.** V-World 키는 등록 도메인에 묶여 있고, 서버 호출은 Referer 가 없어 이 값을 `domain` 파라미터로 보내야 인증 통과. 미설정 시 `ned/data`·일부 `req/data` 가 `INCORRECT_KEY`. (별도 NED 활용신청·data.go.kr 불필요 — 도메인만 맞으면 동작.) |
+| `VWORLD_NED_ENABLED` | (true/false, 기본 false) | **개별공시지가**(`ned/data`) 호출 on/off. `VWORLD_API_KEY`+`VWORLD_DOMAIN`+`JUSO_API_KEY`(PNU용) 갖춰지면 `true`. 미설정 시 공시지가 줄만 생략, 용도지역은 정상. |
+| `JUSO_API_KEY` | [business.juso.go.kr](https://business.juso.go.kr) (도로명주소) | 주소→법정동코드+번지(PNU 조립용 지오코더, V-World 전제) |
+
+> 각 소스 독립(하나만 넣어도 그 부분 동작). 주소→시군구코드(5)는 **내장 표(`LawdCode`)** — Kakao 불필요. **용도지역**은 `VWORLD_API_KEY` + `VWORLD_DOMAIN` 으로 동작(V-World 자체 지오코더 — juso 불필요). **개별공시지가**는 PNU(19)가 필요해 `JUSO_API_KEY` + `VWORLD_NED_ENABLED=true` 추가. **공통 전제 = `VWORLD_DOMAIN`**(키 등록 도메인) 일치 — 이게 빠지면 전부 INCORRECT_KEY.
+>
+> **거래상대방 실사**: 일부 API(국세청 사업자상태·조달청 제재·국민연금)는 `DATA_GO_KR_API_KEY` 로 즉시 동작하지만, **금융위 기업기본정보(1160100)** 는 data.go.kr 에서 별도 활용신청·승인이 필요(미승인 시 해당 항목만 생략).
+
 ## 도메인 / 배포 (운영 = aixnative.com)
 | ENV | 기본값 | 용도 |
 |---|---|---|

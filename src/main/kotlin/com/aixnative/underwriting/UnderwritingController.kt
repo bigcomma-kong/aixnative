@@ -45,6 +45,18 @@ class UnderwritingController(
     ): ApiResponse<UnderwriteResponse> = ApiResponse.ok(service.analyze(type, req))
 
     /**
+     * 과금 — 문서/텍스트 기반 분석 단계(매입 추가분 + 신규 트랙).
+     * UNDERWRITING_GUIDE / BUILDING_RESEARCH / TAX_PRICE_DIAGNOSIS / BOV / AM_QUARTERLY /
+     * HOLD_SELL_REFI / DEV_FEASIBILITY / MARKET_RESEARCH_DEEP. 각 호출 = 1 크레딧(성공 시).
+     */
+    @RequiresCredit
+    @PostMapping("/analyze-doc/{type}")
+    fun analyzeDoc(
+        @PathVariable type: DocAnalysisType,
+        @Valid @RequestBody req: DocAnalyzeRequest,
+    ): ApiResponse<DocAnalyzeResponse> = ApiResponse.ok(service.analyzeDoc(type, req))
+
+    /**
      * 투자 보고서(HTML). 주어진 run 이 속한 딜의 분석 단계들을 합본해 인쇄 친화 문서로 반환.
      * 무료(저장된 분석 결과 조립일 뿐 AI 미호출). 다른 테넌트의 run 이면 404.
      */

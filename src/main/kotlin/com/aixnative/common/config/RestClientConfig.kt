@@ -24,4 +24,22 @@ class RestClientConfig {
         }
         return builder.requestFactory(factory).build()
     }
+
+    /**
+     * Short-timeout client for public market-data APIs (ECOS·R-ONE·RTMS·Kakao).
+     * These must respond quickly; a slow source is skipped (graceful degrade) rather
+     * than parking the analysis request.
+     */
+    @Bean
+    fun marketDataRestClient(builder: RestClient.Builder): RestClient {
+        val factory = SimpleClientHttpRequestFactory().apply {
+            setConnectTimeout(Duration.ofSeconds(5))
+            setReadTimeout(Duration.ofSeconds(8))
+        }
+        // data.go.kr 게이트웨이가 일부 기본 User-Agent 를 WAF 차단함 — 명시적 UA 로 회피.
+        return builder
+            .requestFactory(factory)
+            .defaultHeader("User-Agent", "Mozilla/5.0 (compatible; aixnative/1.0)")
+            .build()
+    }
 }

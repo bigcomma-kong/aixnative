@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   api, ApiError,
-  type AnalysisType, type AnalyzeResponse, type Analysis, type ProForma, type ProFormaResponse,
+  type AnalysisType, type AnalyzeResponse, type Analysis, type GuidelineSummary, type ProForma, type ProFormaResponse,
   type RunResult, type RunSummary, type Scenario, type UnderwriteInput,
 } from './api'
 import { CashflowChart } from './Chart'
@@ -55,6 +55,7 @@ interface Results {
   analysisType?: string
   proForma: ProForma
   scenarios: Scenario[]
+  guidelineChecks?: GuidelineSummary
   disclaimer: string
   analysis?: Analysis | null
   analysisRaw?: string | null
@@ -94,7 +95,7 @@ export function UnderwriteView({ onCreditBalance }: UnderwriteViewProps) {
     setBusy('proforma')
     try {
       const res: ProFormaResponse = await api.proforma(buildInput())
-      setResults({ proForma: res.proForma, scenarios: res.scenarios, disclaimer: res.disclaimer })
+      setResults({ proForma: res.proForma, scenarios: res.scenarios, guidelineChecks: res.guidelineChecks, disclaimer: res.disclaimer })
     } catch (err: unknown) {
       setError(err instanceof ApiError ? err.message : '계산 중 오류가 발생했습니다.')
     } finally {
@@ -109,7 +110,7 @@ export function UnderwriteView({ onCreditBalance }: UnderwriteViewProps) {
       const res: AnalyzeResponse = await api.analyzeStage(type, buildInput())
       setResults({
         runId: res.runId, analysisType: res.analysisType,
-        proForma: res.proForma, scenarios: res.scenarios, disclaimer: res.disclaimer,
+        proForma: res.proForma, scenarios: res.scenarios, guidelineChecks: res.guidelineChecks, disclaimer: res.disclaimer,
         analysis: res.analysis, analysisRaw: res.analysisRaw, provider: res.provider,
       })
       onCreditBalance(res.creditBalance)
@@ -352,6 +353,8 @@ function ResultPanel({ results, onReport, reportBusy }: { results: Results; onRe
         </div>
       </section>
 
+      {results.guidelineChecks && <GuidelineFit summary={results.guidelineChecks} />}
+
       <section className="chart-card">
         <div className="section-title">연차별 현금흐름 · DSCR</div>
         <div className="chart-legend">
@@ -484,6 +487,35 @@ function StageAnalysis({ type, analysis, provider }: { type?: string; analysis: 
 
 function Metric({ k, v }: { k: string; v: string }) {
   return <div className="metric"><span className="k">{k}</span><span className="v">{v}</span></div>
+}
+
+/** 가이드라인 적합성 — 코드가 임계값과 대조한 결정론적 판정(PASS/WARN/FAIL). AI 판단 아님. */
+function GuidelineFit({ summary }: { summary: GuidelineSummary }) {
+  const tone: Record<string, string> = { PASS: 'go', WARN: 'cond', FAIL: 'no' }
+  return (
+    <section className="ai-block guideline-fit">
+      <div className="section-title">
+        가이드라인 적합성 <span className="gl-sub">코드 판정 · 임계값 대조</span>
+      </div>
+      <div className="gl-summary">
+        <span className="gl-tag go">PASS {summary.pass}</span>
+        <span className="gl-tag cond">WARN {summary.warn}</span>
+        <span className="gl-tag no">FAIL {summary.fail}</span>
+      </div>
+      <table className="gl-table">
+        <tbody>
+          {summary.checks.map((c) => (
+            <tr key={c.metric}>
+              <td className="gl-metric">{c.metric}</td>
+              <td className="num">{c.actual}</td>
+              <td className="gl-th">{c.threshold}</td>
+              <td><span className={`gl-badge ${tone[c.status] ?? 'cond'}`}>{c.status}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  )
 }
 
 interface VerdictStyle { cls: 'go' | 'cond' | 'no'; mark: string; label: string }

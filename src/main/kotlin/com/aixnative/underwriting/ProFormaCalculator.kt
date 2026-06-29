@@ -23,8 +23,9 @@ object ProFormaCalculator {
         val holdYears: Int = 5,
         val rentGrowthPct: Double = 3.0,
         val exitCapPct: Double,
-        val acqCostPct: Double = 4.6,   // 취득부대비용률(기본 4.6)
-        val saleCostPct: Double = 1.5,  // 매각비용률(기본 1.5)
+        // 취득부대비용률 = 취득세 + 등기 (가이드라인 기본). 매각비용률 = 가이드라인 하한.
+        val acqCostPct: Double = CreGuidelines.ACQ_TAX_PCT + CreGuidelines.REGISTRATION_PCT,
+        val saleCostPct: Double = CreGuidelines.SALE_COST_MIN_PCT,
         val capexPerYearEok: Double = 0.0,
     )
 

@@ -34,11 +34,7 @@ class AuthService(
             throw ConflictException("이미 가입된 이메일입니다.")
         }
         // 지정된 관리자 이메일로 가입하면 ADMIN 권한 부여(app.admin-email).
-        val role = if (adminEmail.isNotBlank() && adminEmail.equals(req.email, ignoreCase = true)) {
-            UserRole.ADMIN
-        } else {
-            UserRole.USER
-        }
+        val role = if (isAdminEmail(req.email)) UserRole.ADMIN else UserRole.USER
         val tenant = tenants.save(Tenant(name = req.email))
         val tenantId = requireNotNull(tenant.id)
         val user = users.save(
@@ -56,7 +52,7 @@ class AuthService(
         return AuthResponse(token = token, email = user.email, plan = user.plan, role = user.role, creditBalance = balance)
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     fun login(req: LoginRequest): AuthResponse {
         // Generic message on both branches to avoid account enumeration.
         val invalid = UnauthorizedException("이메일 또는 비밀번호가 올바르지 않습니다.")
@@ -65,9 +61,18 @@ class AuthService(
         if (!passwordEncoder.matches(req.password, hash)) throw invalid
         if (user.status != UserStatus.ACTIVE) throw ForbiddenException("비활성화된 계정입니다.")
 
+        // 관리자 이메일이 나중에 지정된 경우, 로그인 시 기존 계정을 ADMIN 으로 승격(멱등).
+        if (isAdminEmail(user.email) && user.role != UserRole.ADMIN) {
+            user.role = UserRole.ADMIN
+        }
+
         val userId = requireNotNull(user.id)
         val balance = creditService.balance(user.tenantId, userId)
         val token = jwtService.issue(AuthPrincipal(userId, user.tenantId, user.email, user.role.name))
         return AuthResponse(token = token, email = user.email, plan = user.plan, role = user.role, creditBalance = balance)
     }
+
+    /** 설정된 관리자 이메일(app.admin-email)과 대소문자 무시 비교. 미설정이면 항상 false. */
+    private fun isAdminEmail(email: String): Boolean =
+        adminEmail.isNotBlank() && adminEmail.equals(email, ignoreCase = true)
 }

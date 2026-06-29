@@ -30,40 +30,44 @@ export function AuthView({ onAuthed }: AuthViewProps) {
   }
 
   return (
-    <div className="auth-wrap">
-      <div className="card auth-card">
-        <div className="brand">aix<span>native</span></div>
-        <h1 className="auth-hero">매물 한 건, <em>1분 심사</em>.</h1>
-        <p className="tagline">AI 부동산 딜 언더라이팅. 입력 한 번으로 ProForma 지표와 AI 심사 의견을 받아보세요.</p>
-
-        <div className="tabs" role="tablist">
-          <button role="tab" aria-selected={mode === 'login'} onClick={() => setMode('login')}>로그인</button>
-          <button role="tab" aria-selected={mode === 'signup'} onClick={() => setMode('signup')}>회원가입</button>
-        </div>
-
-        <form onSubmit={submit}>
-          <div className="field">
-            <label htmlFor="email">이메일</label>
-            <input id="email" type="email" required value={email}
-              onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
-          </div>
-          <div className="field">
-            <label htmlFor="password">비밀번호</label>
-            <input id="password" type="password" required minLength={8} value={password}
-              onChange={(e) => setPassword(e.target.value)} placeholder="8자 이상" />
-          </div>
-          <button className="btn-primary" type="submit" disabled={busy} style={{ width: '100%' }}>
-            {busy ? '처리 중…' : mode === 'login' ? '로그인' : '회원가입 (무료 크레딧 지급)'}
-          </button>
-          {error && <p className="error">{error}</p>}
-        </form>
-
-        {mode === 'login' && (
-          <p className="muted" style={{ marginTop: '1rem', textAlign: 'center' }}>
-            처음이신가요? <button className="btn-link" onClick={() => setMode('signup')}>회원가입</button> 시 무료 크레딧을 드립니다.
-          </p>
-        )}
+    <div className="card auth-card" id="auth">
+      <div className="auth-head">
+        <span className="auth-eyebrow">{mode === 'login' ? '로그인' : '무료 가입'}</span>
+        <h2 className="auth-title">
+          {mode === 'login' ? '다시 오신 걸 환영합니다' : '1분 만에 시작하세요'}
+        </h2>
+        <p className="auth-sub">
+          {mode === 'login' ? '이메일로 로그인합니다.' : '가입 즉시 무료 크레딧을 드립니다. 카드 등록 없이.'}
+        </p>
       </div>
+
+      <div className="tabs" role="tablist">
+        <button role="tab" aria-selected={mode === 'login'} onClick={() => setMode('login')}>로그인</button>
+        <button role="tab" aria-selected={mode === 'signup'} onClick={() => setMode('signup')}>회원가입</button>
+      </div>
+
+      <form onSubmit={submit}>
+        <div className="field">
+          <label htmlFor="email">이메일</label>
+          <input id="email" type="email" required value={email}
+            onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+        </div>
+        <div className="field">
+          <label htmlFor="password">비밀번호</label>
+          <input id="password" type="password" required minLength={8} value={password}
+            onChange={(e) => setPassword(e.target.value)} placeholder="8자 이상" />
+        </div>
+        <button className="btn-primary" type="submit" disabled={busy} style={{ width: '100%' }}>
+          {busy ? '처리 중…' : mode === 'login' ? '로그인' : '회원가입 (무료 크레딧 지급)'}
+        </button>
+        {error && <p className="error">{error}</p>}
+      </form>
+
+      {mode === 'login' && (
+        <p className="muted auth-switch">
+          처음이신가요? <button className="btn-link" onClick={() => setMode('signup')}>회원가입</button> 시 무료 크레딧을 드립니다.
+        </p>
+      )}
     </div>
   )
 }

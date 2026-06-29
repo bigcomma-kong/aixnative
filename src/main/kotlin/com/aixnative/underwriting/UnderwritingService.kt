@@ -9,8 +9,12 @@ import com.aixnative.billing.CreditGate
 import com.aixnative.billing.CreditService
 import com.aixnative.common.Disclaimer
 import com.aixnative.common.tenant.TenantContext
+import com.aixnative.common.web.BadRequestException
 import com.aixnative.common.web.InsufficientCreditsException
 import com.aixnative.common.web.ServiceUnavailableException
+import com.aixnative.integration.bizhealth.BizHealthClient
+import com.aixnative.integration.bizhealth.BizHealthFacts
+import com.aixnative.integration.marketdata.MarketDataService
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.security.MessageDigest
@@ -27,6 +31,8 @@ class UnderwritingService(
     private val creditService: CreditService,
     private val aiToolRunService: AiToolRunService,
     private val objectMapper: ObjectMapper,
+    private val marketDataService: MarketDataService,
+    private val bizHealthClient: BizHealthClient,
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -34,9 +40,11 @@ class UnderwritingService(
     /** 무료: ProForma 지표만 계산 (AI·크레딧 미사용). */
     fun proForma(req: UnderwriteRequest): ProFormaResponse {
         val inputs = req.toInputs()
+        val result = ProFormaCalculator.compute(inputs)
         return ProFormaResponse(
-            proForma = ProFormaCalculator.compute(inputs),
+            proForma = result,
             scenarios = ProFormaCalculator.scenarios(inputs),
+            guidelineChecks = GuidelineEvaluator.evaluate(inputs, result),
             disclaimer = Disclaimer.TEXT,
         )
     }
@@ -57,6 +65,7 @@ class UnderwritingService(
         val inputs = req.toInputs()
         val result = ProFormaCalculator.compute(inputs)
         val scenarios = ProFormaCalculator.scenarios(inputs)
+        val guidelineChecks = GuidelineEvaluator.evaluate(inputs, result)
         val facts = FactsFormatter.toFacts(inputs, result, scenarios)
         val assetFacts = FactsFormatter.toAssetFacts(req, result)
 
@@ -64,9 +73,15 @@ class UnderwritingService(
             AnalysisType.UNDERWRITING ->
                 UnderwritingPrompts.underwritingNarrative(facts, req.dealName, CreGuidelines.underwritingGuidelineText(req.assetType))
             AnalysisType.SCREENING ->
-                UnderwritingPrompts.dealScreening(assetFacts, req.dealName, CreGuidelines.screeningGuidelineText(req.assetType))
+                UnderwritingPrompts.dealScreening(
+                    assetFacts + marketDataService.marketFacts(req.location, req.assetType),
+                    req.dealName, CreGuidelines.screeningGuidelineText(req.assetType),
+                )
             AnalysisType.MARKET_STUDY ->
-                UnderwritingPrompts.marketStudy(assetFacts, req.dealName)
+                UnderwritingPrompts.marketStudy(
+                    assetFacts + marketDataService.marketFacts(req.location, req.assetType),
+                    req.dealName,
+                )
             AnalysisType.IC_MEMO ->
                 UnderwritingPrompts.icMemo(buildIcMemoFacts(facts, assetFacts, req.dealName), req.dealName)
         }
@@ -89,6 +104,7 @@ class UnderwritingService(
             "analysisType" to type.name,
             "proForma" to result,
             "scenarios" to scenarios,
+            "guidelineChecks" to guidelineChecks,
             "analysis" to parsed,
             "analysisRaw" to if (parsed == null) ai.text else null,
             "provider" to ai.provider,
@@ -110,10 +126,147 @@ class UnderwritingService(
             analysisType = type.name,
             proForma = result,
             scenarios = scenarios,
+            guidelineChecks = guidelineChecks,
             analysis = parsed,
             analysisRaw = if (parsed == null) ai.text else null,
             provider = ai.provider,
             creditBalance = balance,
+            disclaimer = Disclaimer.TEXT,
+        )
+    }
+
+    /**
+     * 과금: 문서/텍스트 기반 분석(매입 추가 단계 + 신규 트랙 B~E). ProForma 없이 자유 텍스트를 근거로
+     * 단계별 프롬프트를 호출한다. 성공 시에만 1 크레딧 차감(AI 호출 실패는 503·미차감).
+     */
+    fun analyzeDoc(type: DocAnalysisType, req: DocAnalyzeRequest): DocAnalyzeResponse {
+        if (!aiServiceManager.hasConfiguredProvider()) {
+            throw ServiceUnavailableException("AI 분석 서비스가 설정되지 않았습니다(API 키 미설정).")
+        }
+
+        val assetType = req.assetType
+        // BOV·DEV 단계는 구조화 입력으로 코드가 수치를 확정하고(calc) <DATA> 에 주입한다(정밀화).
+        // 나머지 단계는 자유 텍스트(documentText) 필수.
+        var calc: Any? = null
+        val prompt = when (type) {
+            DocAnalysisType.BOV -> {
+                val input = req.bov ?: throw BadRequestException("매각 BOV 는 평가 입력(noi·시장 Cap 등)이 필요합니다.")
+                val used = BovValuator.Inputs(
+                    noiEok = input.noiEok,
+                    marketCapPct = input.marketCapPct,
+                    discountRatePct = input.discountRatePct ?: CreGuidelines.bovDefaultDiscountPct(assetType),
+                    exitCapPct = input.exitCapPct ?: CreGuidelines.bovDefaultExitCapPct(assetType),
+                    holdYears = input.holdYears,
+                    rentGrowthPct = input.rentGrowthPct,
+                    salesCompValueEok = input.salesCompValueEok,
+                )
+                val r = BovValuator.compute(used)
+                calc = r
+                UnderwritingPrompts.bovNarrative(
+                    DocCalcFacts.bovFacts(input, used, r, req.documentText) +
+                        marketDataService.marketFacts(req.location, assetType),
+                    req.dealName, CreGuidelines.bovGuidelineText(assetType),
+                )
+            }
+            DocAnalysisType.DEV_FEASIBILITY -> {
+                val input = req.dev ?: throw BadRequestException("개발 타당성은 사업비·수입 입력이 필요합니다.")
+                val hasGdv = input.salesRevenueEok > 0 || (input.stabilizedNoiEok > 0 && input.exitCapPct > 0)
+                if (!hasGdv) {
+                    throw BadRequestException("자산가치 산정 불가: 분양수입 또는 (안정화 NOI + Exit Cap) 중 하나는 입력해야 합니다.")
+                }
+                val devIn = DevFeasibilityCalculator.Inputs(
+                    landCostEok = input.landCostEok,
+                    constructionCostEok = input.constructionCostEok,
+                    financingCostEok = input.financingCostEok,
+                    otherCostEok = input.otherCostEok,
+                    contingencyPct = input.contingencyPct,
+                    stabilizedNoiEok = input.stabilizedNoiEok,
+                    exitCapPct = input.exitCapPct,
+                    salesRevenueEok = input.salesRevenueEok,
+                )
+                val r = DevFeasibilityCalculator.compute(devIn)
+                calc = r
+                UnderwritingPrompts.devFeasibility(
+                    DocCalcFacts.devFacts(input, r, req.documentText) +
+                        marketDataService.marketFacts(req.location, assetType) +
+                        marketDataService.landComparablesFactLine(req.location) +
+                        marketDataService.landValuationFactLine(req.parcelAddress),
+                    req.dealName, CreGuidelines.devFeasibilityGuidelineText(assetType),
+                )
+            }
+            DocAnalysisType.COUNTERPARTY_DD -> {
+                val bizNo = req.bizNo?.replace("[^0-9]".toRegex(), "")?.takeIf { it.length == 10 }
+                if (bizNo == null && req.counterpartyName.isNullOrBlank()) {
+                    throw BadRequestException("거래상대방 실사는 사업자등록번호(10자리) 또는 상호가 필요합니다.")
+                }
+                val r = bizHealthClient.check(req.bizNo, req.counterpartyName)
+                calc = r
+                UnderwritingPrompts.counterpartyDd(BizHealthFacts.summary(r), req.dealName)
+            }
+            else -> {
+                val doc = req.documentText?.takeIf { it.isNotBlank() }
+                    ?: throw BadRequestException("분석 대상 정보(documentText)는 필수입니다.")
+                when (type) {
+                    DocAnalysisType.UNDERWRITING_GUIDE ->
+                        UnderwritingPrompts.underwritingGuide(doc, req.dealName, CreGuidelines.underwritingGuidelineText(assetType))
+                    DocAnalysisType.BUILDING_RESEARCH ->
+                        UnderwritingPrompts.buildingResearch(doc, req.dealName)
+                    DocAnalysisType.TAX_PRICE_DIAGNOSIS ->
+                        UnderwritingPrompts.taxPriceDiagnosis(
+                            doc + marketDataService.marketFacts(req.location, assetType) +
+                                marketDataService.landComparablesFactLine(req.location) +
+                                marketDataService.landValuationFactLine(req.parcelAddress),
+                            req.dealName,
+                        )
+                    DocAnalysisType.AM_QUARTERLY ->
+                        UnderwritingPrompts.amQuarterly(doc, req.dealName)
+                    DocAnalysisType.HOLD_SELL_REFI ->
+                        UnderwritingPrompts.holdSellRefi(doc, req.dealName, CreGuidelines.holdSellRefiGuidelineText())
+                    DocAnalysisType.MARKET_RESEARCH_DEEP ->
+                        UnderwritingPrompts.marketResearchDeep(
+                            doc + marketDataService.marketFacts(req.location ?: req.assetType, req.assetType),
+                            req.dealName,
+                        )
+                    else -> error("unreachable: $type")
+                }
+            }
+        }
+
+        val ai = try {
+            creditGate.charge { aiServiceManager.complete(prompt) }
+        } catch (e: InsufficientCreditsException) {
+            throw e
+        } catch (e: Exception) {
+            log.error("[Underwriting] 문서 분석 실패 (type={})", type, e)
+            throw ServiceUnavailableException("AI 분석 호출에 실패했습니다: ${rootMessage(e)}")
+        }
+
+        val parsed = tryParseJson(ai.text)
+        val resultPayload = linkedMapOf<String, Any?>(
+            "analysisType" to type.name,
+            "analysis" to parsed,
+            "analysisRaw" to if (parsed == null) ai.text else null,
+            "calc" to calc,
+            "provider" to ai.provider,
+            "disclaimer" to Disclaimer.TEXT,
+        )
+        val run = aiToolRunService.record(
+            tool = type.tool,
+            status = RunStatus.SUCCESS,
+            requestHash = sha256(prompt),
+            dealName = req.dealName,
+            requestJson = objectMapper.writeValueAsString(req),
+            resultJson = objectMapper.writeValueAsString(resultPayload),
+        )
+        val current = TenantContext.require()
+        return DocAnalyzeResponse(
+            runId = requireNotNull(run.id),
+            analysisType = type.name,
+            analysis = parsed,
+            analysisRaw = if (parsed == null) ai.text else null,
+            calc = calc?.let { objectMapper.valueToTree(it) },
+            provider = ai.provider,
+            creditBalance = creditService.balance(current.tenantId, current.userId),
             disclaimer = Disclaimer.TEXT,
         )
     }

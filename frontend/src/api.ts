@@ -7,10 +7,13 @@ export interface ApiResponse<T> {
   error?: string
 }
 
+export type UserRole = 'USER' | 'ADMIN'
+
 export interface AuthResult {
   token: string
   email: string
   plan: string
+  role: UserRole
   creditBalance: number
 }
 
@@ -18,6 +21,7 @@ export interface Me {
   userId: number
   tenantId: number
   email: string
+  role: UserRole
   creditBalance: number
 }
 
@@ -82,9 +86,25 @@ export interface ProForma {
   exitCapSensitivity: Sensitivity[]
 }
 
+/** 가이드라인 적합성 — 코드가 임계값과 대조한 결정론적 판정. */
+export type CheckStatus = 'PASS' | 'WARN' | 'FAIL'
+export interface GuidelineCheck {
+  metric: string
+  actual: string
+  threshold: string
+  status: CheckStatus
+}
+export interface GuidelineSummary {
+  checks: GuidelineCheck[]
+  pass: number
+  warn: number
+  fail: number
+}
+
 export interface ProFormaResponse {
   proForma: ProForma
   scenarios: Scenario[]
+  guidelineChecks: GuidelineSummary
   disclaimer: string
 }
 
@@ -107,6 +127,7 @@ export interface AnalyzeResponse {
   analysisType?: string
   proForma: ProForma
   scenarios: Scenario[]
+  guidelineChecks: GuidelineSummary
   analysis?: Analysis | null
   analysisRaw?: string | null
   provider: string
@@ -129,6 +150,7 @@ export interface RunSummary {
 export interface RunResult {
   proForma: ProForma
   scenarios: Scenario[]
+  guidelineChecks?: GuidelineSummary
   analysis?: Analysis | null
   analysisRaw?: string | null
   provider?: string
@@ -157,6 +179,160 @@ export interface UnderwriteInput {
   exitCapPct: number
   holdYears?: number
   rentGrowthPct?: number
+}
+
+/** 문서/텍스트 기반 분석 단계(매입 추가분 + 신규 트랙). 백엔드 DocAnalysisType 과 일치. */
+export type DocAnalysisType =
+  | 'UNDERWRITING_GUIDE'
+  | 'BUILDING_RESEARCH'
+  | 'TAX_PRICE_DIAGNOSIS'
+  | 'BOV'
+  | 'AM_QUARTERLY'
+  | 'HOLD_SELL_REFI'
+  | 'DEV_FEASIBILITY'
+  | 'MARKET_RESEARCH_DEEP'
+  | 'COUNTERPARTY_DD'
+
+/** 매각 BOV 3-Method 평가 입력(코드 확정 계산). 할인율·Exit Cap 미입력 시 서버가 자산유형 기본값으로 보정. */
+export interface BovInput {
+  noiEok: number
+  marketCapPct: number
+  discountRatePct?: number
+  exitCapPct?: number
+  holdYears?: number
+  rentGrowthPct?: number
+  salesCompValueEok?: number
+}
+
+/** 개발 타당성 수익성 입력. GDV = 분양수입(있으면) 또는 Stabilized Value(NOI/ExitCap). */
+export interface DevFeasibilityInput {
+  landCostEok: number
+  constructionCostEok: number
+  financingCostEok?: number
+  otherCostEok?: number
+  contingencyPct?: number
+  stabilizedNoiEok?: number
+  exitCapPct?: number
+  salesRevenueEok?: number
+}
+
+export interface DocAnalyzeInput {
+  dealName?: string
+  assetType?: string
+  location?: string
+  documentText?: string
+  bov?: BovInput
+  dev?: DevFeasibilityInput
+  bizNo?: string
+  counterpartyName?: string
+  parcelAddress?: string
+}
+
+/** 코드 확정 BOV 평가 결과(결정론적). */
+export interface BovCalc {
+  directCapValueEok: number
+  dcfValueEok: number
+  salesCompValueEok: number
+  bovValueEok: number
+  lowEok: number
+  highEok: number
+  impliedCapPct: number
+}
+
+export interface DevSensitivity {
+  label: string
+  profitMarginPct: number
+  developmentProfitEok: number
+}
+
+/** 코드 확정 개발 수익성 결과(결정론적). */
+export interface DevCalc {
+  baseCostEok: number
+  contingencyEok: number
+  totalProjectCostEok: number
+  stabilizedValueEok: number
+  grossDevelopmentValueEok: number
+  developmentProfitEok: number
+  profitMarginPct: number
+  yieldOnCostPct: number
+  marginVerdict: 'GO' | 'CONDITIONAL' | 'NO_GO'
+  sensitivity: DevSensitivity[]
+}
+
+/** 거래상대방 실사 결과(결정론적 공공데이터 사실). */
+export interface BizStatusInfo { available: boolean; status?: string; taxType?: string; closedDate?: string }
+export interface SanctionItem { from: string; to: string; org: string; basis: string }
+export interface SanctionResultInfo { available: boolean; count: number; items: SanctionItem[] }
+export interface CorpInfoData { available: boolean; corpName?: string; repName?: string; estbDate?: string; industry?: string }
+export interface PensionInfoData { available: boolean; workplaceName?: string; members?: string; monthlyNotice?: string; industry?: string }
+export interface BizHealthCalc {
+  bizNo?: string
+  name?: string
+  status: BizStatusInfo
+  sanctions: SanctionResultInfo
+  corp: CorpInfoData
+  pension: PensionInfoData
+}
+
+export type DocCalc = BovCalc | DevCalc | BizHealthCalc
+
+/** calc 가 BOV 결과인지 판별(렌더 분기용). */
+export function isBovCalc(c: DocCalc): c is BovCalc {
+  return (c as BovCalc).bovValueEok !== undefined
+}
+
+/** calc 가 거래상대방 실사 결과인지 판별. */
+export function isBizHealthCalc(c: DocCalc): c is BizHealthCalc {
+  return (c as BizHealthCalc).status !== undefined && (c as BizHealthCalc).sanctions !== undefined
+}
+
+export interface SectionTable {
+  headers: string[]
+  rows: string[][]
+}
+
+/** 신규 트랙 공통 섹션(택1: text | bullets | table). */
+export interface DocSection {
+  title?: string
+  text?: string
+  bullets?: string[]
+  table?: SectionTable
+}
+
+export interface TaxGuide {
+  kind?: string
+  title?: string
+  detail?: string
+  basis?: string
+}
+
+/** 단계별 출력 합집합 — 단계에 따라 일부 필드만 채워진다. */
+export interface DocAnalysis {
+  headline?: string
+  verdict?: string
+  confidence?: string
+  sections?: DocSection[]
+  // BUILDING_RESEARCH
+  im_markdown?: string
+  // UNDERWRITING_GUIDE
+  recommend?: Record<string, number>
+  rationale?: string
+  // TAX_PRICE_DIAGNOSIS
+  priceVerdict?: string
+  priceComment?: string
+  guides?: TaxGuide[]
+  disclaimer?: string
+}
+
+export interface DocAnalyzeResponse {
+  runId: number
+  analysisType: string
+  analysis?: DocAnalysis | null
+  analysisRaw?: string | null
+  calc?: DocCalc | null
+  provider: string
+  creditBalance: number
+  disclaimer: string
 }
 
 /**
@@ -223,6 +399,9 @@ export const api = {
 
   analyzeStage: (type: AnalysisType, input: UnderwriteInput): Promise<AnalyzeResponse> =>
     request(`/api/underwriting/analyze/${type}`, { method: 'POST', body: JSON.stringify(input) }),
+
+  analyzeDoc: (type: DocAnalysisType, input: DocAnalyzeInput): Promise<DocAnalyzeResponse> =>
+    request(`/api/underwriting/analyze-doc/${type}`, { method: 'POST', body: JSON.stringify(input) }),
 
   /** 투자 보고서 HTML(원문). 인증 헤더가 필요하므로 fetch 로 받아 새 창에 띄운다. */
   reportHtml: async (runId: number): Promise<string> => {

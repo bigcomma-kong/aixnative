@@ -21,8 +21,16 @@ annotation class RequiresCredit
 @Component
 class CreditGate(private val creditService: CreditService) {
 
+    private companion object {
+        const val ADMIN_ROLE = "ADMIN"
+    }
+
     fun <T> charge(block: () -> T): T {
         val current = TenantContext.require()
+        // ADMIN runs with unlimited credits — never balance-checked, never debited.
+        if (current.role == ADMIN_ROLE) {
+            return block()
+        }
         // Fail fast with 402 before doing any expensive work.
         if (creditService.balance(current.tenantId, current.userId) <= 0) {
             throw InsufficientCreditsException()

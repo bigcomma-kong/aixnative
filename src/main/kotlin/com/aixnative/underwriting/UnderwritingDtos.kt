@@ -59,10 +59,11 @@ data class UnderwriteRequest(
     )
 }
 
-/** ProForma 계산 결과 + 시나리오 (무료, AI 미사용). */
+/** ProForma 계산 결과 + 시나리오 + 가이드라인 적합성 코드 판정 (무료, AI 미사용). */
 data class ProFormaResponse(
     val proForma: ProFormaCalculator.Result,
     val scenarios: List<ProFormaCalculator.Scenario>,
+    val guidelineChecks: GuidelineEvaluator.Summary,
     val disclaimer: String,
 )
 
@@ -73,6 +74,8 @@ data class UnderwriteResponse(
     val analysisType: String = AnalysisType.UNDERWRITING.name,
     val proForma: ProFormaCalculator.Result,
     val scenarios: List<ProFormaCalculator.Scenario>,
+    /** 가이드라인 적합성 코드 판정(임계값 대조). AI 서술의 근거. */
+    val guidelineChecks: GuidelineEvaluator.Summary,
     /** AI 가 반환한 구조화 내러티브(JSON). 파싱 실패 시 null 이고 [analysisRaw] 에 원문. */
     val analysis: JsonNode? = null,
     val analysisRaw: String? = null,
