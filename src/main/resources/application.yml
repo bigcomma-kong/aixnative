@@ -84,9 +84,9 @@ mistral:
 # 트리거: Cloud Scheduler → POST /api/ingest/market-feed (헤더 X-Ingest-Token). 토큰 미설정 시 인입 비활성.
 marketfeed:
   ingest-token: ${MARKETFEED_INGEST_TOKEN:}
-  recent-hours: ${MARKETFEED_RECENT_HOURS:48}
-  max-per-source: ${MARKETFEED_MAX_PER_SOURCE:8}
-  max-cards: ${MARKETFEED_MAX_CARDS:40}
+  recent-hours: ${MARKETFEED_RECENT_HOURS:72}
+  max-per-source: ${MARKETFEED_MAX_PER_SOURCE:15}
+  max-cards: ${MARKETFEED_MAX_CARDS:90}
   google-news-enabled: ${MARKETFEED_GOOGLE_NEWS:true}
   briefing-enabled: ${MARKETFEED_BRIEFING:true}
 

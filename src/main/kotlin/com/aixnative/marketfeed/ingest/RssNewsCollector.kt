@@ -28,9 +28,9 @@ class RssNewsCollector(
     /** 모든 활성 소스에서 기사 수집(중복제거 전 원본). */
     fun collect(): List<NewsItem> {
         val out = ArrayList<NewsItem>()
-        // 1) 부동산 RSS(신뢰 소스).
-        for ((name, url) in RSS_FEEDS) {
-            runCatching { out += parseFeed(fetch(url), source = "RSS:$name", loose = false, sector = null) }
+        // 1) RSS. 부동산 전용 피드는 loose=false(앵커 불요), 경제/금융·종합지는 loose=true(부동산 앵커 필수).
+        for ((name, url, loose) in RSS_FEEDS) {
+            runCatching { out += parseFeed(fetch(url), source = "RSS:$name", loose = loose, sector = null) }
                 .onFailure { log.warn("[ingest] RSS '{}' 실패: {}", name, it.message) }
         }
         // 2) 구글뉴스 섹터 딜 검색(느슨한 소스 — 앵커 게이트 적용).
@@ -99,23 +99,40 @@ class RssNewsCollector(
     private companion object {
         const val SUMMARY_MAX = 600
 
-        // 공개 부동산 RSS(키 불필요). 매체명 = 출처 라벨.
+        // 공개 RSS(키 불필요). Triple(매체명, URL, loose). loose=true 면 부동산 앵커 필수.
+        //  - 부동산 전용 피드: loose=false (앵커 불요)
+        //  - 경제/금융·종합 비즈니스 피드: loose=true (부동산 외 뉴스·외신/일본판 차단)
         val RSS_FEEDS = listOf(
-            "한국경제" to "https://www.hankyung.com/feed/realestate",
-            "매일경제" to "https://www.mk.co.kr/rss/50300009/",
-            "조선비즈" to "https://biz.chosun.com/arc/outboundfeeds/rss/?outputType=xml",
+            Triple("한국경제부동산", "https://www.hankyung.com/feed/realestate", false),
+            Triple("매일경제부동산", "https://www.mk.co.kr/rss/50300009/", false),
+            Triple("한국경제경제", "https://www.hankyung.com/feed/economy", true),
+            Triple("한국경제금융", "https://www.hankyung.com/feed/finance", true),
+            Triple("매일경제경제", "https://www.mk.co.kr/rss/30100041/", true),
+            Triple("매일경제증권", "https://www.mk.co.kr/rss/50200011/", true),
+            Triple("조선비즈", "https://biz.chosun.com/arc/outboundfeeds/rss/?outputType=xml", true),
         )
 
-        // 섹터 → 구글뉴스 딜 검색어(매각·우선협상 등 거래 시그널 중심). site: 로 딜 전문지 가중.
+        // 섹터 → 구글뉴스 딜 검색어(매각·우선협상 등 거래 시그널). site: 로 딜 전문지 가중.
         val DEAL_QUERIES = listOf(
             "office" to "오피스 빌딩 매각 우선협상대상자",
-            "office" to "CBD GBD 오피스 매각",
+            "office" to "CBD GBD YBD 오피스 매각",
+            "office" to "프라임 오피스 매각 site:thebell.co.kr",
+            "office" to "사옥 매각 우선협상 site:investchosun.com",
             "logistics" to "물류센터 매각 우선협상대상자",
+            "logistics" to "물류센터 거래 site:thebell.co.kr",
+            "logistics" to "콜드체인 물류 매각",
             "hotel" to "호텔 매각 우선협상대상자",
+            "hotel" to "특급호텔 매각 site:thebell.co.kr",
             "retail" to "리테일 상업시설 매각",
+            "retail" to "쇼핑몰 백화점 매각",
             "datacenter" to "데이터센터 매각 투자",
+            "datacenter" to "데이터센터 site:thebell.co.kr",
             "reit" to "상장리츠 자산편입 유상증자",
-            "pf" to "부동산 PF NPL 공매 매각",
+            "reit" to "리츠 매각 site:thebell.co.kr",
+            "pf" to "부동산 PF 부실 공매 매각",
+            "pf" to "NPL 매각 site:marketinsight.hankyung.com",
+            "office" to "부동산 자산운용 매입 우선협상대상자",
+            "office" to "상업용 부동산 거래 site:dealsite.co.kr",
         )
     }
 }

@@ -14,11 +14,11 @@ data class MarketFeedProperties(
     /** Cloud Scheduler 호출 검증용 공유 시크릿(X-Ingest-Token). 빈 값이면 인입 엔드포인트 비활성. */
     val ingestToken: String = "",
     /** 수집 윈도(시간) — 이 시간 이내 발행분만 카드화. */
-    val recentHours: Long = 48,
-    /** 소스당 카드 상한. */
-    val maxPerSource: Int = 8,
+    val recentHours: Long = 72,
+    /** 소스(섹터)당 카드 상한. */
+    val maxPerSource: Int = 15,
     /** 전체 신규 카드 상한(한 번의 수집에서). */
-    val maxCards: Int = 40,
+    val maxCards: Int = 90,
     /** 구글뉴스 섹터 딜 검색 사용. */
     val googleNewsEnabled: Boolean = true,
     /** 마켓 브리핑(AI 다이제스트) 생성 시도. 무료 AI 미설정 시 자동 생략. */

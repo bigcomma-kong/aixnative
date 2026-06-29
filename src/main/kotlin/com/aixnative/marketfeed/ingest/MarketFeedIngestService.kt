@@ -56,11 +56,12 @@ class MarketFeedIngestService(
             .filter { NewsTextFilter.isRelevant(it) }
             .sortedByDescending { it.publishedAt ?: Instant.EPOCH }
 
-        // 소스당 상한 + 전체 상한.
+        // 소스(+섹터)당 상한 + 전체 상한. 구글뉴스는 섹터별로 캡을 나눠 다양성 확보.
         val perSource = HashMap<String, Int>()
         val capped = filtered.filter {
-            val n = perSource.getOrDefault(it.source, 0)
-            if (n >= props.maxPerSource) false else { perSource[it.source] = n + 1; true }
+            val capKey = "${it.source}:${it.sectorHint ?: ""}"
+            val n = perSource.getOrDefault(capKey, 0)
+            if (n >= props.maxPerSource) false else { perSource[capKey] = n + 1; true }
         }.take(props.maxCards)
 
         // DB 중복제거: 이미 있는 dedup_key 제외 후 저장.
