@@ -72,3 +72,17 @@ data class MarketBriefingView(
     val provider: String?,
     val generatedAt: Instant?,
 )
+
+/** AI 심층 시장 리포트(크레딧 소비, Claude). 무료 브리핑(Mistral)보다 깊은 온디맨드 분석. */
+data class DeepReportRequest(val focus: String? = null)
+data class DeepReportSection(val title: String? = null, val body: String? = null)
+data class DeepReportPick(val title: String? = null, val why: String? = null)
+data class MarketDeepReportView(
+    val headline: String?,
+    val summary: String?,
+    val sections: List<DeepReportSection>,
+    val picks: List<DeepReportPick>,
+    val provider: String,
+    val creditBalance: Int,
+    val disclaimer: String,
+)

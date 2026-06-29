@@ -47,6 +47,10 @@ class EmailService(
         send(toEmail, subject, body, "비밀번호 재설정")
     }
 
+    /** 마켓 브리핑 뉴스레터 발송(무료). SMTP 미설정 시 로그 폴백, 실패해도 예외 미전파. */
+    fun sendNewsletter(toEmail: String, subject: String, body: String) =
+        send(toEmail, subject, body, "뉴스레터")
+
     /** SMTP 미설정 시 링크를 로그로 남기고, 설정 시 발송. 어떤 경우에도 호출자에게 예외를 던지지 않는다. */
     private fun send(toEmail: String, subject: String, body: String, kind: String) {
         val sender = mailSenderProvider.ifAvailable

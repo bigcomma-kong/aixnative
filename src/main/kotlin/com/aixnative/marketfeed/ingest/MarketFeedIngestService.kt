@@ -23,15 +23,17 @@ class MarketFeedIngestService(
     private val repository: MarketFeedRepository,
     private val props: MarketFeedProperties,
     private val briefingGenerator: MarketBriefingGenerator,
+    private val newsletterService: com.aixnative.marketfeed.NewsletterService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
     /**
      * @param purge true 면 자동 수집 카드를 모두 지우고 새로 채운다(오염 데이터 1회성 정리).
      *   기본 false — 스케줄 실행은 누적(이력 보존). 수동 등록 ADMIN 카드는 purge 영향 없음.
+     * @param notify true 면 브리핑 생성 시 구독자에게 메일 발송(스케줄 경로). 관리자 테스트는 기본 false.
      */
     @Transactional
-    fun ingest(purge: Boolean = false): IngestReport {
+    fun ingest(purge: Boolean = false, notify: Boolean = false): IngestReport {
         val errors = ArrayList<String>()
 
         if (purge) {
@@ -86,6 +88,12 @@ class MarketFeedIngestService(
             runCatching { briefingGenerator.generate(filtered) }
                 .onSuccess { res -> briefingDone = res != null; briefingProvider = res }
                 .onFailure { errors += "브리핑 실패: ${it.message}"; log.warn("[ingest] 브리핑 실패", it) }
+        }
+
+        // 구독자 메일 발송(무료 재방문 유도) — 스케줄 경로(notify=true)에서 브리핑이 생성됐을 때만.
+        if (notify && briefingDone) {
+            runCatching { newsletterService.broadcastLatest() }
+                .onFailure { errors += "메일 발송 실패: ${it.message}"; log.warn("[ingest] 뉴스레터 발송 실패", it) }
         }
 
         return IngestReport(

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   api, ApiError, isBovCalc, isBizHealthCalc, isPriceForecastCalc,
   type BizHealthCalc, type BovInput, type DealExtract, type DevFeasibilityInput, type DocAnalysisType, type DocAnalyzeInput,
@@ -130,13 +130,23 @@ export function DocAnalysisView({ onCreditBalance, initialDealText }: DocAnalysi
   const [dealText, setDealText] = useState('')
   const [extracting, setExtracting] = useState(false)
   const [extracted, setExtracted] = useState<DealExtract | null>(null)
+  // 스크롤 타깃 — 딜 진입 시 딜 텍스트로, '채우기' 후 가격 예측 입력으로 이동.
+  const dealTextRef = useRef<HTMLTextAreaElement>(null)
+  const forecastRef = useRef<HTMLDivElement>(null)
 
-  // 시장 피드에서 딜 원문을 받고 들어오면 textarea 채우고 자동 추출.
+  // 시장 피드에서 딜 원문을 받고 들어오면 textarea 채우고 자동 추출 + 딜 텍스트로 스크롤·포커스.
   useEffect(() => {
     const seed = initialDealText?.trim()
     if (!seed) return
     setDealText(seed)
     void extractDeal(seed)
+    // 탭 전환 시 이전 스크롤 위치가 남아 폼 하단으로 떨어지는 문제 방지 — 딜 입력 영역을 보여준다.
+    requestAnimationFrame(() => {
+      const el = dealTextRef.current
+      if (!el) return
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.focus({ preventScroll: true })
+    })
     // initialDealText 변경 시에만 실행(채우기는 1회성 진입 신호)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDealText])
@@ -175,6 +185,13 @@ export function DocAnalysisView({ onCreditBalance, initialDealText }: DocAnalysi
     setType('PRICE_FORECAST')
     setResult(null)
     setError(null)
+    // 채워진 가격 예측 입력으로 스크롤(화면 아래라 '안 바뀐 것처럼' 보이던 문제 해결).
+    // setType 반영 후 forecast 영역이 렌더되므로 다음 프레임에 스크롤.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        forecastRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      })
+    })
   }
 
   const meta = DOC_TYPES.find((d) => d.type === type) ?? DOC_TYPES[0]
@@ -283,7 +300,7 @@ export function DocAnalysisView({ onCreditBalance, initialDealText }: DocAnalysi
         <form className="card input-panel" onSubmit={(e) => { e.preventDefault(); run() }}>
           <div className="deal-ingest">
             <label htmlFor="dealText">딜/기사로 시작 (선택) · 붙여넣으면 AI가 자동 정리</label>
-            <textarea id="dealText" rows={3} value={dealText} onChange={(e) => setDealText(e.target.value)}
+            <textarea id="dealText" ref={dealTextRef} rows={3} value={dealText} onChange={(e) => setDealText(e.target.value)}
               placeholder="예: 신한카드 을지로 본사 사옥(파인에비뉴 A동) 매각, 우선협상대상자 MDM자산운용 선정. 8곳 입찰, PI 참여, 임차구조 안정성…" />
             <div className="deal-ingest-actions">
               <button type="button" className="btn-ghost" onClick={() => extractDeal()} disabled={extracting || !dealText.trim()}>
@@ -365,7 +382,7 @@ export function DocAnalysisView({ onCreditBalance, initialDealText }: DocAnalysi
               </div>
             )}
             {forecastMode && (
-              <div className="full">
+              <div className="full" ref={forecastRef}>
                 <label>가격 예측 입력 (NOI·연면적 중 하나는 필수)</label>
                 <div className="calc-grid">
                   {FORECAST_FIELDS.map((f) => (

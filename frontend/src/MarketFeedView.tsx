@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   api, ApiError,
-  type IngestReport, type MarketBriefing, type MarketFeedItem, type MarketFeedInput,
+  type IngestReport, type MarketBriefing, type MarketDeepReport, type MarketFeedItem, type MarketFeedInput,
 } from './api'
 
 interface MarketFeedViewProps {
   isAdmin: boolean
   /** '이 딜 분석하기' — 카드 원문을 심화 분석(딜 진입)으로 넘긴다. */
   onAnalyzeDeal: (sourceText: string) => void
+  /** 심층 리포트(크레딧 소비) 후 잔액 갱신. */
+  onCreditBalance: (balance: number) => void
 }
 
 const ASSET_FILTERS = ['전체', '오피스', '물류', '호텔', '리테일'] as const
@@ -18,7 +20,7 @@ type AssetFilter = (typeof ASSET_FILTERS)[number]
  * 브리핑으로 큰 그림을 보고, 자산유형으로 딜을 좁혀 그 자리에서 AI 분석으로 진입.
  * 데이터는 스케줄러가 매일 자동 수집(이력 누적) — 관리자는 즉시 수집/추가/삭제.
  */
-export function MarketFeedView({ isAdmin, onAnalyzeDeal }: MarketFeedViewProps) {
+export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance }: MarketFeedViewProps) {
   const [items, setItems] = useState<MarketFeedItem[]>([])
   const [briefing, setBriefing] = useState<MarketBriefing | null>(null)
   const [loading, setLoading] = useState(true)
@@ -26,6 +28,23 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal }: MarketFeedViewProps) 
   const [ingesting, setIngesting] = useState(false)
   const [report, setReport] = useState<IngestReport | null>(null)
   const [filter, setFilter] = useState<AssetFilter>('전체')
+  // 심층 리포트(크레딧)
+  const [deep, setDeep] = useState<MarketDeepReport | null>(null)
+  const [deepBusy, setDeepBusy] = useState(false)
+
+  async function runDeepReport() {
+    setDeepBusy(true)
+    setError(null)
+    try {
+      const r = await api.marketDeepReport()
+      setDeep(r)
+      onCreditBalance(r.creditBalance)
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.message : '심층 리포트 생성에 실패했습니다.')
+    } finally {
+      setDeepBusy(false)
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -95,6 +114,8 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal }: MarketFeedViewProps) 
         </div>
       </header>
 
+      <NewsletterBar onError={setError} />
+
       {report && (
         <p className="mi-report">
           수집 완료 — 신규 <b>{report.inserted}</b> · 중복 {report.skippedDuplicate} · 분석 {report.fetched}건
@@ -104,6 +125,19 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal }: MarketFeedViewProps) 
       {error && <p className="form-error">{error}</p>}
 
       {briefing && <BriefingHero briefing={briefing} />}
+
+      {items.length > 0 && (
+        <div className="deep-bar">
+          <div className="deep-bar-text">
+            <strong>AI 심층 시장 분석</strong>
+            <span>무료 브리핑보다 깊은 섹터·모멘텀·액션 리포트 — Claude 기반</span>
+          </div>
+          <button className="btn-primary" onClick={() => void runDeepReport()} disabled={deepBusy}>
+            {deepBusy ? 'AI 분석 중…' : 'AI 심층 분석 · 1크레딧'}
+          </button>
+        </div>
+      )}
+      {deep && <DeepReportPanel report={deep} onClose={() => setDeep(null)} />}
 
       {isAdmin && <AdminFeedForm onCreated={(it) => setItems((list) => [it, ...list])} onError={setError} />}
 
@@ -198,6 +232,77 @@ function BriefingHero({ briefing }: { briefing: MarketBriefing }) {
           </div>
         )}
       </div>
+    </section>
+  )
+}
+
+/** 무료 메일 구독 바 — 매일 아침 브리핑을 메일로(재방문 유도). */
+function NewsletterBar({ onError }: { onError: (m: string | null) => void }) {
+  const [subscribed, setSubscribed] = useState<boolean | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    api.newsletterStatus().then((s) => setSubscribed(s.subscribed)).catch(() => setSubscribed(false))
+  }, [])
+
+  async function toggle() {
+    setBusy(true)
+    onError(null)
+    try {
+      const r = subscribed ? await api.newsletterUnsubscribe() : await api.newsletterSubscribe()
+      setSubscribed(r.subscribed)
+    } catch (err: unknown) {
+      onError(err instanceof ApiError ? err.message : '구독 처리에 실패했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (subscribed === null) return null
+  return (
+    <div className={`nl-bar${subscribed ? ' on' : ''}`}>
+      <div className="nl-text">
+        <span className="nl-ico" aria-hidden="true">✉</span>
+        <span>{subscribed ? '매일 아침 시장 브리핑을 메일로 받고 있습니다.' : '매일 아침 시장 브리핑을 메일로 받아보세요. (무료)'}</span>
+      </div>
+      <button className={subscribed ? 'btn-ghost' : 'btn-primary'} onClick={() => void toggle()} disabled={busy}>
+        {busy ? '처리 중…' : subscribed ? '구독 중 · 해지' : '메일 구독'}
+      </button>
+    </div>
+  )
+}
+
+/** AI 심층 리포트 결과 패널(크레딧 소비 결과). */
+function DeepReportPanel({ report, onClose }: { report: MarketDeepReport; onClose: () => void }) {
+  return (
+    <section className="deep-panel" aria-label="AI 심층 시장 리포트">
+      <div className="deep-panel-head">
+        <span className="deep-tag">AI 심층 리포트 · {report.provider}</span>
+        <button className="deep-close" onClick={onClose} aria-label="닫기">×</button>
+      </div>
+      {report.headline && <h3 className="deep-headline">{report.headline}</h3>}
+      {report.summary && <p className="deep-summary">{report.summary}</p>}
+      {report.sections.length > 0 && (
+        <div className="deep-sections">
+          {report.sections.map((s, i) => (
+            <div key={i} className="deep-section">
+              <h4>{s.title}</h4>
+              <p>{s.body}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      {report.picks.length > 0 && (
+        <div className="deep-picks">
+          <h4>주목 포인트</h4>
+          <ul>
+            {report.picks.map((p, i) => (
+              <li key={i}><strong>{p.title}</strong>{p.why ? ` — ${p.why}` : ''}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <p className="deep-disc">{report.disclaimer}</p>
     </section>
   )
 }

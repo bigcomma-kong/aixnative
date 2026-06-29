@@ -309,6 +309,19 @@ export interface MarketBriefing {
   generatedAt: string | null
 }
 
+/** AI 심층 시장 리포트(크레딧 소비, Claude). */
+export interface DeepReportSection { title: string | null; body: string | null }
+export interface DeepReportPick { title: string | null; why: string | null }
+export interface MarketDeepReport {
+  headline: string | null
+  summary: string | null
+  sections: DeepReportSection[]
+  picks: DeepReportPick[]
+  provider: string
+  creditBalance: number
+  disclaimer: string
+}
+
 /** 자동 수집 실행 결과. */
 export interface IngestReport {
   fetched: number
@@ -589,6 +602,17 @@ export const api = {
   /** 관리자 — 즉시 수집(딜 카드 + 무료 브리핑). 스케줄러와 동일 경로. */
   marketFeedIngest: (): Promise<IngestReport> =>
     request('/api/admin/market-feed/ingest', { method: 'POST' }),
+
+  /** 과금 — AI 심층 시장 리포트(Claude, 1크레딧). */
+  marketDeepReport: (focus?: string): Promise<MarketDeepReport> =>
+    request('/api/market-feed/deep-report', { method: 'POST', body: JSON.stringify({ focus: focus ?? null }) }),
+
+  /** 무료 — 마켓 브리핑 메일 구독 상태/구독/해지. */
+  newsletterStatus: (): Promise<{ subscribed: boolean }> => request('/api/newsletter/status'),
+  newsletterSubscribe: (): Promise<{ subscribed: boolean }> =>
+    request('/api/newsletter/subscribe', { method: 'POST' }),
+  newsletterUnsubscribe: (): Promise<{ subscribed: boolean }> =>
+    request('/api/newsletter/subscribe', { method: 'DELETE' }),
 
   /** 관리자 — 전체 사용자 목록. */
   adminUsers: (): Promise<AdminUser[]> => request('/api/admin/users'),

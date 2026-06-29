@@ -1,5 +1,6 @@
 package com.aixnative.marketfeed
 
+import com.aixnative.billing.RequiresCredit
 import com.aixnative.common.web.ApiResponse
 import com.aixnative.marketfeed.ingest.IngestReport
 import com.aixnative.marketfeed.ingest.MarketFeedIngestService
@@ -33,6 +34,12 @@ class MarketFeedController(
     /** 최신 마켓 브리핑(AI 다이제스트). 아직 생성 전이면 data=null. */
     @GetMapping("/briefing")
     fun briefing(): ApiResponse<MarketBriefingView?> = ApiResponse.ok(service.latestBriefing())
+
+    /** 과금 — AI 심층 시장 리포트(Claude). 성공 시 1 크레딧 차감(무료 브리핑과 구분되는 수익 액션). */
+    @RequiresCredit
+    @PostMapping("/deep-report")
+    fun deepReport(@RequestBody(required = false) req: DeepReportRequest?): ApiResponse<MarketDeepReportView> =
+        ApiResponse.ok(service.deepReport(req?.focus))
 }
 
 /**
@@ -54,11 +61,12 @@ class MarketFeedAdminController(
         return ApiResponse.ok(mapOf("deleted" to true))
     }
 
-    /** 수동 수집 — 관리자가 즉시 한 번 수집·적재(+무료 브리핑). purge=true 면 자동 카드 정리 후 재수집. */
+    /** 수동 수집 — 관리자가 즉시 한 번 수집·적재(+무료 브리핑). purge=자동카드 정리, notify=구독자 메일발송(기본 미발송). */
     @PostMapping("/ingest")
     fun ingest(
         @RequestParam(required = false, defaultValue = "false") purge: Boolean,
-    ): ApiResponse<IngestReport> = ApiResponse.ok(ingestService.ingest(purge))
+        @RequestParam(required = false, defaultValue = "false") notify: Boolean,
+    ): ApiResponse<IngestReport> = ApiResponse.ok(ingestService.ingest(purge, notify))
 }
 
 /**
@@ -76,11 +84,12 @@ class MarketFeedIngestController(
     fun trigger(
         @RequestHeader(name = "X-Ingest-Token", required = false) token: String?,
         @RequestParam(required = false, defaultValue = "false") purge: Boolean,
+        @RequestParam(required = false, defaultValue = "true") notify: Boolean,
     ): ResponseEntity<ApiResponse<IngestReport>> {
         if (!props.ingestEndpointEnabled || token.isNullOrBlank() || token != props.ingestToken) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiResponse.fail("수집 트리거가 비활성이거나 토큰이 올바르지 않습니다."))
         }
-        return ResponseEntity.ok(ApiResponse.ok(ingestService.ingest(purge)))
+        return ResponseEntity.ok(ApiResponse.ok(ingestService.ingest(purge, notify)))
     }
 }

@@ -151,7 +151,11 @@ function App() {
 
       <main>
         {tab === 'feed' && (
-          <MarketFeedView isAdmin={isAdmin} onAnalyzeDeal={analyzeDeal} />
+          <MarketFeedView
+            isAdmin={isAdmin}
+            onAnalyzeDeal={analyzeDeal}
+            onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
+          />
         )}
         {tab === 'underwrite' && (
           <UnderwriteView onCreditBalance={(balance) => patchSession({ creditBalance: balance })} />
