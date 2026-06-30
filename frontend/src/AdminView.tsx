@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react'
-import { api, ApiError, type AdminRun, type AdminRunDetail, type AdminUser, type UserRole } from './api'
+import {
+  api,
+  ApiError,
+  type AdminRun,
+  type AdminRunDetail,
+  type AdminUser,
+  type NewsletterSendLogEntry,
+  type NewsSubscriber,
+  type UserRole,
+} from './api'
 
 interface AdminViewProps {
   currentEmail: string
@@ -8,7 +17,7 @@ interface AdminViewProps {
 const fmtDate = (s: string | null): string => (s ? new Date(s).toLocaleString('ko-KR') : '-')
 
 export function AdminView({ currentEmail }: AdminViewProps) {
-  const [section, setSection] = useState<'users' | 'runs'>('users')
+  const [section, setSection] = useState<'users' | 'runs' | 'newsletter'>('users')
 
   return (
     <>
@@ -20,10 +29,13 @@ export function AdminView({ currentEmail }: AdminViewProps) {
         <div className="seg admin-seg" role="group" aria-label="관리자 섹션">
           <button type="button" aria-pressed={section === 'users'} onClick={() => setSection('users')}>사용자·크레딧</button>
           <button type="button" aria-pressed={section === 'runs'} onClick={() => setSection('runs')}>분석 데이터</button>
+          <button type="button" aria-pressed={section === 'newsletter'} onClick={() => setSection('newsletter')}>뉴스레터</button>
         </div>
       </div>
 
-      {section === 'users' ? <UsersPanel currentEmail={currentEmail} /> : <RunsPanel />}
+      {section === 'users' && <UsersPanel currentEmail={currentEmail} />}
+      {section === 'runs' && <RunsPanel />}
+      {section === 'newsletter' && <NewsletterPanel />}
     </>
   )
 }
@@ -169,6 +181,81 @@ function RunsPanel() {
         </div>
       )}
     </div>
+  )
+}
+
+function NewsletterPanel() {
+  const [subs, setSubs] = useState<NewsSubscriber[]>([])
+  const [logs, setLogs] = useState<NewsletterSendLogEntry[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([api.adminNewsletterSubscribers(), api.adminNewsletterSendLog()])
+      .then(([s, l]) => { setSubs(s); setLogs(l) })
+      .catch((e: unknown) => setError(e instanceof ApiError ? e.message : '조회 실패'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const activeCount = subs.filter((s) => s.active).length
+
+  return (
+    <>
+      {error && <p className="error">{error}</p>}
+
+      <div className="card">
+        <div className="section-title">구독자 — 활성 {activeCount} / 전체 {subs.length}</div>
+        {loading ? <p className="hint">불러오는 중…</p> : (
+          <div className="table-scroll">
+            <table className="admin-table">
+              <thead>
+                <tr><th>이메일</th><th>상태</th><th>구독일</th></tr>
+              </thead>
+              <tbody>
+                {subs.length === 0 ? (
+                  <tr><td colSpan={3} className="muted">아직 구독자가 없습니다.</td></tr>
+                ) : subs.map((s) => (
+                  <tr key={s.email}>
+                    <td className="admin-email">{s.email}</td>
+                    <td>
+                      <span className={`plan-pill ${s.active ? 'admin' : 'free'}`}>{s.active ? '구독중' : '해지'}</span>
+                    </td>
+                    <td className="num admin-date">{fmtDate(s.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="section-title">발송 로그 — 누구에게 언제 ({logs.length})</div>
+        {loading ? <p className="hint">불러오는 중…</p> : (
+          <div className="table-scroll">
+            <table className="admin-table">
+              <thead>
+                <tr><th>수신자</th><th>제목</th><th>상태</th><th>발송 일시</th></tr>
+              </thead>
+              <tbody>
+                {logs.length === 0 ? (
+                  <tr><td colSpan={4} className="muted">아직 발송 이력이 없습니다.</td></tr>
+                ) : logs.map((l, i) => (
+                  <tr key={`${l.email}-${l.sentAt ?? i}`}>
+                    <td className="admin-email">{l.email}</td>
+                    <td>{l.subject ?? '-'}</td>
+                    <td><span className={l.status === 'SENT' ? 'st-ok' : 'st-fail'}>{l.status}</span></td>
+                    <td className="num admin-date">{fmtDate(l.sentAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="hint">발송은 수집 스케줄러가 새 브리핑을 만들 때 활성 구독자 전원에게 자동 전송됩니다. 발송 자체는 무료(과금 없음).</p>
+      </div>
+    </>
   )
 }
 

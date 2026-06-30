@@ -56,6 +56,19 @@ export interface AdminRunDetail extends AdminRun {
   resultJson: string | null
 }
 
+export interface NewsSubscriber {
+  email: string
+  active: boolean
+  createdAt: string | null
+}
+
+export interface NewsletterSendLogEntry {
+  email: string
+  subject: string | null
+  status: string
+  sentAt: string | null
+}
+
 export interface CreditHistoryItem {
   id: number
   delta: number
@@ -292,6 +305,26 @@ export interface MarketFeedItem {
   origin: string | null
 }
 
+/** 피드 페이지 — 더보기(아카이브) 페이지네이션. */
+export interface MarketFeedPage {
+  items: MarketFeedItem[]
+  page: number
+  hasMore: boolean
+}
+
+/** 관심 딜(찜) — 저장된 카드 스냅샷. */
+export interface DealWatch {
+  id: number
+  feedItemId: number
+  title: string
+  summary: string | null
+  assetType: string | null
+  location: string | null
+  sourceText: string | null
+  sourceUrl: string | null
+  createdAt: string | null
+}
+
 /** 마켓 브리핑(AI 다이제스트) — 뉴스레터 강점. */
 export interface BriefingSection { topic: string | null; summary: string | null; impact: string | null }
 export interface BriefingWatch { item: string | null; why: string | null }
@@ -308,15 +341,44 @@ export interface MarketBriefing {
   provider: string | null
   generatedAt: string | null
 }
+export interface BriefingHistoryItem {
+  id: number
+  briefingDate: string | null
+  headline: string | null
+  articleCount: number | null
+  generatedAt: string | null
+}
 
 /** AI 심층 시장 리포트(크레딧 소비, Claude). */
 export interface DeepReportSection { title: string | null; body: string | null }
-export interface DeepReportPick { title: string | null; why: string | null }
+export interface DeepReportPick {
+  title: string | null
+  why: string | null
+  conviction: string | null
+  risk: string | null
+}
+export interface DeepSector {
+  name: string | null
+  stance: string | null
+  score: number | null
+  note: string | null
+}
+export interface DeepScenario { name: string | null; narrative: string | null }
+export interface DeepReportHistoryItem {
+  id: number
+  headline: string | null
+  generatedAt: string | null
+}
 export interface MarketDeepReport {
   headline: string | null
   summary: string | null
+  marketTempScore: number | null
+  marketTempLabel: string | null
+  sectors: DeepSector[]
+  scenarios: DeepScenario[]
   sections: DeepReportSection[]
   picks: DeepReportPick[]
+  contrarian: string | null
   provider: string
   creditBalance: number
   disclaimer: string
@@ -473,12 +535,20 @@ export interface DocAnalysis {
   disclaimer?: string
 }
 
+/** 분석에 주입된 실측 시장데이터 한 건(공공 API 출처). */
+export interface MarketFact {
+  source: string
+  detail: string
+}
+
 export interface DocAnalyzeResponse {
   runId: number
   analysisType: string
   analysis?: DocAnalysis | null
   analysisRaw?: string | null
   calc?: DocCalc | null
+  /** 실측 시장데이터(없으면 빈 배열). "실측·확정" 카드로 노출. */
+  marketFacts?: MarketFact[]
   provider: string
   creditBalance: number
   disclaimer: string
@@ -584,9 +654,9 @@ export const api = {
 
   history: (): Promise<BillingHistory> => request('/api/billing/history'),
 
-  /** 시장 인텔리전스 피드 — 최신 카드(인증 사용자). */
-  marketFeed: (limit = 30): Promise<MarketFeedItem[]> =>
-    request(`/api/market-feed?limit=${limit}`),
+  /** 시장 인텔리전스 피드 — 카드 페이지(최신순). page 0-기반(과거 딜 더 보기). */
+  marketFeed: (limit = 30, page = 0): Promise<MarketFeedPage> =>
+    request(`/api/market-feed?limit=${limit}&page=${page}`),
 
   /** 관리자 — 피드 카드 추가. */
   marketFeedCreate: (input: MarketFeedInput): Promise<MarketFeedItem> =>
@@ -599,6 +669,25 @@ export const api = {
   /** 최신 마켓 브리핑(AI 다이제스트). 아직 없으면 null. */
   marketBriefing: (): Promise<MarketBriefing | null> => request('/api/market-feed/briefing'),
 
+  /** 무료 — 지난 브리핑 아카이브 목록(최신순). */
+  marketBriefingHistory: (): Promise<BriefingHistoryItem[]> =>
+    request('/api/market-feed/briefing/history'),
+
+  /** 무료 — 저장된 브리핑 단건 다시 보기. */
+  marketBriefingById: (id: number): Promise<MarketBriefing> =>
+    request(`/api/market-feed/briefing/${id}`),
+
+  /** 관심 딜(찜) — 내 목록. */
+  watchList: (): Promise<DealWatch[]> => request('/api/market-feed/watch'),
+  /** 관심 딜 카드 id 집합(⭐ 상태). */
+  watchIds: (): Promise<number[]> => request('/api/market-feed/watch/ids'),
+  /** 찜 추가. */
+  watchAdd: (feedItemId: number): Promise<DealWatch> =>
+    request('/api/market-feed/watch', { method: 'POST', body: JSON.stringify({ feedItemId }) }),
+  /** 찜 해제. */
+  watchRemove: (feedItemId: number): Promise<{ removed: boolean }> =>
+    request(`/api/market-feed/watch/${feedItemId}`, { method: 'DELETE' }),
+
   /** 관리자 — 즉시 수집(딜 카드 + 무료 브리핑). 스케줄러와 동일 경로. */
   marketFeedIngest: (): Promise<IngestReport> =>
     request('/api/admin/market-feed/ingest', { method: 'POST' }),
@@ -606,6 +695,14 @@ export const api = {
   /** 과금 — AI 심층 시장 리포트(Claude, 1크레딧). */
   marketDeepReport: (focus?: string): Promise<MarketDeepReport> =>
     request('/api/market-feed/deep-report', { method: 'POST', body: JSON.stringify({ focus: focus ?? null }) }),
+
+  /** 무료 — 내가 만든 지난 심층 리포트 목록. */
+  marketDeepReportHistory: (): Promise<DeepReportHistoryItem[]> =>
+    request('/api/market-feed/deep-report/history'),
+
+  /** 무료 — 저장된 심층 리포트 단건 다시 보기. */
+  marketDeepReportById: (id: number): Promise<MarketDeepReport> =>
+    request(`/api/market-feed/deep-report/${id}`),
 
   /** 무료 — 마켓 브리핑 메일 구독 상태/구독/해지. */
   newsletterStatus: (): Promise<{ subscribed: boolean }> => request('/api/newsletter/status'),
@@ -630,4 +727,11 @@ export const api = {
 
   /** 관리자 — 분석 데이터 단건 상세(입력/결과 JSON). */
   adminRunDetail: (id: number): Promise<AdminRunDetail> => request(`/api/admin/runs/${id}`),
+
+  /** 관리자 — 뉴스레터 구독자 목록(최신 가입순). */
+  adminNewsletterSubscribers: (): Promise<NewsSubscriber[]> => request('/api/admin/newsletter/subscribers'),
+
+  /** 관리자 — 뉴스레터 발송 로그(누구에게/언제/성공여부). */
+  adminNewsletterSendLog: (limit = 100): Promise<NewsletterSendLogEntry[]> =>
+    request(`/api/admin/newsletter/send-log?limit=${limit}`),
 }

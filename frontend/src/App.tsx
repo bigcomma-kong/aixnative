@@ -35,9 +35,18 @@ function App() {
   // 시장 피드 '이 딜 분석하기' → 심화 분석으로 넘길 딜 원문(진입 신호).
   const [dealSeed, setDealSeed] = useState<string | undefined>(undefined)
 
+  // 크레딧 소진 시(어느 분석 버튼이든 402) 화면 중앙에 페이월 안내를 띄운다.
+  const [showPaywall, setShowPaywall] = useState(false)
+
   function analyzeDeal(sourceText: string) {
     setDealSeed(sourceText)
     setTab('advanced')
+  }
+
+  // 402 발생 시: 잔여 크레딧 0 으로 보정(상단 배너) + 중앙 안내 모달 노출.
+  function handleNeedCredits() {
+    patchSession({ creditBalance: 0 })
+    setShowPaywall(true)
   }
 
   // 앱 시작 시 저장된 토큰이 있으면 세션 복원. (plan 은 결제 도입 전까지 FREE; 사용 내역에서 서버값으로 보정)
@@ -155,14 +164,19 @@ function App() {
             isAdmin={isAdmin}
             onAnalyzeDeal={analyzeDeal}
             onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
+            onNeedCredits={handleNeedCredits}
           />
         )}
         {tab === 'underwrite' && (
-          <UnderwriteView onCreditBalance={(balance) => patchSession({ creditBalance: balance })} />
+          <UnderwriteView
+            onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
+            onNeedCredits={handleNeedCredits}
+          />
         )}
         {tab === 'advanced' && (
           <DocAnalysisView
             onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
+            onNeedCredits={handleNeedCredits}
             initialDealText={dealSeed}
           />
         )}
@@ -173,6 +187,23 @@ function App() {
           <AdminView currentEmail={session.email} />
         )}
       </main>
+
+      {showPaywall && (
+        <div
+          className="analyze-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="크레딧 소진 안내"
+          onClick={() => setShowPaywall(false)}
+        >
+          <div className="paywall-modal" onClick={(e) => e.stopPropagation()}>
+            <Paywall creditBalance={0} variant="card" />
+            <button type="button" className="btn-ghost paywall-modal-close" onClick={() => setShowPaywall(false)}>
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
     </>
   )
 }

@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   api, ApiError,
+  type BriefingHistoryItem,
+  type DeepReportHistoryItem,
   type IngestReport, type MarketBriefing, type MarketDeepReport, type MarketFeedItem, type MarketFeedInput,
 } from './api'
+import { downloadDeepReportDoc, printDeepReport } from './reportExport'
 
 interface MarketFeedViewProps {
   isAdmin: boolean
@@ -10,9 +13,12 @@ interface MarketFeedViewProps {
   onAnalyzeDeal: (sourceText: string) => void
   /** 심층 리포트(크레딧 소비) 후 잔액 갱신. */
   onCreditBalance: (balance: number) => void
+  /** 크레딧 소진(402) 시 중앙 페이월 안내 노출. */
+  onNeedCredits: () => void
 }
 
-const ASSET_FILTERS = ['전체', '오피스', '물류', '호텔', '리테일'] as const
+const PAGE_SIZE = 60
+const ASSET_FILTERS = ['전체', '관심', '오피스', '물류', '호텔', '리테일'] as const
 type AssetFilter = (typeof ASSET_FILTERS)[number]
 
 /**
@@ -20,9 +26,15 @@ type AssetFilter = (typeof ASSET_FILTERS)[number]
  * 브리핑으로 큰 그림을 보고, 자산유형으로 딜을 좁혀 그 자리에서 AI 분석으로 진입.
  * 데이터는 스케줄러가 매일 자동 수집(이력 누적) — 관리자는 즉시 수집/추가/삭제.
  */
-export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance }: MarketFeedViewProps) {
+export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeedCredits }: MarketFeedViewProps) {
   const [items, setItems] = useState<MarketFeedItem[]>([])
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [moreBusy, setMoreBusy] = useState(false)
   const [briefing, setBriefing] = useState<MarketBriefing | null>(null)
+  const [briefHistory, setBriefHistory] = useState<BriefingHistoryItem[]>([])
+  const [briefOpenId, setBriefOpenId] = useState<number | null>(null)
+  const [watched, setWatched] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [ingesting, setIngesting] = useState(false)
@@ -31,6 +43,19 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance }: Mark
   // 심층 리포트(크레딧)
   const [deep, setDeep] = useState<MarketDeepReport | null>(null)
   const [deepBusy, setDeepBusy] = useState(false)
+  const [history, setHistory] = useState<DeepReportHistoryItem[]>([])
+  const [openId, setOpenId] = useState<number | null>(null)
+
+  function loadHistory() {
+    api.marketDeepReportHistory().then(setHistory).catch(() => setHistory([]))
+  }
+
+  // 심층 리포트 패널이 렌더된 뒤 그 위치로 부드럽게 이동(아래에서 찾아 내려가는 수고 제거).
+  function scrollToDeep() {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      document.getElementById('deep-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }))
+  }
 
   async function runDeepReport() {
     setDeepBusy(true)
@@ -38,11 +63,30 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance }: Mark
     try {
       const r = await api.marketDeepReport()
       setDeep(r)
+      setOpenId(null)
       onCreditBalance(r.creditBalance)
+      loadHistory()
+      scrollToDeep()
     } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : '심층 리포트 생성에 실패했습니다.')
+      if (err instanceof ApiError && err.status === 402) {
+        onNeedCredits()
+      } else {
+        setError(err instanceof ApiError ? err.message : '심층 리포트 생성에 실패했습니다.')
+      }
     } finally {
       setDeepBusy(false)
+    }
+  }
+
+  async function openPastReport(id: number) {
+    setError(null)
+    try {
+      const r = await api.marketDeepReportById(id)
+      setDeep(r)
+      setOpenId(id)
+      scrollToDeep()
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.message : '리포트를 불러오지 못했습니다.')
     }
   }
 
@@ -50,9 +94,12 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance }: Mark
     setLoading(true)
     setError(null)
     try {
-      const [feed, brief] = await Promise.all([api.marketFeed(60), api.marketBriefing().catch(() => null)])
-      setItems(feed)
+      const [feed, brief] = await Promise.all([api.marketFeed(PAGE_SIZE, 0), api.marketBriefing().catch(() => null)])
+      setItems(feed.items)
+      setPage(0)
+      setHasMore(feed.hasMore)
       setBriefing(brief)
+      setBriefOpenId(null)
     } catch (err: unknown) {
       setError(err instanceof ApiError ? err.message : '피드를 불러오지 못했습니다.')
     } finally {
@@ -60,7 +107,69 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance }: Mark
     }
   }
 
-  useEffect(() => { void load() }, [])
+  async function loadMore() {
+    if (moreBusy) return
+    setMoreBusy(true)
+    setError(null)
+    try {
+      const next = page + 1
+      const feed = await api.marketFeed(PAGE_SIZE, next)
+      setItems((list) => [...list, ...feed.items])
+      setPage(next)
+      setHasMore(feed.hasMore)
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.message : '과거 딜을 불러오지 못했습니다.')
+    } finally {
+      setMoreBusy(false)
+    }
+  }
+
+  function loadBriefHistory() {
+    api.marketBriefingHistory().then(setBriefHistory).catch(() => setBriefHistory([]))
+  }
+
+  function loadWatched() {
+    api.watchIds().then((ids) => setWatched(new Set(ids))).catch(() => setWatched(new Set()))
+  }
+
+  async function toggleWatch(item: MarketFeedItem) {
+    const on = watched.has(item.id)
+    // 낙관적 업데이트 후 실패 시 롤백.
+    setWatched((s) => {
+      const next = new Set(s)
+      if (on) next.delete(item.id); else next.add(item.id)
+      return next
+    })
+    try {
+      if (on) await api.watchRemove(item.id)
+      else await api.watchAdd(item.id)
+    } catch (err: unknown) {
+      setWatched((s) => {
+        const next = new Set(s)
+        if (on) next.add(item.id); else next.delete(item.id)
+        return next
+      })
+      setError(err instanceof ApiError ? err.message : '관심 딜 처리에 실패했습니다.')
+    }
+  }
+
+  async function openPastBriefing(id: number) {
+    setError(null)
+    try {
+      const b = await api.marketBriefingById(id)
+      setBriefing(b)
+      setBriefOpenId(id)
+      // 칩이 화면 아래에 있어 매번 top 으로 끌어올리면 "눌렀다 튕김"이 반복됨 →
+      // 갱신되는 브리핑(상단)만 필요 시 부드럽게 노출하고, 사용자 위치는 유지.
+      requestAnimationFrame(() => {
+        document.getElementById('brief-hero')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      })
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.message : '브리핑을 불러오지 못했습니다.')
+    }
+  }
+
+  useEffect(() => { void load(); loadHistory(); loadBriefHistory(); loadWatched() }, [])
 
   async function remove(id: number) {
     try {
@@ -87,12 +196,15 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance }: Mark
   }
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { 전체: items.length }
+    const c: Record<string, number> = { 전체: items.length, 관심: items.filter((it) => watched.has(it.id)).length }
     for (const it of items) if (it.assetType) c[it.assetType] = (c[it.assetType] ?? 0) + 1
     return c
-  }, [items])
+  }, [items, watched])
 
-  const visible = filter === '전체' ? items : items.filter((it) => it.assetType === filter)
+  const visible =
+    filter === '전체' ? items
+    : filter === '관심' ? items.filter((it) => watched.has(it.id))
+    : items.filter((it) => it.assetType === filter)
 
   return (
     <section className="mi">
@@ -124,7 +236,29 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance }: Mark
       )}
       {error && <p className="form-error">{error}</p>}
 
-      {briefing && <BriefingHero briefing={briefing} />}
+      {briefing && <BriefingHero briefing={briefing} isPast={briefOpenId != null} onLatest={() => void load()} />}
+
+      {briefHistory.length > 1 && (
+        <div className="brief-archive">
+          <span className="brief-archive-label">지난 브리핑</span>
+          <div className="brief-archive-list">
+            {briefHistory.map((b) => {
+              const active = briefOpenId === b.id || (briefOpenId == null && briefing?.id === b.id)
+              return (
+                <button
+                  key={b.id}
+                  className={`brief-archive-chip${active ? ' active' : ''}`}
+                  onClick={() => void openPastBriefing(b.id)}
+                  title={b.headline ?? '브리핑'}
+                >
+                  <span className="ba-date">{fmtArchiveDate(b.generatedAt ?? b.briefingDate)}</span>
+                  <span className="ba-title">{b.headline ?? '시장 브리핑'}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {items.length > 0 && (
         <div className="deep-bar">
@@ -137,7 +271,33 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance }: Mark
           </button>
         </div>
       )}
-      {deep && <DeepReportPanel report={deep} onClose={() => setDeep(null)} />}
+
+      {history.length > 0 && (
+        <div className="deep-history">
+          <span className="deep-history-label">지난 리포트</span>
+          <div className="deep-history-list">
+            {history.map((h) => (
+              <button
+                key={h.id}
+                className={`deep-history-chip${openId === h.id ? ' active' : ''}`}
+                onClick={() => void openPastReport(h.id)}
+                title={h.headline ?? '심층 시장 분석'}
+              >
+                <span className="dh-date">{fmtHistoryDate(h.generatedAt)}</span>
+                <span className="dh-title">{h.headline ?? '심층 시장 분석'}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {deep && (
+        <DeepReportPanel
+          report={deep}
+          saved={openId != null}
+          onClose={() => { setDeep(null); setOpenId(null) }}
+        />
+      )}
 
       {isAdmin && <AdminFeedForm onCreated={(it) => setItems((list) => [it, ...list])} onError={setError} />}
 
@@ -153,7 +313,7 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance }: Mark
               onClick={() => setFilter(f)}
               disabled={f !== '전체' && !counts[f]}
             >
-              {f}{counts[f] ? <span className="mi-chip-n">{counts[f]}</span> : null}
+              {f === '관심' ? '★ 관심' : f}{counts[f] ? <span className="mi-chip-n">{counts[f]}</span> : null}
             </button>
           ))}
         </div>
@@ -165,30 +325,56 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance }: Mark
         </p>
       )}
       {!loading && items.length > 0 && visible.length === 0 && (
-        <p className="feed-empty">‘{filter}’ 유형의 딜이 없습니다.</p>
+        <p className="feed-empty">
+          {filter === '관심' ? '아직 관심 딜이 없습니다. 카드의 ★ 를 눌러 저장하세요.' : `‘${filter}’ 유형의 딜이 없습니다.`}
+        </p>
       )}
 
       <div className="feed-grid">
         {visible.map((it) => (
-          <FeedCard key={it.id} item={it} isAdmin={isAdmin} onAnalyze={onAnalyzeDeal} onDelete={remove} />
+          <FeedCard
+            key={it.id}
+            item={it}
+            isAdmin={isAdmin}
+            watched={watched.has(it.id)}
+            onAnalyze={onAnalyzeDeal}
+            onDelete={remove}
+            onToggleWatch={toggleWatch}
+          />
         ))}
       </div>
+
+      {hasMore && filter === '전체' && (
+        <div className="feed-more">
+          <button className="btn-ghost" onClick={() => void loadMore()} disabled={moreBusy}>
+            {moreBusy ? '불러오는 중…' : '과거 딜 더 보기'}
+          </button>
+        </div>
+      )}
+      {hasMore && filter !== '전체' && visible.length > 0 && (
+        <p className="feed-more-hint">‘{filter}’ 필터 중 — 과거 딜을 더 보려면 ‘전체’로 전환하세요.</p>
+      )}
     </section>
   )
 }
 
 /** 마켓 브리핑 — 프리미엄 다크 히어로(헤드라인·전망 + 동향/워치리스트/리스크). */
-function BriefingHero({ briefing }: { briefing: MarketBriefing }) {
+function BriefingHero({ briefing, isPast = false, onLatest }: { briefing: MarketBriefing; isPast?: boolean; onLatest?: () => void }) {
   const date = briefing.generatedAt
     ? new Date(briefing.generatedAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })
     : briefing.briefingDate
   return (
-    <section className="brief" aria-label="마켓 브리핑">
+    <section className="brief" id="brief-hero" aria-label="마켓 브리핑">
       <div className="brief-top">
-        <span className="brief-badge"><span className="brief-dot" />AI 마켓 브리핑</span>
+        <span className="brief-badge">
+          <span className="brief-dot" />{isPast ? '지난 브리핑' : 'AI 마켓 브리핑'}
+        </span>
         <span className="brief-meta">
           {briefing.articleCount ? `${briefing.articleCount}건 분석` : null}
           {date ? ` · ${date}` : null}
+          {isPast && onLatest && (
+            <button type="button" className="brief-latest" onClick={onLatest}>최신으로 →</button>
+          )}
         </span>
       </div>
       {briefing.headline && <h3 className="brief-headline">{briefing.headline}</h3>}
@@ -200,9 +386,10 @@ function BriefingHero({ briefing }: { briefing: MarketBriefing }) {
             <h4>주요 동향</h4>
             <ul>
               {briefing.sections.map((s, i) => (
-                <li key={i}>
-                  <strong>{s.topic}</strong>{s.summary ? <span className="brief-li-sum"> {s.summary}</span> : null}
-                  {s.impact && <span className="brief-impact">{s.impact}</span>}
+                <li key={i} className="brief-item">
+                  <span className="bi-lead">{s.topic}</span>
+                  {s.summary && <span className="bi-sum">{s.summary}</span>}
+                  {s.impact && <span className="bi-impact">시사점 · {s.impact}</span>}
                 </li>
               ))}
             </ul>
@@ -213,7 +400,10 @@ function BriefingHero({ briefing }: { briefing: MarketBriefing }) {
             <h4>워치리스트</h4>
             <ul>
               {briefing.watchlist.map((w, i) => (
-                <li key={i}><strong>{w.item}</strong>{w.why ? <span className="brief-li-sum"> {w.why}</span> : null}</li>
+                <li key={i} className="brief-item">
+                  <span className="bi-lead">{w.item}</span>
+                  {w.why && <span className="bi-sum">{w.why}</span>}
+                </li>
               ))}
             </ul>
           </div>
@@ -223,9 +413,12 @@ function BriefingHero({ briefing }: { briefing: MarketBriefing }) {
             <h4>리스크</h4>
             <ul>
               {briefing.risks.map((r, i) => (
-                <li key={i}>
-                  {r.severity && <span className={`risk-sev ${r.severity.toLowerCase()}`}>{r.severity}</span>}
-                  <strong>{r.signal}</strong>{r.mitigation ? <span className="brief-li-sum"> {r.mitigation}</span> : null}
+                <li key={i} className="brief-item">
+                  <span className="bi-lead">
+                    {r.severity && <span className={`risk-sev ${r.severity.toLowerCase()}`}>{r.severity}</span>}
+                    {r.signal}
+                  </span>
+                  {r.mitigation && <span className="bi-sum">대응 · {r.mitigation}</span>}
                 </li>
               ))}
             </ul>
@@ -273,15 +466,81 @@ function NewsletterBar({ onError }: { onError: (m: string | null) => void }) {
 }
 
 /** AI 심층 리포트 결과 패널(크레딧 소비 결과). */
-function DeepReportPanel({ report, onClose }: { report: MarketDeepReport; onClose: () => void }) {
+const STANCE_CLASS: Record<string, string> = { '비중확대': 'up', '비중축소': 'down', '중립': 'neutral' }
+
+function fmtHistoryDate(s: string | null): string {
+  if (!s) return '—'
+  return new Date(s).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
+}
+
+function fmtArchiveDate(s: string | null): string {
+  if (!s) return '—'
+  return new Date(s).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' })
+}
+
+function DeepReportPanel({ report, saved = false, onClose }: { report: MarketDeepReport; saved?: boolean; onClose: () => void }) {
+  const temp = report.marketTempScore
   return (
-    <section className="deep-panel" aria-label="AI 심층 시장 리포트">
+    <section className="deep-panel" id="deep-panel" aria-label="AI 심층 시장 리포트">
       <div className="deep-panel-head">
-        <span className="deep-tag">AI 심층 리포트 · {report.provider}</span>
-        <button className="deep-close" onClick={onClose} aria-label="닫기">×</button>
+        <span className="deep-tag">AI 심층 리포트{saved ? ' · 저장된 이력' : ' · 유료 하우스 뷰'} · {report.provider}</span>
+        <div className="deep-head-actions">
+          <button className="btn-ghost btn-xs" onClick={() => downloadDeepReportDoc(report)} title="Word(.doc)로 저장">Word</button>
+          <button className="btn-ghost btn-xs" onClick={() => printDeepReport(report)} title="PDF로 저장(인쇄)">PDF</button>
+          <button className="deep-close" onClick={onClose} aria-label="닫기">×</button>
+        </div>
       </div>
       {report.headline && <h3 className="deep-headline">{report.headline}</h3>}
+
+      {(temp != null || report.marketTempLabel) && (
+        <div className="deep-temp">
+          <div className="deep-temp-row">
+            <span className="deep-temp-label">시장 온도</span>
+            {report.marketTempLabel && <span className="deep-temp-tag">{report.marketTempLabel}</span>}
+            {temp != null && <span className="deep-temp-score">{temp}<small>/100</small></span>}
+          </div>
+          {temp != null && (
+            <div className="deep-temp-bar"><span style={{ width: `${Math.max(0, Math.min(100, temp))}%` }} /></div>
+          )}
+        </div>
+      )}
+
       {report.summary && <p className="deep-summary">{report.summary}</p>}
+
+      {report.sectors.length > 0 && (
+        <div className="deep-board">
+          <h4 className="deep-h">섹터 스코어보드</h4>
+          <div className="deep-board-grid">
+            {report.sectors.map((s, i) => (
+              <div key={i} className={`deep-sector ${STANCE_CLASS[s.stance ?? ''] ?? 'neutral'}`}>
+                <div className="ds-top">
+                  <strong>{s.name}</strong>
+                  {s.stance && <span className="ds-stance">{s.stance}</span>}
+                </div>
+                {s.score != null && (
+                  <div className="ds-bar"><span style={{ width: `${Math.max(0, Math.min(100, s.score))}%` }} /><em>{s.score}</em></div>
+                )}
+                {s.note && <p className="ds-note">{s.note}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {report.scenarios.length > 0 && (
+        <div className="deep-scenarios">
+          <h4 className="deep-h">시나리오</h4>
+          <div className="deep-scn-grid">
+            {report.scenarios.map((s, i) => (
+              <div key={i} className="deep-scn">
+                <span className="scn-name">{s.name}</span>
+                <p>{s.narrative}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {report.sections.length > 0 && (
         <div className="deep-sections">
           {report.sections.map((s, i) => (
@@ -292,28 +551,46 @@ function DeepReportPanel({ report, onClose }: { report: MarketDeepReport; onClos
           ))}
         </div>
       )}
+
       {report.picks.length > 0 && (
         <div className="deep-picks">
-          <h4>주목 포인트</h4>
-          <ul>
+          <h4 className="deep-h">실행 픽</h4>
+          <div className="deep-pick-list">
             {report.picks.map((p, i) => (
-              <li key={i}><strong>{p.title}</strong>{p.why ? ` — ${p.why}` : ''}</li>
+              <div key={i} className="deep-pick">
+                <div className="dp-top">
+                  <strong>{p.title}</strong>
+                  {p.conviction && <span className={`dp-conv c-${p.conviction}`}>확신 {p.conviction}</span>}
+                </div>
+                {p.why && <p className="dp-why">{p.why}</p>}
+                {p.risk && <p className="dp-risk">리스크 · {p.risk}</p>}
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       )}
+
+      {report.contrarian && (
+        <div className="deep-contra">
+          <h4 className="deep-h">컨트래리안 뷰</h4>
+          <p>{report.contrarian}</p>
+        </div>
+      )}
+
       <p className="deep-disc">{report.disclaimer}</p>
     </section>
   )
 }
 
 function FeedCard({
-  item, isAdmin, onAnalyze, onDelete,
+  item, isAdmin, watched, onAnalyze, onDelete, onToggleWatch,
 }: {
   item: MarketFeedItem
   isAdmin: boolean
+  watched: boolean
   onAnalyze: (sourceText: string) => void
   onDelete: (id: number) => void
+  onToggleWatch: (item: MarketFeedItem) => void
 }) {
   const seed = item.sourceText?.trim() || item.summary?.trim() || item.title
   const dateLabel = item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) : null
@@ -321,6 +598,15 @@ function FeedCard({
 
   return (
     <article className="feed-card" data-asset={item.assetType ?? ''}>
+      <button
+        className={`fc-star${watched ? ' on' : ''}`}
+        onClick={() => onToggleWatch(item)}
+        aria-pressed={watched}
+        aria-label={watched ? '관심 딜 해제' : '관심 딜 저장'}
+        title={watched ? '관심 딜 해제' : '관심 딜 저장'}
+      >
+        {watched ? '★' : '☆'}
+      </button>
       <div className="fc-top">
         {item.assetType && <span className="fc-asset">{item.assetType}</span>}
         {item.location && <span className="fc-loc">{item.location}</span>}

@@ -5,9 +5,12 @@ import {
   type RunResult, type RunSummary, type Scenario, type UnderwriteInput,
 } from './api'
 import { CashflowChart } from './Chart'
+import { DealCompare } from './DealCompare'
 
 interface UnderwriteViewProps {
   onCreditBalance: (balance: number) => void
+  /** 크레딧 소진(402) 시 중앙 페이월 안내 노출. */
+  onNeedCredits: () => void
 }
 
 interface FormState {
@@ -36,16 +39,18 @@ const STAGES: { type: AnalysisType; label: string; hint: string }[] = [
 
 const STAGE_LABEL: Record<string, string> = Object.fromEntries(STAGES.map((s) => [s.type, s.label]))
 
+// 필수 입력은 빈 값으로 시작(데모 숫자 자동 채움 금지 → 의도치 않은 분석/크레딧 소진 방지).
+// 보유기간·임대성장률은 표준 가정이라 기본값 유지(선택).
 const INITIAL: FormState = {
   dealName: '',
   assetType: '오피스',
   location: '',
   notes: '',
-  askingPriceEok: '1000',
-  noiEok: '55',
-  ltvPct: '50',
-  loanRatePct: '3.5',
-  exitCapPct: '5.0',
+  askingPriceEok: '',
+  noiEok: '',
+  ltvPct: '',
+  loanRatePct: '',
+  exitCapPct: '',
   holdYears: '5',
   rentGrowthPct: '3.0',
 }
@@ -62,7 +67,7 @@ interface Results {
   provider?: string
 }
 
-export function UnderwriteView({ onCreditBalance }: UnderwriteViewProps) {
+export function UnderwriteView({ onCreditBalance, onNeedCredits }: UnderwriteViewProps) {
   const [form, setForm] = useState<FormState>(INITIAL)
   const [results, setResults] = useState<Results | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -85,12 +90,30 @@ export function UnderwriteView({ onCreditBalance }: UnderwriteViewProps) {
       ltvPct: Number(form.ltvPct),
       loanRatePct: Number(form.loanRatePct),
       exitCapPct: Number(form.exitCapPct),
-      holdYears: Number(form.holdYears),
-      rentGrowthPct: Number(form.rentGrowthPct),
+      // 선택값 — 비어 있으면 표준 가정 적용.
+      holdYears: Number(form.holdYears || '5'),
+      rentGrowthPct: Number(form.rentGrowthPct || '3'),
     }
   }
 
+  /**
+   * 필수 입력 검증. requireName=true(AI 분석)면 딜 이름도 필수.
+   * 통과하지 못하면 안내 문자열 반환 → 호출부가 실행을 막아 빈 값/크레딧 낭비를 방지.
+   */
+  function validate(requireName: boolean): string | null {
+    if (requireName && !form.dealName.trim()) return '딜 이름을 입력하세요. (분석 이력 구분에 필요합니다)'
+    if (!(Number(form.askingPriceEok) > 0)) return '매입가(억원)를 입력하세요.'
+    if (!(Number(form.noiEok) > 0)) return 'NOI(억원)를 입력하세요.'
+    const ltv = Number(form.ltvPct)
+    if (form.ltvPct.trim() === '' || ltv < 0 || ltv > 100) return 'LTV(%)는 0~100 사이로 입력하세요.'
+    if (!(Number(form.loanRatePct) >= 0) || form.loanRatePct.trim() === '') return '대출금리(%)를 입력하세요.'
+    if (!(Number(form.exitCapPct) > 0)) return 'Exit Cap(%)를 입력하세요.'
+    return null
+  }
+
   async function runProforma() {
+    const invalid = validate(false)
+    if (invalid) { setError(invalid); return }
     setError(null)
     setBusy('proforma')
     try {
@@ -104,6 +127,8 @@ export function UnderwriteView({ onCreditBalance }: UnderwriteViewProps) {
   }
 
   async function runStage(type: AnalysisType) {
+    const invalid = validate(true)
+    if (invalid) { setError(invalid); return }
     setError(null)
     setBusy(type)
     try {
@@ -117,7 +142,7 @@ export function UnderwriteView({ onCreditBalance }: UnderwriteViewProps) {
       setHistoryVersion((v) => v + 1)
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 402) {
-        setError('남은 크레딧이 없습니다. (결제는 추후 지원 예정)')
+        onNeedCredits()
       } else if (err instanceof ApiError && err.status === 503) {
         // 서버가 실제 사유(인증 토큰 미설정 / Claude API 4xx·5xx·rate limit 등)를 담아 보낸다.
         setError(err.message || 'AI 분석 서비스를 사용할 수 없습니다. ProForma 계산은 가능합니다.')
@@ -157,7 +182,7 @@ export function UnderwriteView({ onCreditBalance }: UnderwriteViewProps) {
       <div className="layout">
         <form className="card input-panel" onSubmit={(e) => { e.preventDefault(); runProforma() }}>
           <div className="form-head">
-            <span className="section-title" style={{ margin: 0 }}>딜 입력</span>
+            <span className="section-title" style={{ margin: 0 }}>딜 입력 <span className="req-legend"><span className="req">*</span> 필수</span></span>
             <button type="button" className="btn-link" onClick={() => { setForm(INITIAL); setResults(null); setError(null) }}>
               초기화
             </button>
@@ -165,8 +190,8 @@ export function UnderwriteView({ onCreditBalance }: UnderwriteViewProps) {
 
           <div className="form-grid">
             <div className="full">
-              <label htmlFor="dealName">딜 이름 (선택)</label>
-              <input id="dealName" value={form.dealName} onChange={(e) => set('dealName', e.target.value)} placeholder="예: 강남 오피스" />
+              <label htmlFor="dealName">딜 이름 <span className="req">*</span></label>
+              <input id="dealName" value={form.dealName} onChange={(e) => set('dealName', e.target.value)} placeholder="예: 강남 오피스 (AI 분석에 필수)" />
             </div>
 
             <div className="full">
@@ -185,13 +210,13 @@ export function UnderwriteView({ onCreditBalance }: UnderwriteViewProps) {
               <input id="location" value={form.location} onChange={(e) => set('location', e.target.value)} placeholder="예: 서울 GBD, 판교" />
             </div>
 
-            <NumField id="askingPriceEok" label="매입가 (억원)" value={form.askingPriceEok} onChange={(v) => set('askingPriceEok', v)} />
-            <NumField id="noiEok" label="NOI (억원)" value={form.noiEok} onChange={(v) => set('noiEok', v)} />
-            <NumField id="ltvPct" label="LTV (%)" value={form.ltvPct} onChange={(v) => set('ltvPct', v)} />
-            <NumField id="loanRatePct" label="대출금리 (%)" value={form.loanRatePct} onChange={(v) => set('loanRatePct', v)} />
-            <NumField id="exitCapPct" label="Exit Cap (%)" value={form.exitCapPct} onChange={(v) => set('exitCapPct', v)} />
-            <NumField id="holdYears" label="보유기간 (년)" value={form.holdYears} onChange={(v) => set('holdYears', v)} />
-            <NumField id="rentGrowthPct" label="임대성장률 (%)" value={form.rentGrowthPct} onChange={(v) => set('rentGrowthPct', v)} />
+            <NumField id="askingPriceEok" label="매입가 (억원)" required placeholder="예: 1000" value={form.askingPriceEok} onChange={(v) => set('askingPriceEok', v)} />
+            <NumField id="noiEok" label="NOI (억원)" required placeholder="예: 55" value={form.noiEok} onChange={(v) => set('noiEok', v)} />
+            <NumField id="ltvPct" label="LTV (%)" required placeholder="예: 50" value={form.ltvPct} onChange={(v) => set('ltvPct', v)} />
+            <NumField id="loanRatePct" label="대출금리 (%)" required placeholder="예: 3.5" value={form.loanRatePct} onChange={(v) => set('loanRatePct', v)} />
+            <NumField id="exitCapPct" label="Exit Cap (%)" required placeholder="예: 5.0" value={form.exitCapPct} onChange={(v) => set('exitCapPct', v)} />
+            <NumField id="holdYears" label="보유기간 (년)" placeholder="기본 5" value={form.holdYears} onChange={(v) => set('holdYears', v)} />
+            <NumField id="rentGrowthPct" label="임대성장률 (%)" placeholder="기본 3" value={form.rentGrowthPct} onChange={(v) => set('rentGrowthPct', v)} />
 
             <div className="full">
               <label htmlFor="notes">메모 (선택) · IM 요약·임대 현황·특이사항</label>
@@ -272,6 +297,7 @@ export function UnderwriteView({ onCreditBalance }: UnderwriteViewProps) {
 function HistoryPanel({ version, onOpen }: { version: number; onOpen: (r: RunResult, runId: number) => void }) {
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [compareOpen, setCompareOpen] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -292,8 +318,14 @@ function HistoryPanel({ version, onOpen }: { version: number; onOpen: (r: RunRes
 
   return (
     <div className="card">
-      <div className="section-title">분석 이력</div>
+      <div className="hist-head">
+        <div className="section-title" style={{ margin: 0 }}>분석 이력</div>
+        <button className="btn-ghost btn-xs" disabled={runs.length < 2} onClick={() => setCompareOpen(true)}>
+          딜 비교
+        </button>
+      </div>
       {error && <p className="error">{error}</p>}
+      {compareOpen && <DealCompare onClose={() => setCompareOpen(false)} />}
       {runs.length === 0 ? (
         <p className="hist-empty">아직 AI 분석 이력이 없습니다. 분석을 실행하면 여기에 저장됩니다.</p>
       ) : (
@@ -316,12 +348,18 @@ function HistoryPanel({ version, onOpen }: { version: number; onOpen: (r: RunRes
   )
 }
 
-interface NumFieldProps { id: string; label: string; value: string; onChange: (v: string) => void }
-function NumField({ id, label, value, onChange }: NumFieldProps) {
+interface NumFieldProps {
+  id: string; label: string; value: string; onChange: (v: string) => void
+  required?: boolean; placeholder?: string
+}
+function NumField({ id, label, value, onChange, required, placeholder }: NumFieldProps) {
   return (
     <div>
-      <label htmlFor={id}>{label}</label>
-      <input id={id} type="number" step="any" required value={value} onChange={(e) => onChange(e.target.value)} />
+      <label htmlFor={id}>
+        {label}{required ? <span className="req"> *</span> : <span className="opt"> (선택)</span>}
+      </label>
+      <input id={id} type="number" step="any" value={value} placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)} />
     </div>
   )
 }

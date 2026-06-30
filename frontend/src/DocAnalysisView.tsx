@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import {
   api, ApiError, isBovCalc, isBizHealthCalc, isPriceForecastCalc,
   type BizHealthCalc, type BovInput, type DealExtract, type DevFeasibilityInput, type DocAnalysisType, type DocAnalyzeInput,
-  type DocAnalyzeResponse, type DocCalc, type DocSection, type PriceForecastCalc, type PriceForecastInput,
+  type DocAnalyzeResponse, type DocCalc, type DocSection, type MarketFact, type PriceForecastCalc, type PriceForecastInput,
   type RunSummary, type TaxGuide,
 } from './api'
 
 interface DocAnalysisViewProps {
   onCreditBalance: (balance: number) => void
+  /** 크레딧 소진(402) 시 중앙 페이월 안내 노출. */
+  onNeedCredits: () => void
   /** 시장 피드 '이 딜 분석하기'로 들어올 때 딜/기사 원문. 들어오면 자동으로 추출 실행. */
   initialDealText?: string
 }
@@ -17,6 +19,10 @@ interface DocTypeMeta {
   label: string
   hint: string
   placeholder: string
+  /** 이 분석에 꼭 필요한 입력(평이한 말). */
+  needs: string
+  /** 무엇이 나오는지(산출물). */
+  gives: string
 }
 
 const ASSET_TYPES = ['오피스', '물류', '호텔', '리테일'] as const
@@ -24,24 +30,34 @@ const ASSET_TYPES = ['오피스', '물류', '호텔', '리테일'] as const
 /** 신규/추가 분석 단계 — 자유 텍스트 입력 기반(각 1 크레딧). */
 const DOC_TYPES: DocTypeMeta[] = [
   { type: 'UNDERWRITING_GUIDE', label: '언더라이팅 입력가이드', hint: '권장 가정 선제안',
+    needs: '자산 개요 텍스트 (아는 값 있으면 함께)', gives: '권장 매입가·Cap·LTV 등 입력 가정',
     placeholder: '예: 강남 GBD 중형 오피스 매입 검토, 연면적 약 2,000평. 알고 있는 값(매입가·NOI·Cap)이 있으면 함께 적어주세요.' },
   { type: 'BUILDING_RESEARCH', label: '건물 검색(예비 IM)', hint: '공개 벤치마크 예비 IM',
+    needs: '건물·위치 텍스트', gives: '공개 벤치마크 기반 예비 IM',
     placeholder: '예: 서울 영등포구 여의도동 소재 오피스, 연면적 약 3,000평, 2015년 준공, 호가 미상.' },
   { type: 'TAX_PRICE_DIAGNOSIS', label: '세무·가격 진단', hint: '절세 포인트·가격 적정성',
+    needs: '취득가·양도가·보유기간 텍스트 (필지주소 넣으면 공시지가 자동)', gives: '절세 포인트·가격 적정성',
     placeholder: '예: 취득가 2,000억, 양도가 2,400억, 보유 5년, 법인 보유. 취득세·중개보수·법무비·자본적지출 등 실제 지출 내역.' },
   { type: 'BOV', label: '매각 BOV', hint: '평가·가격범위·매각방식',
+    needs: '안정화 NOI* · 시장 Cap* (아래 입력)', gives: '3법 평가·가격범위·매각방식',
     placeholder: '예: GBD 코어오피스, 현 NOI 95억, 시장 Cap 4.75%, 잔여대출 1,100억(조기상환 페널티 2%), 매각 우선순위=확실성.' },
   { type: 'AM_QUARTERLY', label: '분기 자산보고', hint: '운영 실적·KPI·Variance',
+    needs: '분기 운영 실적 텍스트 (NOI·점유율 등)', gives: '실적·KPI·Variance 분석',
     placeholder: '예: 3분기 GPR 30억/EGI 28억/OpEx 9억/NOI 19억(예산 대비 +3%), Occupancy 94%, WALT 3.2년, Top1 임차 28%.' },
   { type: 'HOLD_SELL_REFI', label: '보유·매각·리파이', hint: '4-시나리오 결정',
+    needs: '보유 현황 텍스트 (NAV·대출·NOI 등)', gives: '보유/매각/리파이 4-시나리오 결정',
     placeholder: '예: 보유 3년차, 현 NAV 2,200억, 잔여대출 1,100억(금리 4.5%), 현 NOI 95억, 취득가 2,000억.' },
   { type: 'DEV_FEASIBILITY', label: '개발 타당성', hint: '사업비·마진·인허가·PF',
+    needs: '토지비* · 공사비* + (분양수입 또는 안정화 NOI+Exit Cap)', gives: '사업비·마진·인허가·PF 타당성',
     placeholder: '예: 역삼동 토지 500평, 용적률 800%, 오피스 개발, 토지매입가 800억, 예상 연면적 4,000평.' },
   { type: 'MARKET_RESEARCH_DEEP', label: '심화 시장리서치', hint: '권역·매크로·하우스뷰',
+    needs: '권역·시장 텍스트 (위치 넣으면 실측 주입)', gives: '권역·매크로·하우스뷰',
     placeholder: '예: 서울 GBD 오피스 시장. 향후 3년 공급, 금리 환경, 최근 거래 사례 기준 House View 요청.' },
   { type: 'COUNTERPARTY_DD', label: '거래상대방 실사', hint: '사업자상태·제재·규모',
+    needs: '사업자등록번호 10자리* (또는 상호)', gives: '사업자상태·제재·기업규모',
     placeholder: '정성 정보(선택): 거래 맥락·우려사항 등. 핵심 사실은 사업자번호로 공공데이터가 확정합니다.' },
   { type: 'PRICE_FORECAST', label: '매입·매각 가격 예측', hint: '소득환원+거래사례 밴드',
+    needs: 'NOI 또는 연면적 중 하나* (위치/필지 넣으면 실측 자동)', gives: '매입·매각 가격 밴드',
     placeholder: '정성 정보(선택): 입찰 맥락·매도 우선순위 등. 핵심 수치는 아래 입력 + 실거래/공시지가로 확정합니다.' },
 ]
 
@@ -112,7 +128,7 @@ function verdictTone(verdict?: string): 'go' | 'no' | 'cond' {
   return 'cond'
 }
 
-export function DocAnalysisView({ onCreditBalance, initialDealText }: DocAnalysisViewProps) {
+export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealText }: DocAnalysisViewProps) {
   const [type, setType] = useState<DocAnalysisType>('DEV_FEASIBILITY')
   const [dealName, setDealName] = useState('')
   const [assetType, setAssetType] = useState<string>('오피스')
@@ -276,7 +292,7 @@ export function DocAnalysisView({ onCreditBalance, initialDealText }: DocAnalysi
       setHistoryVersion((v) => v + 1)
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 402) {
-        setError('남은 크레딧이 없습니다. (결제는 추후 지원 예정)')
+        onNeedCredits()
       } else if (err instanceof ApiError && err.status === 503) {
         setError(err.message || 'AI 분석 서비스를 사용할 수 없습니다.')
       } else {
@@ -462,6 +478,8 @@ function DocResult({ res, label }: { res: DocAnalyzeResponse; label: string }) {
 
       {res.calc && <CalcCard calc={res.calc} />}
 
+      {res.marketFacts && res.marketFacts.length > 0 && <MarketFactsCard facts={res.marketFacts} />}
+
       {a ? (
         <>
           {a.headline && <p className="narrative"><b>{a.headline}</b></p>}
@@ -486,6 +504,27 @@ function DocResult({ res, label }: { res: DocAnalyzeResponse; label: string }) {
 
       <p className="disclaimer">{a?.disclaimer ?? res.disclaimer}</p>
     </div>
+  )
+}
+
+/** 실측 시장데이터 카드 — 분석에 주입된 공공데이터(실거래·공시지가·임대시장·매크로)를 출처와 함께 노출.
+ *  "이 분석은 실측에 앵커링됐다"를 가시화 = AI 환각과 구분되는 확정 사실. */
+function MarketFactsCard({ facts }: { facts: MarketFact[] }) {
+  return (
+    <section className="calc-card mkt-facts">
+      <div className="section-title">
+        실측 시장데이터 <span className="calc-badge">확정 · 공공데이터</span>
+      </div>
+      <ul className="mkt-list">
+        {facts.map((f, i) => (
+          <li key={i} className="mkt-item">
+            <span className="mkt-src">{f.source}</span>
+            <span className="mkt-detail">{f.detail}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mkt-note">위 수치는 공공 API 실측값으로, AI 추정이 아니라 분석의 근거로 직접 인용됩니다.</p>
+    </section>
   )
 }
 
