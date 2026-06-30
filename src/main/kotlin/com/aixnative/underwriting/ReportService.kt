@@ -129,8 +129,12 @@ class ReportService(
 
     private fun StringBuilder.appendMarketStudy(a: JsonNode) {
         a.txt("region")?.let { append("<p><b>권역</b> ${esc(it)} · <b>House View</b> ${esc(a.txt("house_view") ?: "-")}</p>") }
-        a.txt("house_view_reason")?.let { append("<p>${esc(it)}</p>") }
-        a.txt("fundamentals")?.let { append("<p>${esc(it)}</p>") }
+        a.txt("house_view_reason")?.let { append("<h3>하우스뷰 근거</h3><p>${esc(it)}</p>") }
+        // fundamentals — 신규: 불릿 배열 / 구버전: 문자열.
+        a.get("fundamentals")?.let { f ->
+            if (f.isArray && f.size() > 0) listBlock("권역 현황", f.map { it.asText() }.filter { it.isNotBlank() })
+            else f.takeIf { it.isTextual && it.asText().isNotBlank() }?.let { append("<h3>권역 현황</h3><p>${esc(it.asText())}</p>") }
+        }
         appendAssumptionTable(a.get("assumption_check"))
         appendCompsTable(a.get("comps"))
         a.txt("macro")?.let { append("<h3>매크로</h3><p>${esc(it)}</p>") }

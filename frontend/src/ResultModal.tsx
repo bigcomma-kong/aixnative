@@ -72,7 +72,16 @@ export function ResultModal({ run, result, request, subtitle, onClose }: {
           {!isPipeline && (<>
           {str(a.headline) && <h3 className="rm-h3">{a.headline}</h3>}
           {(str(a.verdict) || str(a.priceVerdict) || str(a.recommendation)) && (
-            <div className="rm-verdict">{a.verdict ?? a.priceVerdict ?? a.recommendation}</div>
+            <div className={`rm-verdict ${tone(a.verdict ?? a.priceVerdict ?? a.recommendation)}`}>
+              {a.verdict ?? a.priceVerdict ?? a.recommendation}{str(a.confidence) ? ` · 신뢰도 ${a.confidence}` : ''}
+            </div>
+          )}
+          {arr(a.flags).length > 0 && (
+            <Block title="주요 플래그">
+              {a.flags.map((f: any, i: number) => (
+                <div key={i} className="rm-flag"><span>{f.label}</span><span className={`sev-badge ${sevTone(f.severity)}`}>{f.severity}</span></div>
+              ))}
+            </Block>
           )}
           {str(a.recommendation_reason) && <p className="rm-p">{a.recommendation_reason}</p>}
           {str(a.summary) && <p className="rm-p">{a.summary}</p>}
@@ -88,7 +97,11 @@ export function ResultModal({ run, result, request, subtitle, onClose }: {
             <Block title="핵심 동인"><ul className="rm-ul">{a.key_drivers.map((d: string, i: number) => <li key={i}>{d}</li>)}</ul></Block>
           )}
           {arr(a.key_risks).length > 0 && (
-            <Block title="핵심 리스크"><ul className="rm-ul">{a.key_risks.map((r: any, i: number) => <li key={i}><b>{r.risk}</b>{r.impact ? ` — ${r.impact}` : ''}</li>)}</ul></Block>
+            <Block title="핵심 리스크">
+              {a.key_risks.map((r: any, i: number) => (
+                <div key={i} className="rm-flag"><span>{r.risk}</span>{r.impact && <span className={`sev-badge ${sevTone(r.impact)}`}>{r.impact}</span>}</div>
+              ))}
+            </Block>
           )}
 
           {arr(a.sectors).length > 0 && (
@@ -164,6 +177,25 @@ function Block({ title, children }: { title: string; children: ReactNode }) {
 
 function str(v: any): v is string { return typeof v === 'string' && v.trim().length > 0 }
 function arr(v: any): any[] { return Array.isArray(v) ? v : [] }
+
+const POSITIVE = ['GO', '적정', '양호', '강세', 'BULL', '상향', '저평가', '추천', 'STRONG_BUY']
+const NEGATIVE = ['NO_GO', 'NO-GO', '과도', '위험', '약세', 'BEAR', '하향', '고평가', 'PASS', 'SELL']
+/** verdict 문자열 → 색상 톤. */
+function tone(v?: string): 'go' | 'no' | 'cond' {
+  if (!v) return 'cond'
+  const t = v.toUpperCase()
+  if (POSITIVE.some((p) => t.includes(p))) return 'go'
+  if (NEGATIVE.some((n) => t.includes(n))) return 'no'
+  return 'cond'
+}
+/** 심각도 → 색상 톤. HIGH·높음=빨강, LOW·낮음=초록, 그 외=주황. */
+function sevTone(s?: string): 'go' | 'no' | 'cond' {
+  if (!s) return 'cond'
+  const t = s.trim().toUpperCase()
+  if (t.startsWith('H') || t.includes('높')) return 'no'
+  if (t.startsWith('L') || t.includes('낮')) return 'go'
+  return 'cond'
+}
 
 /** 입력 객체 → 표시용 [키, 값] 목록. 객체/배열/빈값은 건너뛰고, 긴 텍스트는 자른다. */
 function inputRows(req: any): [string, string][] {

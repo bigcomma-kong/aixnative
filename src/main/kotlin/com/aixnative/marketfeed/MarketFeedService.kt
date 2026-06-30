@@ -115,7 +115,7 @@ class MarketFeedService(
               "marketTempLabel": "침체 | 둔화 | 중립 | 회복 | 과열 중 하나",
               "sectors": [{"name":"오피스/물류/리테일/호텔/주거 등","stance":"비중확대|중립|비중축소","score":0~100,"note":"한 줄 근거"}],
               "scenarios": [{"name":"기본","narrative":"전개와 함의 2~3문장"},{"name":"낙관","narrative":"..."},{"name":"비관","narrative":"..."}],
-              "sections": [{"title":"섹션 제목","body":"분석 본문(4~6문장, 함의 중심)"}],
+              "sections": [{"title":"섹션 제목","body":"분석 본문 2~3문장(함의 중심)","bullets":["핵심 포인트 한 줄(2~4개, 가독성)"]}],
               "picks": [{"title":"주목 딜/테마","why":"투자 논리","conviction":"높음|중간|낮음","risk":"핵심 리스크 한 줄"}],
               "contrarian": "시장 컨센서스가 놓치고 있는 점 2~3문장"
             }

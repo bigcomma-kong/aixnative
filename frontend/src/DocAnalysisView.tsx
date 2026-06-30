@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { TrustBadge } from './TrustBadge'
 import {
   api, ApiError, isBovCalc, isBizHealthCalc, isPriceForecastCalc,
-  type BizHealthCalc, type BovInput, type DealExtract, type DevFeasibilityInput, type DocAnalysisType, type DocAnalyzeInput,
+  type AnalysisFlag, type BizHealthCalc, type BovInput, type DealExtract, type DevFeasibilityInput, type DocAnalysisType, type DocAnalyzeInput,
   type DocAnalyzeResponse, type DocCalc, type DocSection, type MarketFact, type PriceForecastCalc, type PriceForecastInput,
   type RunSummary, type TaxGuide,
 } from './api'
@@ -134,6 +134,36 @@ function verdictTone(verdict?: string): 'go' | 'no' | 'cond' {
   if (POSITIVE.some((p) => v.includes(p))) return 'go'
   if (NEGATIVE.some((n) => v.includes(n))) return 'no'
   return 'cond'
+}
+
+/** 심각도 → 색상. HIGH·높음=빨강, LOW·낮음=초록, 그 외(MEDIUM·중간)=주황. */
+function sevTone(s?: string): 'go' | 'no' | 'cond' {
+  if (!s) return 'cond'
+  const t = s.trim().toUpperCase()
+  if (t.startsWith('H') || t.includes('높')) return 'no'
+  if (t.startsWith('L') || t.includes('낮')) return 'go'
+  return 'cond'
+}
+
+/** 심각도 뱃지(HIGH/MEDIUM/LOW). 공통. */
+function SevBadge({ v }: { v?: string }) {
+  if (!v) return null
+  return <span className={`sev-badge ${sevTone(v)}`}>{v}</span>
+}
+
+/** 주요 플래그 — sections 계약 트랙의 리스크·결격·체크 사유를 심각도 뱃지와 함께. */
+function FlagList({ flags }: { flags: AnalysisFlag[] }) {
+  return (
+    <section className="scr-section">
+      <div className="section-title">주요 플래그</div>
+      {flags.map((f, i) => (
+        <div key={i} className="risk">
+          <span className="r-name">{f.label}</span>
+          <span className="r-impact"><SevBadge v={f.severity} /></span>
+        </div>
+      ))}
+    </section>
+  )
 }
 
 export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealText, toolCosts }: DocAnalysisViewProps) {
@@ -527,13 +557,14 @@ function DocResult({ res, label }: { res: DocAnalyzeResponse; label: string }) {
             </div>
           )}
 
+          {a.flags && a.flags.length > 0 && <FlagList flags={a.flags} />}
           {a.recommend && <RecommendGrid recommend={a.recommend} rationale={a.rationale} />}
           {a.guides && a.guides.length > 0 && <TaxGuides guides={a.guides} priceVerdict={a.priceVerdict} />}
           {a.im_markdown && <Markdown md={a.im_markdown} />}
           {a.sections && a.sections.length > 0 && <Sections sections={a.sections} />}
         </>
       ) : res.analysisRaw ? (
-        <section><div className="section-title">AI 분석</div><p className="narrative">{res.analysisRaw}</p></section>
+        <section><div className="section-title">AI 분석</div><Markdown md={res.analysisRaw} /></section>
       ) : null}
 
       <p className="disclaimer">{a?.disclaimer ?? res.disclaimer}</p>
@@ -734,10 +765,16 @@ function RecommendGrid({ recommend, rationale }: { recommend: Record<string, num
 function TaxGuides({ guides, priceVerdict }: { guides: TaxGuide[]; priceVerdict?: string }) {
   return (
     <section>
-      <div className="section-title">진단 {priceVerdict ? `· 가격 ${priceVerdict}` : ''}</div>
+      <div className="section-title">
+        진단 {priceVerdict && <span className={`sev-badge ${verdictTone(priceVerdict)}`}>가격 {priceVerdict}</span>}
+      </div>
       {guides.map((g, i) => (
         <div key={i} className="risk" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-          <span className="r-name">{g.kind ? `[${g.kind}] ` : ''}{g.title}</span>
+          <span className="r-name flag-line">
+            {g.kind && <span className={`sev-badge ${g.kind === '절세' ? 'go' : g.kind === '주의' ? 'no' : 'cond'}`}>{g.kind}</span>}
+            <span>{g.title}</span>
+            <SevBadge v={g.impact} />
+          </span>
           {g.detail && <span className="muted">{g.detail}</span>}
           {g.basis && <span className="guideline" style={{ margin: 0 }}>{g.basis}</span>}
         </div>

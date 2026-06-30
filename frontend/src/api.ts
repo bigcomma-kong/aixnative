@@ -489,7 +489,7 @@ export interface BriefingHistoryItem {
 }
 
 /** AI 심층 시장 리포트(크레딧 소비, Claude). */
-export interface DeepReportSection { title: string | null; body: string | null }
+export interface DeepReportSection { title: string | null; body: string | null; bullets?: string[] | null }
 export interface DeepReportPick {
   title: string | null
   why: string | null
@@ -651,9 +651,16 @@ export interface DocSection {
 
 export interface TaxGuide {
   kind?: string
+  impact?: string
   title?: string
   detail?: string
   basis?: string
+}
+
+/** 분석 공통 플래그 — 심각도 표시(HIGH/MEDIUM/LOW). sections 계약 트랙 공용. */
+export interface AnalysisFlag {
+  label: string
+  severity?: string
 }
 
 /** 단계별 출력 합집합 — 단계에 따라 일부 필드만 채워진다. */
@@ -661,6 +668,8 @@ export interface DocAnalysis {
   headline?: string
   verdict?: string
   confidence?: string
+  /** 주요 리스크·결격·체크 사유 + 심각도(sections 계약 트랙 공통). */
+  flags?: AnalysisFlag[]
   sections?: DocSection[]
   // BUILDING_RESEARCH
   im_markdown?: string

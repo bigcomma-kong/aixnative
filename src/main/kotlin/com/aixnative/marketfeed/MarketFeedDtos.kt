@@ -110,7 +110,7 @@ data class NewsletterSendLogView(val email: String, val subject: String?, val st
 
 /** AI 심층 시장 리포트(크레딧 소비, Claude). 무료 브리핑(Mistral)보다 깊은 온디맨드 분석. */
 data class DeepReportRequest(val focus: String? = null)
-data class DeepReportSection(val title: String? = null, val body: String? = null)
+data class DeepReportSection(val title: String? = null, val body: String? = null, val bullets: List<String>? = null)
 
 /** 픽 — 무료 브리핑과 달리 확신도·핵심 리스크까지. */
 data class DeepReportPick(

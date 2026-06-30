@@ -549,7 +549,10 @@ function DeepReportPanel({ report, saved = false, onClose }: { report: MarketDee
           {report.sections.map((s, i) => (
             <div key={i} className="deep-section">
               <h4>{s.title}</h4>
-              <p>{s.body}</p>
+              {s.body && <p>{s.body}</p>}
+              {s.bullets && s.bullets.length > 0 && (
+                <ul className="deep-bullets">{s.bullets.map((b, j) => <li key={j}>{b}</li>)}</ul>
+              )}
             </div>
           ))}
         </div>

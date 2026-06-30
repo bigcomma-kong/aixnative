@@ -119,6 +119,32 @@ const COMPARE = [
   { item: '시장 리서치', detail: '권역 · 매크로 · 하우스뷰', them: '리서치하우스 리포트 · 구독', us: '무료 브리핑 + 심층 5크레딧' },
 ] as const
 
+/** 두 핵심 메뉴(언더라이팅 vs 심화 분석)가 무엇인지 — 메뉴 이름만으론 헷갈리므로 명시. */
+const MODES = [
+  {
+    tag: '언더라이팅',
+    title: '매입 한 건, 깊게 심사',
+    desc: '매입가·NOI·LTV·금리·Exit Cap 숫자를 넣으면 ProForma 지표(무료)와 4단계 AI 심사를 한 흐름으로.',
+    items: [
+      'ProForma — IRR·EM·DSCR·민감도 (코드 계산, 무료)',
+      '스크리닝 → 시장조사 → 언더라이팅 → 투심 메모',
+      '같은 딜로 쌓으면 보고서 자동 합본',
+    ],
+    when: '“이 딜 살까?” 매입 의사결정',
+  },
+  {
+    tag: '심화 분석',
+    title: '상황별 전문 분석 도구함',
+    desc: '문서·자료나 특수 입력으로 매입 외 매각·개발·보유·실사까지 개별 전문 분석을.',
+    items: [
+      '매각 BOV(3-Method) · 개발 타당성 · 가격 예측',
+      '세무·가격 진단 · 거래상대방 실사',
+      '심화 시장 리서치 · 분기 자산보고 · 보유·매각·리파이',
+    ],
+    when: '필요할 때 꺼내 쓰는 전문 분석',
+  },
+] as const
+
 export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
   function focusAuth() {
     document.getElementById('auth')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -213,6 +239,27 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
               <span className="step-n num">{s.n}. {s.title}</span>
               <p className="step-desc">{s.desc}</p>
             </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="modes reveal" aria-labelledby="modes-h">
+        <div className="feat-head">
+          <span className="eyebrow">메뉴 안내</span>
+          <h2 id="modes-h" className="feat-h">두 가지 분석, 언제 무엇을</h2>
+          <p className="modes-sub">‘언더라이팅’은 매입 한 건 심사, ‘심화 분석’은 딜 전반 전문 도구함입니다.</p>
+        </div>
+        <div className="mode-grid">
+          {MODES.map((m) => (
+            <article className="mode-card" key={m.tag}>
+              <span className="mode-tag">{m.tag}</span>
+              <h3 className="mode-title">{m.title}</h3>
+              <p className="mode-desc">{m.desc}</p>
+              <ul className="mode-list">
+                {m.items.map((it) => <li key={it}><Check /> {it}</li>)}
+              </ul>
+              <div className="mode-when">{m.when}</div>
+            </article>
           ))}
         </div>
       </section>

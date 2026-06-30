@@ -71,6 +71,7 @@ export function StageAnalysis({ type, analysis, provider }: { type?: string; ana
   if (type === 'MARKET_STUDY') {
     const assumptions = list('assumption_check')
     const comps = list('comps')
+    const fundamentals = list('fundamentals') // 신규: 불릿 배열 / 구버전: 문자열(아래 str 폴백)
     return (
       <section className="ai-block">
         <div className="section-title">시장조사 <ConfBadge c={val('confidence')} /></div>
@@ -88,10 +89,14 @@ export function StageAnalysis({ type, analysis, provider }: { type?: string; ana
             <p className="narrative">{str('house_view_reason')}</p>
           </div>
         )}
-        {str('fundamentals') && (
+        {(fundamentals.length > 0 || str('fundamentals')) && (
           <div className="scr-section">
             <div className="section-title">권역 현황</div>
-            <p className="narrative">{str('fundamentals')}</p>
+            {fundamentals.length > 0 ? (
+              <ul className="bullet-list">{fundamentals.map((f, i) => <li key={i}>{String(f)}</li>)}</ul>
+            ) : (
+              <p className="narrative">{str('fundamentals')}</p>
+            )}
           </div>
         )}
 

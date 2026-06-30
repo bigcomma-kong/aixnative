@@ -111,7 +111,7 @@ object UnderwritingPrompts {
             "[출력 스키마]\n" +
             "{\n" +
             "  \"region\": \"권역명(예: 서울 GBD)\",\n" +
-            "  \"fundamentals\": \"권역 현황 2~4문장 — 총 stock·Class 분포·공실률 추이·평당 임대료·신규 공급 파이프라인·렌트프리(한국어)\",\n" +
+            "  \"fundamentals\": [ \"권역 현황 항목별 한 줄(공실률·평당 임대료·신규 공급·렌트프리·흡수율 등), 한국어\" ],\n" +
             "  \"assumption_check\": [ { \"assumption\": \"검증 대상 가정(시장임대료/Exit Cap/임대료인상률/공실 등)\", \"market\": \"시장 데이터·벤치마크\", \"verdict\": \"GREEN|YELLOW|RED\" } ],\n" +
             "  \"comps\": [ { \"name\": \"거래 사례\", \"region\": \"\", \"price_per_pyeong_manwon\": null, \"cap_rate_pct\": null } ],\n" +
             "  \"macro\": \"매크로 맥락 2~3문장 — 기준금리·국고채·수요·공급·정책(한국어)\",\n" +
@@ -121,6 +121,7 @@ object UnderwritingPrompts {
             "  \"confidence\": \"HIGH|MEDIUM|LOW\"\n" +
             "}\n\n" +
             "[판단 지침 — 기관 리서치 깊이]\n" +
+            "- fundamentals 는 긴 문단이 아니라 항목별 짧은 불릿 4~6개로(공실률·평당 임대료·신규 공급·렌트프리·흡수율·Class 분포).\n" +
             "- assumption_check 는 핵심 매입 가정을 빠짐없이 검증 — 통상 4~6개(시장임대료·Exit Cap·임대료 인상률·공실·운영비·신규공급 흡수).\n" +
             "- comps 는 동권역·동유형 거래사례를 가능한 한 제시(3개 이상). 데이터 없으면 벤치마크 기반 '(추정)' 표기 + confidence 낮춤.\n" +
             "- 자산유형 고유지표(호텔 ADR/Occ/RevPAR, 물류 삼중순임대·임대료, 리테일 매출연동임대)를 fundamentals·assumption_check 에 반영.\n" +
@@ -253,7 +254,7 @@ object UnderwritingPrompts {
             "  \"priceComment\": \"가격 적정성 근거 — 시장 비교(한국어). 실측 인용 시 출처·시점 명시\",\n" +
             "  \"confidence\": \"HIGH|MEDIUM|LOW\",\n" +
             "  \"guides\": [\n" +
-            "    { \"kind\": \"절세|주의|가격\", \"title\": \"포인트 제목(한국어)\", \"detail\": \"설명(한국어, 1~3문장)\", \"basis\": \"근거·조항·요건(한국어, 없으면 빈 문자열)\" }\n" +
+            "    { \"kind\": \"절세|주의|가격\", \"impact\": \"HIGH|MEDIUM|LOW\", \"title\": \"포인트 제목(한국어)\", \"detail\": \"설명(한국어, 1~3문장)\", \"basis\": \"근거·조항·요건(한국어, 없으면 빈 문자열)\" }\n" +
             "  ],\n" +
             "  \"disclaimer\": \"본 진단은 일반 정보이며 구체 세액·적용은 세무 전문가 확인이 필요합니다.\"\n" +
             "}\n\n" +
@@ -271,6 +272,7 @@ object UnderwritingPrompts {
             "  \"headline\": \"핵심 한 줄 요약(한국어)\",\n" +
             "  \"verdict\": \"<아래 지시된 판정값>\",\n" +
             "  \"confidence\": \"HIGH|MEDIUM|LOW\",\n" +
+            "  \"flags\": [ { \"label\": \"핵심 리스크·결격·체크 사유 한 줄(한국어)\", \"severity\": \"HIGH|MEDIUM|LOW\" } ],\n" +
             "  \"sections\": [\n" +
             "    { \"title\": \"섹션 제목\", \"text\": \"문단 서술(한국어)\" },\n" +
             "    { \"title\": \"섹션 제목\", \"bullets\": [\"항목1\", \"항목2\"] },\n" +
@@ -278,11 +280,13 @@ object UnderwritingPrompts {
             "  ]\n" +
             "}\n"
 
-    /** 신규 트랙 공통 엄격 규칙 — COMMON_STRICT_RULES + 섹션 형식·간결성. */
+    /** 신규 트랙 공통 엄격 규칙 — COMMON_STRICT_RULES + 섹션 형식·구조화·간결성. */
     val SECTIONS_RULES: String =
         COMMON_STRICT_RULES +
-            "- 각 섹션은 text / bullets / table 중 하나만 사용. 표는 수치 비교·현황·시계열에만 사용(서술은 text).\n" +
-            "- 간결하게: 핵심만. 섹션 text 는 3~5문장, bullets 는 항목당 1줄. 장문·반복 금지(응답이 길면 생성 지연·타임아웃 위험).\n"
+            "- 각 섹션은 text / bullets / table 중 하나만 사용. 서술은 text(3~5문장), 항목 나열은 bullets(항목당 1줄).\n" +
+            "- 수치 비교·시계열·시나리오·민감도·실적·거래사례·사업비 구성 섹션은 반드시 table 로(산문 금지). 표는 headers/rows 로.\n" +
+            "- 주요 리스크·결격·검증 필요 사유는 flags[] 에 severity(HIGH|MEDIUM|LOW)와 함께 1급으로 분리(섹션 산문에 묻지 말 것). 통상 3~6개.\n" +
+            "- 표면 나열 금지: 각 항목에 '무엇을·왜·다음 액션'이 드러나게. 단, 장문·반복 금지(응답이 길면 타임아웃 위험).\n"
 
     /** 매각 BOV — 3-Method 평가(코드 수치는 <DATA>)·가격범위·매각방식·리스크. [guidelines]=bovGuidelineText. */
     fun bovNarrative(factsText: String, docName: String?, guidelines: String): String =
