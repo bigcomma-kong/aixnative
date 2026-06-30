@@ -588,6 +588,25 @@ td.warn { color: var(--no); font-weight: 600; }
 .conf-badge.cond { background: var(--cond-tint); color: oklch(45% 0.1 70); }
 .conf-badge.no { background: var(--no-tint); color: var(--no); }
 
+/* 심각도/발생가능성 뱃지 — HIGH 빨강 / MEDIUM 주황 / LOW 초록 */
+.sev-badge {
+  display: inline-block; font-size: 0.66rem; font-weight: 700; padding: 0.1rem 0.5rem;
+  border-radius: 999px; white-space: nowrap; line-height: 1.4;
+}
+.sev-badge.go { background: var(--go-tint); color: var(--go); }
+.sev-badge.cond { background: var(--cond-tint); color: oklch(45% 0.1 70); }
+.sev-badge.no { background: var(--no-tint); color: var(--no); }
+
+/* 시장조사 헤더 — 권역 + House View 뱃지 */
+.ms-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.2rem; }
+.ms-region { font-weight: 700; font-size: 0.96rem; color: var(--ink); }
+.hv-badge {
+  font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.6rem; border-radius: 999px; white-space: nowrap;
+}
+.hv-badge.go { background: var(--go-tint); color: var(--go); }
+.hv-badge.cond { background: var(--cond-tint); color: oklch(45% 0.1 70); }
+.hv-badge.no { background: var(--no-tint); color: var(--no); }
+
 /* 투심 Exec Summary 등 키-값 표 */
 .kv-table td { padding: 0.5rem 0.6rem; border-top: 1px solid var(--line); font-size: 0.88rem; text-align: left; }
 .kv-table tr:first-child td { border-top: none; }

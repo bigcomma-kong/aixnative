@@ -28,6 +28,28 @@ function ConfBadge({ c }: { c: string | null }) {
   return <span className={`conf-badge ${signalClass(sig)}`}>신뢰도 {c}</span>
 }
 
+/** 심각도/발생가능성 → 색상. HIGH·높음=빨강, LOW·낮음=초록, 그 외(MEDIUM·중간)=주황. */
+function severityClass(v: string): string {
+  const t = v.trim().toUpperCase()
+  if (t.startsWith('H') || t.includes('높')) return 'no'
+  if (t.startsWith('L') || t.includes('낮')) return 'go'
+  return 'cond'
+}
+
+/** 심각도 뱃지 — HIGH/MEDIUM/LOW·높음/중간/낮음 을 색상 알약으로. */
+function ImpactBadge({ v }: { v?: string | null }) {
+  if (!v || v === '-') return null
+  return <span className={`sev-badge ${severityClass(v)}`}>{v}</span>
+}
+
+/** House View → 색상. Bullish=초록, Bearish=빨강, Neutral=주황. */
+function houseViewClass(v: string): string {
+  const t = v.trim().toLowerCase()
+  if (t.includes('bull') || t.includes('강세') || t.includes('긍정')) return 'go'
+  if (t.includes('bear') || t.includes('약세') || t.includes('부정')) return 'no'
+  return 'cond'
+}
+
 /**
  * 단계별 AI 결과 인라인 렌더. 라이브 분석(UnderwriteView)·이력/관리자 모달(ResultModal) 공용.
  * 프롬프트가 생성하는 표·플래그·매크로를 그대로 화면에 그린다(생성됐는데 버려지던 데이터 복구).
@@ -53,10 +75,25 @@ export function StageAnalysis({ type, analysis, provider }: { type?: string; ana
       <section className="ai-block">
         <div className="section-title">시장조사 <ConfBadge c={val('confidence')} /></div>
         {(str('region') || str('house_view')) && (
-          <p><b>{str('region') ?? '권역'}</b> · House View {str('house_view') ?? '-'}</p>
+          <div className="ms-head">
+            {str('region') && <span className="ms-region">{str('region')}</span>}
+            {str('house_view') && (
+              <span className={`hv-badge ${houseViewClass(String(a.house_view))}`}>House View · {str('house_view')}</span>
+            )}
+          </div>
         )}
-        {str('house_view_reason') && <p className="narrative">{str('house_view_reason')}</p>}
-        {str('fundamentals') && <p className="narrative">{str('fundamentals')}</p>}
+        {str('house_view_reason') && (
+          <div className="scr-section">
+            <div className="section-title">하우스뷰 근거</div>
+            <p className="narrative">{str('house_view_reason')}</p>
+          </div>
+        )}
+        {str('fundamentals') && (
+          <div className="scr-section">
+            <div className="section-title">권역 현황</div>
+            <p className="narrative">{str('fundamentals')}</p>
+          </div>
+        )}
 
         {assumptions.length > 0 && (
           <div className="scr-section">
@@ -193,7 +230,7 @@ export function StageAnalysis({ type, analysis, provider }: { type?: string; ana
               return (
                 <div key={i} className="risk">
                   <span className="r-name">{cell(o.flag)}</span>
-                  <span className="r-impact">{cell(o.impact)}</span>
+                  <span className="r-impact"><ImpactBadge v={cell(o.impact)} /></span>
                   {verify !== '-' && <span className="r-verify">검증: {verify}</span>}
                 </div>
               )
@@ -263,8 +300,8 @@ export function StageAnalysis({ type, analysis, provider }: { type?: string; ana
                   return (
                     <tr key={i}>
                       <td>{cell(o.risk)}</td>
-                      <td>{cell(o.likelihood)}</td>
-                      <td>{cell(o.impact)}</td>
+                      <td><ImpactBadge v={cell(o.likelihood)} /></td>
+                      <td><ImpactBadge v={cell(o.impact)} /></td>
                       <td>{cell(o.mitigation)}</td>
                     </tr>
                   )
@@ -328,7 +365,7 @@ function AiNarrative({ analysis, provider }: { analysis: Analysis; provider?: st
         <div>
           <div className="section-title">리스크</div>
           {analysis.key_risks.map((r, i) => (
-            <div key={i} className="risk"><span className="r-name">{r.risk}</span><span className="r-impact">{r.impact}</span></div>
+            <div key={i} className="risk"><span className="r-name">{r.risk}</span><span className="r-impact"><ImpactBadge v={r.impact} /></span></div>
           ))}
         </div>
       )}
