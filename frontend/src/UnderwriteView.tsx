@@ -124,6 +124,8 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
   const [results, setResults] = useState<Results | null>(null)
   // 현재 딜의 완료된 단계 모음(합본 탭) — 같은 딜명으로 스크리닝·시장조사 등을 따로 했어도 한 화면에서 전환.
   const [stageMap, setStageMap] = useState<Partial<Record<AnalysisType, DealStage>>>({})
+  // 활성 탭 — 'FINANCE'(공통 재무 모델) 또는 분석 단계. 재무 데이터와 단계별 AI 분석을 분리해 한 번에 하나만 표시.
+  const [activeTab, setActiveTab] = useState<'FINANCE' | AnalysisType>('FINANCE')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<'none' | 'proforma' | AnalysisType>('none')
   const [reportBusy, setReportBusy] = useState(false)
@@ -185,6 +187,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
       const input = buildInput()
       const res: ProFormaResponse = await api.proforma(input)
       setResults({ proForma: res.proForma, scenarios: res.scenarios, guidelineChecks: res.guidelineChecks, disclaimer: res.disclaimer, inputs: input })
+      setActiveTab('FINANCE')
       void loadDealStages(input.dealName)
     } catch (err: unknown) {
       setError(err instanceof ApiError ? err.message : '계산 중 오류가 발생했습니다.')
@@ -211,6 +214,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
         proForma: res.proForma, scenarios: res.scenarios, guidelineChecks: res.guidelineChecks, disclaimer: res.disclaimer,
         analysis: res.analysis, analysisRaw: res.analysisRaw, provider: res.provider, inputs: input,
       })
+      setActiveTab(type)
       onCreditBalance(res.creditBalance)
       setHistoryVersion((v) => v + 1)
       void loadDealStages(input.dealName)
@@ -257,7 +261,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
         <form className="card input-panel" onSubmit={(e) => { e.preventDefault(); runProforma() }}>
           <div className="form-head">
             <span className="section-title" style={{ margin: 0 }}>딜 입력 <span className="req-legend"><span className="req">*</span> 필수</span></span>
-            <button type="button" className="btn-link" onClick={() => { setForm(INITIAL); setResults(null); setError(null); setStageMap({}) }}>
+            <button type="button" className="btn-link" onClick={() => { setForm(INITIAL); setResults(null); setError(null); setStageMap({}); setActiveTab('FINANCE') }}>
               초기화
             </button>
           </div>
@@ -329,7 +333,12 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
             <ResultPanel
               results={results}
               stageMap={stageMap}
-              onSelectStage={(type) => { const s = stageMap[type]; if (s) setResults(resultsFromStage(s)) }}
+              activeTab={activeTab}
+              onSelectTab={(tab) => {
+                if (tab === 'FINANCE') { setActiveTab('FINANCE'); return }
+                const s = stageMap[tab]
+                if (s) { setResults(resultsFromStage(s)); setActiveTab(tab) }
+              }}
               onReport={openReport}
               reportBusy={reportBusy}
             />
@@ -360,7 +369,12 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
         </div>
       </div>
 
-      <HistoryPanel version={historyVersion} onOpen={(r, runId, request) => { setResults({ ...r, runId, inputs: request }); void loadDealStages(request?.dealName) }} />
+      <HistoryPanel version={historyVersion} onOpen={(r, runId, request) => {
+        setResults({ ...r, runId, inputs: request })
+        const at = (r as unknown as { analysisType?: AnalysisType }).analysisType
+        setActiveTab(at ?? 'FINANCE')
+        void loadDealStages(request?.dealName)
+      }} />
 
       {busy !== 'none' && (
         <div className="analyze-overlay" role="alertdialog" aria-busy="true" aria-live="assertive" aria-label="분석 진행 중">
@@ -461,102 +475,105 @@ function fmtDscr(d: number): string {
   return Number.isFinite(d) ? `${d}` : '-'
 }
 
-function ResultPanel({ results, stageMap, onSelectStage, onReport, reportBusy }: {
+function ResultPanel({ results, stageMap, activeTab, onSelectTab, onReport, reportBusy }: {
   results: Results
   stageMap: Partial<Record<AnalysisType, DealStage>>
-  onSelectStage: (type: AnalysisType) => void
+  activeTab: 'FINANCE' | AnalysisType
+  onSelectTab: (tab: 'FINANCE' | AnalysisType) => void
   onReport: () => void
   reportBusy: boolean
 }) {
   const p = results.proForma
   const md = minDscr(p)
-  const stageLabel = results.analysisType ? (STAGE_LABEL[results.analysisType] ?? results.analysisType) : null
   return (
     <div className="ai-block">
-      {(stageLabel || results.runId) && (
+      {results.runId && (
         <div className="result-head">
-          {stageLabel && <span className="stage-pill">{stageLabel}</span>}
-          {results.runId && (
-            <button type="button" className="btn-ghost btn-report" onClick={onReport} disabled={reportBusy}>
-              {reportBusy ? '보고서 여는 중…' : '투자 보고서 보기'}
-            </button>
-          )}
+          <button type="button" className="btn-ghost btn-report" onClick={onReport} disabled={reportBusy}>
+            {reportBusy ? '보고서 여는 중…' : '투자 보고서 보기'}
+          </button>
         </div>
       )}
-      <StageTabs stageMap={stageMap} active={results.analysisType} onSelect={onSelectStage} />
+      <StageTabs stageMap={stageMap} active={activeTab} onSelect={onSelectTab} />
       {results.inputs && <InputSummary inputs={results.inputs} />}
-      {results.analysis && <Verdict analysis={results.analysis} />}
 
-      <section>
-        <div className="metric-heroes">
-          <HeroMetric label="레버리지 IRR" value={`${p.leveredIrrPct}%`} status={irrStatus(p.leveredIrrPct)} />
-          <HeroMetric label="투자 배수" value={`${p.equityMultiple}x`} status={emStatus(p.equityMultiple)} />
-        </div>
-        <div className="metric-mini-row">
-          <MiniMetric label="매입 수익률" value={`${p.goingInCapPct}%`} />
-          <MiniMetric label="원가 수익률" value={`${p.yieldOnCostPct}%`} />
-          <MiniMetric label="최소 DSCR" value={md != null ? `${md.toFixed(2)}x` : '–'} status={md != null ? dscrStatus(md) : undefined} />
-          <MiniMetric label="투입 자기자본" value={`${p.equityEok}억`} />
-        </div>
-      </section>
+      {activeTab === 'FINANCE' ? (
+        <>
+          <section>
+            <div className="metric-heroes">
+              <HeroMetric label="레버리지 IRR" value={`${p.leveredIrrPct}%`} status={irrStatus(p.leveredIrrPct)} />
+              <HeroMetric label="투자 배수" value={`${p.equityMultiple}x`} status={emStatus(p.equityMultiple)} />
+            </div>
+            <div className="metric-mini-row">
+              <MiniMetric label="매입 수익률" value={`${p.goingInCapPct}%`} />
+              <MiniMetric label="원가 수익률" value={`${p.yieldOnCostPct}%`} />
+              <MiniMetric label="최소 DSCR" value={md != null ? `${md.toFixed(2)}x` : '–'} status={md != null ? dscrStatus(md) : undefined} />
+              <MiniMetric label="투입 자기자본" value={`${p.equityEok}억`} />
+            </div>
+          </section>
 
-      {results.guidelineChecks && <GuidelineFit summary={results.guidelineChecks} />}
+          {results.guidelineChecks && <GuidelineFit summary={results.guidelineChecks} />}
 
-      <section className="chart-card">
-        <div className="section-title">연차별 현금흐름 · DSCR</div>
-        <div className="chart-legend">
-          <span><i className="swatch-cf" />Levered Cash Flow (억원)</span>
-          <span><i className="swatch-dscr" />DSCR</span>
-        </div>
-        <CashflowChart rows={p.proForma} />
-      </section>
+          <section className="chart-card">
+            <div className="section-title">연차별 현금흐름 · DSCR</div>
+            <div className="chart-legend">
+              <span><i className="swatch-cf" />Levered Cash Flow (억원)</span>
+              <span><i className="swatch-dscr" />DSCR</span>
+            </div>
+            <CashflowChart rows={p.proForma} />
+          </section>
 
-      <section>
-        <div className="section-title">연차별 운영</div>
-        <table>
-          <thead><tr><th>연차</th><th>NOI</th><th>이자</th><th>Levered CF</th><th>DSCR</th><th>CoC%</th></tr></thead>
-          <tbody>
-            {p.proForma.map((r) => (
-              <tr key={r.year}>
-                <td>Y{r.year}</td>
-                <td>{r.noi}</td>
-                <td>{r.interest}</td>
-                <td>{r.leveredCf}</td>
-                <td className={Number.isFinite(r.dscr) && r.dscr < 1.2 ? 'warn' : undefined}>{fmtDscr(r.dscr)}</td>
-                <td>{r.cocPct}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+          <section>
+            <div className="section-title">연차별 운영</div>
+            <table>
+              <thead><tr><th>연차</th><th>NOI</th><th>이자</th><th>Levered CF</th><th>DSCR</th><th>CoC%</th></tr></thead>
+              <tbody>
+                {p.proForma.map((r) => (
+                  <tr key={r.year}>
+                    <td>Y{r.year}</td>
+                    <td>{r.noi}</td>
+                    <td>{r.interest}</td>
+                    <td>{r.leveredCf}</td>
+                    <td className={Number.isFinite(r.dscr) && r.dscr < 1.2 ? 'warn' : undefined}>{fmtDscr(r.dscr)}</td>
+                    <td>{r.cocPct}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
 
-      <section>
-        <div className="section-title">시나리오</div>
-        <table>
-          <thead><tr><th>케이스</th><th>임대성장</th><th>Exit Cap</th><th>IRR</th><th>EM</th><th>최소 DSCR</th></tr></thead>
-          <tbody>
-            {results.scenarios.map((s) => (
-              <tr key={s.name}>
-                <td>{s.name}</td>
-                <td>{s.rentGrowthPct}%</td>
-                <td>{s.exitCapPct}%</td>
-                <td>{s.leveredIrrPct}%</td>
-                <td>{s.equityMultiple}x</td>
-                <td className={Number.isFinite(s.minDscr) && s.minDscr < 1.2 ? 'warn' : undefined}>{fmtDscr(s.minDscr)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      {results.analysis ? (
-        <StageAnalysis type={results.analysisType} analysis={results.analysis} provider={results.provider} />
+          <section>
+            <div className="section-title">시나리오</div>
+            <table>
+              <thead><tr><th>케이스</th><th>임대성장</th><th>Exit Cap</th><th>IRR</th><th>EM</th><th>최소 DSCR</th></tr></thead>
+              <tbody>
+                {results.scenarios.map((s) => (
+                  <tr key={s.name}>
+                    <td>{s.name}</td>
+                    <td>{s.rentGrowthPct}%</td>
+                    <td>{s.exitCapPct}%</td>
+                    <td>{s.leveredIrrPct}%</td>
+                    <td>{s.equityMultiple}x</td>
+                    <td className={Number.isFinite(s.minDscr) && s.minDscr < 1.2 ? 'warn' : undefined}>{fmtDscr(s.minDscr)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        </>
+      ) : results.analysis ? (
+        <>
+          <Verdict analysis={results.analysis} />
+          <StageAnalysis type={results.analysisType} analysis={results.analysis} provider={results.provider} />
+        </>
       ) : results.analysisRaw ? (
         <section>
           <div className="section-title">AI 분석</div>
           <p className="narrative">{results.analysisRaw}</p>
         </section>
-      ) : null}
+      ) : (
+        <p className="hist-empty">이 단계는 아직 분석 결과가 없습니다. 좌측에서 실행하세요.</p>
+      )}
 
       <p className="disclaimer">{results.disclaimer}</p>
     </div>
@@ -564,18 +581,23 @@ function ResultPanel({ results, stageMap, onSelectStage, onReport, reportBusy }:
 }
 
 /**
- * 단계 탭 — 한 딜의 완료된 단계(스크리닝·시장조사·언더라이팅·투심)를 한 화면에서 전환.
- * 완료된 단계만 클릭 가능(✓), 미실행 단계는 비활성('미실행' — 좌측 버튼으로 실행). 완료가 0개면 숨김.
+ * 결과 탭 — 공통 「재무 모델」(ProForma 지표·차트·시나리오) + 단계별 AI 분석(스크리닝·시장조사·언더라이팅·투심).
+ * 재무 탭은 항상, 단계 탭은 완료 시 ✓ 클릭 가능, 미실행은 비활성('미실행' — 좌측 버튼으로 실행).
  */
 function StageTabs({ stageMap, active, onSelect }: {
   stageMap: Partial<Record<AnalysisType, DealStage>>
-  active?: string
-  onSelect: (type: AnalysisType) => void
+  active: 'FINANCE' | AnalysisType
+  onSelect: (tab: 'FINANCE' | AnalysisType) => void
 }) {
-  const doneCount = STAGES.filter((s) => stageMap[s.type]).length
-  if (doneCount === 0) return null
   return (
-    <div className="stage-tabs" role="tablist" aria-label="분석 단계">
+    <div className="stage-tabs" role="tablist" aria-label="결과 보기">
+      <button
+        type="button" role="tab" aria-selected={active === 'FINANCE'}
+        className={`stage-tab${active === 'FINANCE' ? ' active' : ''}`}
+        onClick={() => onSelect('FINANCE')} title="재무 모델 — ProForma 지표·차트·시나리오"
+      >
+        <span className="st-label">재무 모델</span>
+      </button>
       {STAGES.map((s) => {
         const done = !!stageMap[s.type]
         const isActive = active === s.type
