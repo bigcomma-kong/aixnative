@@ -25,21 +25,65 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/market-feed")
 class MarketFeedController(
     private val service: MarketFeedService,
+    private val watchService: DealWatchService,
 ) {
-    /** 최신 딜 카드. '이 딜 분석하기' 진입점(sourceText)을 포함. */
+    /** 딜 카드(최신순). page 0-기반 — 과거 딜 더 보기(아카이브). '이 딜 분석하기' 진입점(sourceText) 포함. */
     @GetMapping
-    fun list(@RequestParam(required = false, defaultValue = "30") limit: Int): ApiResponse<List<MarketFeedItemView>> =
-        ApiResponse.ok(service.latest(limit))
+    fun list(
+        @RequestParam(required = false, defaultValue = "30") limit: Int,
+        @RequestParam(required = false, defaultValue = "0") page: Int,
+    ): ApiResponse<MarketFeedPage> =
+        ApiResponse.ok(service.latest(limit, page))
 
     /** 최신 마켓 브리핑(AI 다이제스트). 아직 생성 전이면 data=null. */
     @GetMapping("/briefing")
     fun briefing(): ApiResponse<MarketBriefingView?> = ApiResponse.ok(service.latestBriefing())
+
+    /** 지난 브리핑 아카이브 목록(최신순). 무료 조회. */
+    @GetMapping("/briefing/history")
+    fun briefingHistory(): ApiResponse<List<BriefingHistoryItem>> =
+        ApiResponse.ok(service.briefingHistory())
+
+    /** 저장된 브리핑 단건 다시 보기. 무료. */
+    @GetMapping("/briefing/{id}")
+    fun briefingById(@PathVariable id: Long): ApiResponse<MarketBriefingView> =
+        ApiResponse.ok(service.briefingById(id))
 
     /** 과금 — AI 심층 시장 리포트(Claude). 성공 시 1 크레딧 차감(무료 브리핑과 구분되는 수익 액션). */
     @RequiresCredit
     @PostMapping("/deep-report")
     fun deepReport(@RequestBody(required = false) req: DeepReportRequest?): ApiResponse<MarketDeepReportView> =
         ApiResponse.ok(service.deepReport(req?.focus))
+
+    /** 내가 생성한 지난 심층 리포트 목록(최신순). 무료 조회. */
+    @GetMapping("/deep-report/history")
+    fun deepReportHistory(): ApiResponse<List<DeepReportHistoryItem>> =
+        ApiResponse.ok(service.deepReportHistory())
+
+    /** 저장된 심층 리포트 단건 재조회. 무료(이미 차감된 결과 다시 보기). */
+    @GetMapping("/deep-report/{id}")
+    fun deepReportById(@PathVariable id: Long): ApiResponse<MarketDeepReportView> =
+        ApiResponse.ok(service.deepReportById(id))
+
+    /** 관심 딜(찜) — 내 목록. 무료. */
+    @GetMapping("/watch")
+    fun watchList(): ApiResponse<List<DealWatchView>> = ApiResponse.ok(watchService.listMine())
+
+    /** 관심 딜 카드 id 집합(피드 ⭐ 상태 표시용). 무료. */
+    @GetMapping("/watch/ids")
+    fun watchIds(): ApiResponse<List<Long>> = ApiResponse.ok(watchService.myFeedItemIds())
+
+    /** 찜 추가(idempotent). 무료. */
+    @PostMapping("/watch")
+    fun watchAdd(@RequestBody req: DealWatchRequest): ApiResponse<DealWatchView> =
+        ApiResponse.ok(watchService.add(req.feedItemId))
+
+    /** 찜 해제. 무료. */
+    @DeleteMapping("/watch/{feedItemId}")
+    fun watchRemove(@PathVariable feedItemId: Long): ApiResponse<Map<String, Boolean>> {
+        watchService.remove(feedItemId)
+        return ApiResponse.ok(mapOf("removed" to true))
+    }
 }
 
 /**

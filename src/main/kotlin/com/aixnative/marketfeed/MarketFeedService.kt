@@ -1,11 +1,14 @@
 package com.aixnative.marketfeed
 
 import com.aixnative.ai.AiServiceManager
+import com.aixnative.ai.AiToolRunService
+import com.aixnative.ai.RunStatus
 import com.aixnative.billing.CreditGate
 import com.aixnative.billing.CreditService
 import com.aixnative.common.Disclaimer
 import com.aixnative.common.tenant.TenantContext
 import com.aixnative.common.web.BadRequestException
+import com.aixnative.common.web.NotFoundException
 import com.aixnative.common.web.ServiceUnavailableException
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -27,6 +30,7 @@ class MarketFeedService(
     private val aiServiceManager: AiServiceManager,
     private val creditGate: CreditGate,
     private val creditService: CreditService,
+    private val aiToolRunService: AiToolRunService,
 ) {
 
     /**
@@ -46,15 +50,47 @@ class MarketFeedService(
         val node = extractJson(ai.text)?.let { objectMapper.readTree(it) }
 
         val current = TenantContext.require()
-        return MarketDeepReportView(
+        val view = MarketDeepReportView(
             headline = node?.path("headline")?.asText("")?.ifBlank { null },
             summary = node?.path("summary")?.asText("")?.ifBlank { null },
+            marketTempScore = node?.path("marketTempScore")?.takeIf { it.isNumber }?.asInt(),
+            marketTempLabel = node?.path("marketTempLabel")?.asText("")?.ifBlank { null },
+            sectors = node?.path("sectors")?.let { parseNode(it) } ?: emptyList(),
+            scenarios = node?.path("scenarios")?.let { parseNode(it) } ?: emptyList(),
             sections = node?.path("sections")?.let { parseNode(it) } ?: emptyList(),
             picks = node?.path("picks")?.let { parseNode(it) } ?: emptyList(),
+            contrarian = node?.path("contrarian")?.asText("")?.ifBlank { null },
             provider = ai.provider,
             creditBalance = creditService.balance(current.tenantId, current.userId),
             disclaimer = Disclaimer.TEXT,
         )
+        // 이력 보존 — 닫거나 새로고침해도 '지난 심층 리포트'에서 다시 볼 수 있도록 저장.
+        aiToolRunService.record(
+            tool = DEEP_REPORT_TOOL,
+            status = RunStatus.SUCCESS,
+            dealName = view.headline?.take(200) ?: "심층 시장 분석",
+            requestJson = focus?.takeIf { it.isNotBlank() }?.let { """{"focus":${objectMapper.writeValueAsString(it)}}""" },
+            resultJson = objectMapper.writeValueAsString(view),
+        )
+        return view
+    }
+
+    /** 현재 사용자의 지난 심층 리포트 목록(최신순). */
+    @Transactional(readOnly = true)
+    fun deepReportHistory(): List<DeepReportHistoryItem> =
+        aiToolRunService.listMine()
+            .filter { it.tool == DEEP_REPORT_TOOL && it.status == RunStatus.SUCCESS }
+            .map { DeepReportHistoryItem(id = it.id ?: 0, headline = it.dealName, generatedAt = it.createdAt) }
+
+    /** 저장된 심층 리포트 단건 재조회(테넌트 스코프). creditBalance 는 현재 잔액으로 갱신. */
+    @Transactional(readOnly = true)
+    fun deepReportById(id: Long): MarketDeepReportView {
+        val run = aiToolRunService.get(id)
+        if (run.tool != DEEP_REPORT_TOOL) throw NotFoundException("심층 리포트를 찾을 수 없습니다.")
+        val json = run.resultJson ?: throw NotFoundException("심층 리포트 내용이 비어 있습니다.")
+        val saved = objectMapper.readValue(json, MarketDeepReportView::class.java)
+        val current = TenantContext.require()
+        return saved.copy(creditBalance = creditService.balance(current.tenantId, current.userId))
     }
 
     private fun deepReportPrompt(cards: List<MarketFeedItem>, briefing: MarketBriefing?, focus: String?): String {
@@ -64,19 +100,26 @@ class MarketFeedService(
         val context = briefing?.let { "오늘의 브리핑 헤드라인: ${it.headline ?: ""}\n전망: ${it.outlook ?: ""}\n\n" } ?: ""
         val focusLine = focus?.takeIf { it.isNotBlank() }?.let { "분석 초점(사용자 요청): $it\n\n" } ?: ""
         return """
-            당신은 상업용 부동산(CRE) 시장 전략 애널리스트입니다. 아래 최근 딜·시장 데이터를 종합해
-            기관 투자자용 **심층 시장 리포트**를 작성하세요. 무료 일일 브리핑보다 한 단계 깊은 통찰
-            — 섹터별 모멘텀, 거래 흐름의 함의, 매크로·금리 시사점, 실행 가능한 액션을 담으세요.
-            제공된 데이터 범위에서만 분석하고 추측을 사실처럼 단정하지 마세요.
+            당신은 기관 LP·GP 를 자문하는 상업용 부동산(CRE) 시장 전략 책임자입니다. 아래 최근 딜·시장
+            데이터를 종합해 **유료 심층 시장 리포트**를 작성하세요. 이 리포트는 무료 일일 브리핑(단순 요약)
+            과 명확히 차별화되어야 합니다 — 즉, 단순 뉴스 요약이 아니라 (1) 섹터별 정량 스탠스, (2) 시나리오
+            분기, (3) 컨트래리안 관점, (4) 확신도·리스크가 명시된 실행 픽까지 담은 **하우스 뷰**여야 합니다.
+            제공된 데이터 범위에서 근거를 들어 분석하되, 데이터에 없는 수치를 지어내지 마세요.
 
             반드시 아래 스키마의 **JSON 객체 하나만** 출력하세요(코드블록·설명 금지):
             {
-              "headline": "리포트 한 줄 요약(80자 이내)",
-              "summary": "핵심 요지 3~4문장",
-              "sections": [{"title":"섹션 제목","body":"분석 본문(2~5문장)"}],
-              "picks": [{"title":"주목 딜/테마","why":"투자 관점에서 주목할 이유"}]
+              "headline": "하우스 뷰 한 줄(80자 이내)",
+              "summary": "핵심 논지 4~5문장(왜 지금 이 포지션인가)",
+              "marketTempScore": 0~100 정수(시장 과열도; 거래·심리 종합),
+              "marketTempLabel": "침체 | 둔화 | 중립 | 회복 | 과열 중 하나",
+              "sectors": [{"name":"오피스/물류/리테일/호텔/주거 등","stance":"비중확대|중립|비중축소","score":0~100,"note":"한 줄 근거"}],
+              "scenarios": [{"name":"기본","narrative":"전개와 함의 2~3문장"},{"name":"낙관","narrative":"..."},{"name":"비관","narrative":"..."}],
+              "sections": [{"title":"섹션 제목","body":"분석 본문(4~6문장, 함의 중심)"}],
+              "picks": [{"title":"주목 딜/테마","why":"투자 논리","conviction":"높음|중간|낮음","risk":"핵심 리스크 한 줄"}],
+              "contrarian": "시장 컨센서스가 놓치고 있는 점 2~3문장"
             }
-            sections 3~5개(예: 섹터 동향 / 거래 모멘텀 / 금리·매크로 / 리스크·기회), picks 2~4개. 모든 값 한국어.
+            sectors 는 데이터에 등장하는 자산군 4~5개, scenarios 는 기본/낙관/비관 3개 필수, sections 4~6개
+            (예: 자본시장·금리 / 거래 모멘텀 / 섹터 로테이션 / 정책·규제 / 리스크·촉매), picks 3~4개. 모든 값 한국어.
 
             $focusLine$context<딜·시장 데이터>
             $deals
@@ -97,20 +140,39 @@ class MarketFeedService(
     /** 최신 마켓 브리핑 1건(없으면 null). sections/watchlist/risks JSON 을 파싱해 반환. */
     @Transactional(readOnly = true)
     fun latestBriefing(): MarketBriefingView? =
-        briefingRepository.findTopByOrderByGeneratedAtDesc()?.let { b ->
-            MarketBriefingView(
+        briefingRepository.findTopByOrderByGeneratedAtDesc()?.let { it.toView() }
+
+    /** 지난 브리핑 아카이브 목록(최신순, 최대 30건). 본문은 /briefing/{id} 로 조회. */
+    @Transactional(readOnly = true)
+    fun briefingHistory(): List<BriefingHistoryItem> =
+        briefingRepository.findTop30ByOrderByGeneratedAtDesc().map { b ->
+            BriefingHistoryItem(
                 id = b.id ?: 0,
                 briefingDate = b.briefingDate?.toString(),
                 headline = b.headline,
-                outlook = b.outlook,
-                sections = parseList(b.sectionsJson),
-                watchlist = parseList(b.watchlistJson),
-                risks = parseList(b.risksJson),
                 articleCount = b.articleCount,
-                provider = b.aiProvider,
                 generatedAt = b.generatedAt,
             )
         }
+
+    /** 저장된 브리핑 단건 재조회(없으면 404). */
+    @Transactional(readOnly = true)
+    fun briefingById(id: Long): MarketBriefingView =
+        briefingRepository.findById(id).orElseThrow { NotFoundException("브리핑을 찾을 수 없습니다.") }.toView()
+
+    private fun MarketBriefing.toView(): MarketBriefingView =
+        MarketBriefingView(
+            id = id ?: 0,
+            briefingDate = briefingDate?.toString(),
+            headline = headline,
+            outlook = outlook,
+            sections = parseList(sectionsJson),
+            watchlist = parseList(watchlistJson),
+            risks = parseList(risksJson),
+            articleCount = articleCount,
+            provider = aiProvider,
+            generatedAt = generatedAt,
+        )
 
     private inline fun <reified T> parseList(json: String?): List<T> {
         if (json.isNullOrBlank()) return emptyList()
@@ -118,12 +180,21 @@ class MarketFeedService(
             objectMapper.readValue(json, object : TypeReference<List<T>>() {})
         }.getOrDefault(emptyList())
     }
-    /** 최신 피드 N개(기본 [DEFAULT_LIMIT], 최대 [MAX_LIMIT]). */
+    /**
+     * 피드 N개(최신순). [page] 0-기반 — 과거 딜 더 보기(아카이브)용 페이지네이션.
+     * 응답은 [items] + [hasMore](다음 페이지 존재 여부)로 감싸 무한/더보기 UI 를 지원.
+     */
     @Transactional(readOnly = true)
-    fun latest(limit: Int = DEFAULT_LIMIT): List<MarketFeedItemView> {
+    fun latest(limit: Int = DEFAULT_LIMIT, page: Int = 0): MarketFeedPage {
         val capped = limit.coerceIn(1, MAX_LIMIT)
-        return repository.findAllByOrderByPublishedAtDescIdDesc(PageRequest.of(0, capped))
-            .map { it.toView() }
+        val safePage = page.coerceAtLeast(0)
+        val slice = repository.findAllByOrderByPublishedAtDescIdDesc(PageRequest.of(safePage, capped))
+        val hasMore = (safePage + 1).toLong() * capped < repository.count()
+        return MarketFeedPage(
+            items = slice.map { it.toView() },
+            page = safePage,
+            hasMore = hasMore,
+        )
     }
 
     @Transactional
@@ -150,5 +221,6 @@ class MarketFeedService(
         const val DEFAULT_LIMIT = 30
         const val MAX_LIMIT = 100
         const val DEEP_CARD_SAMPLE = 40
+        const val DEEP_REPORT_TOOL = "MARKET_DEEP_REPORT"
     }
 }
