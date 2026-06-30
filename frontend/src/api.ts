@@ -264,6 +264,7 @@ export interface Analysis {
   conditions?: string[]
   next_steps?: string[]
   thesis?: string
+  investment_thesis?: string
   // MARKET_STUDY
   region?: string
   fundamentals?: string
@@ -915,6 +916,20 @@ export const api = {
   /** 관리자 — 뉴스레터 발송 로그(누구에게/언제/성공여부). */
   adminNewsletterSendLog: (limit = 100): Promise<NewsletterSendLogEntry[]> =>
     request(`/api/admin/newsletter/send-log?limit=${limit}`),
+
+  /** 관리자 — 최신 브리핑 뉴스레터 HTML 미리보기(발송 없음). 인증 헤더 필요 → fetch 로 받아 새 창에. */
+  adminNewsletterPreview: async (): Promise<string> => {
+    const token = tokenStore.get()
+    const res = await fetch(`${API_BASE}/api/admin/newsletter/preview`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!res.ok) throw new ApiError(res.status, `미리보기를 불러오지 못했습니다 (${res.status})`)
+    return res.text()
+  },
+
+  /** 관리자 — 지정 주소로 테스트 발송. */
+  adminNewsletterTestSend: (email: string): Promise<{ sent: boolean }> =>
+    request('/api/admin/newsletter/test-send', { method: 'POST', body: JSON.stringify({ email }) }),
 
   // ── 결제(크레딧 충전) ──
   /** 결제 SDK 초기화용 — clientKey + 활성 여부. */

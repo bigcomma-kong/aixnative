@@ -330,6 +330,9 @@ function NewsletterPanel() {
   const [logs, setLogs] = useState<NewsletterSendLogEntry[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [testEmail, setTestEmail] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
 
   useEffect(() => {
     setLoading(true)
@@ -339,11 +342,45 @@ function NewsletterPanel() {
       .finally(() => setLoading(false))
   }, [])
 
+  async function preview() {
+    setMsg(null); setBusy(true)
+    try {
+      const html = await api.adminNewsletterPreview()
+      const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
+      window.open(url, '_blank', 'noopener')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (e: unknown) { setMsg(e instanceof ApiError ? e.message : '미리보기 실패') }
+    finally { setBusy(false) }
+  }
+
+  async function testSend() {
+    setMsg(null); setBusy(true)
+    try {
+      await api.adminNewsletterTestSend(testEmail.trim())
+      setMsg(`${testEmail.trim()} 로 테스트 메일을 보냈습니다.`)
+    } catch (e: unknown) { setMsg(e instanceof ApiError ? e.message : '발송 실패') }
+    finally { setBusy(false) }
+  }
+
   const activeCount = subs.filter((s) => s.active).length
 
   return (
     <>
       {error && <p className="error">{error}</p>}
+
+      <div className="card">
+        <div className="section-title">메일 미리보기 · 테스트 발송</div>
+        <div className="nl-tools">
+          <button type="button" className="btn-ghost" onClick={preview} disabled={busy}>메일 미리보기</button>
+          <input className="nl-test-email" type="email" placeholder="테스트 받을 이메일"
+            value={testEmail} onChange={(e) => setTestEmail(e.target.value)} />
+          <button type="button" className="btn-primary" onClick={testSend} disabled={busy || !testEmail.trim()}>
+            {busy ? '처리 중…' : '테스트 발송'}
+          </button>
+        </div>
+        {msg && <p className="hint">{msg}</p>}
+        <p className="hint">최신 브리핑으로 만든 실제 메일을 미리보거나, 지정 주소로 1건만 보냅니다(구독자 영향 없음).</p>
+      </div>
 
       <div className="card">
         <div className="section-title">구독자 — 활성 {activeCount} / 전체 {subs.length}</div>

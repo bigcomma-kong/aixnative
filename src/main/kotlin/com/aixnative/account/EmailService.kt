@@ -5,6 +5,7 @@ import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.mail.SimpleMailMessage
 import org.springframework.mail.javamail.JavaMailSender
+import org.springframework.mail.javamail.MimeMessageHelper
 import org.springframework.stereotype.Service
 
 /**
@@ -47,9 +48,30 @@ class EmailService(
         send(toEmail, subject, body, "비밀번호 재설정")
     }
 
-    /** 마켓 브리핑 뉴스레터 발송(무료). SMTP 미설정 시 로그 폴백, 실패해도 예외 미전파. */
+    /** 마켓 브리핑 뉴스레터 발송(무료, 플레인텍스트). SMTP 미설정 시 로그 폴백, 실패해도 예외 미전파. */
     fun sendNewsletter(toEmail: String, subject: String, body: String) =
         send(toEmail, subject, body, "뉴스레터")
+
+    /**
+     * 마켓 브리핑 뉴스레터 발송(HTML). MimeMessage 로 text/html 전송.
+     * SMTP 미설정 시 로그 폴백, 어떤 경우도 호출자에게 예외를 던지지 않는다.
+     */
+    fun sendNewsletterHtml(toEmail: String, subject: String, html: String) {
+        val sender = mailSenderProvider.ifAvailable
+        if (sender == null) {
+            log.warn("[email] SMTP 미설정 — 뉴스레터(HTML) 미발송 (to={}), 길이={}", toEmail, html.length)
+            return
+        }
+        runCatching {
+            val msg = sender.createMimeMessage()
+            val helper = MimeMessageHelper(msg, true, "UTF-8")
+            helper.setFrom(from, "aixnative")
+            helper.setTo(toEmail)
+            helper.setSubject(subject)
+            helper.setText(html, true) // HTML 본문
+            sender.send(msg)
+        }.onFailure { log.error("[email] 뉴스레터(HTML) 발송 실패 (to={}): {}", toEmail, it.message) }
+    }
 
     /** SMTP 미설정 시 링크를 로그로 남기고, 설정 시 발송. 어떤 경우에도 호출자에게 예외를 던지지 않는다. */
     private fun send(toEmail: String, subject: String, body: String, kind: String) {

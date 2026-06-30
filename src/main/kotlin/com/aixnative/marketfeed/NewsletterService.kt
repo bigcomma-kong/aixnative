@@ -1,11 +1,15 @@
 package com.aixnative.marketfeed
 
 import com.aixnative.account.EmailService
+import com.fasterxml.jackson.core.type.TypeReference
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.UUID
 
 /**
@@ -20,9 +24,11 @@ class NewsletterService(
     private val cards: MarketFeedRepository,
     private val sendLog: NewsletterSendLogRepository,
     private val emailService: EmailService,
+    private val objectMapper: ObjectMapper,
     @Value("\${app.base-url:http://localhost:8080}") private val baseUrl: String,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val dateFmt = DateTimeFormatter.ofPattern("yyyy년 M월 d일", Locale.KOREAN)
 
     /** 구독(idempotent). 이미 있으면 active=true 로 되살린다. */
     @Transactional
@@ -64,11 +70,12 @@ class NewsletterService(
         if (recipients.isEmpty()) return 0
 
         val topCards = cards.findAllByOrderByPublishedAtDescIdDesc(PageRequest.of(0, TOP_CARDS))
-        val subject = "[aixnative] 오늘의 시장 브리핑" + (briefing.headline?.let { " — $it" } ?: "")
+        val subject = subjectFor(briefing)
         var sent = 0
         for (sub in recipients) {
-            val body = buildBody(briefing, topCards, sub.unsubToken)
-            val ok = runCatching { emailService.sendNewsletter(sub.email, subject, body) }
+            val unsubUrl = "$baseUrl/api/newsletter/unsubscribe?token=${sub.unsubToken}"
+            val html = buildHtml(briefing, topCards, greetingOf(sub.email), unsubUrl)
+            val ok = runCatching { emailService.sendNewsletterHtml(sub.email, subject, html) }
                 .onFailure { log.warn("[newsletter] 발송 실패 to={}: {}", sub.email, it.message) }
                 .isSuccess
             if (ok) sent++
@@ -102,22 +109,63 @@ class NewsletterService(
         sendLog.findAllByOrderBySentAtDescIdDesc(PageRequest.of(0, limit.coerceIn(1, 500)))
             .map { NewsletterSendLogView(it.email, it.subject, it.status, it.sentAt) }
 
-    private fun buildBody(briefing: MarketBriefing, topCards: List<MarketFeedItem>, token: String): String = buildString {
-        briefing.headline?.let { appendLine(it); appendLine() }
-        briefing.outlook?.let { appendLine(it); appendLine() }
-        if (topCards.isNotEmpty()) {
-            appendLine("오늘의 딜")
-            appendLine("──────────")
-            topCards.forEach { c ->
-                appendLine("• ${c.title}${c.assetType?.let { " [$it]" } ?: ""}")
-            }
-            appendLine()
-        }
-        appendLine("전체 딜 보기 · AI 분석: $baseUrl")
-        appendLine()
-        appendLine("─".repeat(20))
-        appendLine("구독 해지: $baseUrl/api/newsletter/unsubscribe?token=$token")
-        appendLine("aixnative — 본 메일은 투자자문이 아닙니다.")
+    /**
+     * 관리자 — 최신 브리핑으로 만든 뉴스레터 HTML 미리보기(발송 없음). 브리핑 없으면 null.
+     * 구독취소 링크는 더미("#"), 인사말은 "미리보기".
+     */
+    @Transactional(readOnly = true)
+    fun previewHtml(): String? {
+        val briefing = briefings.findTopByOrderByGeneratedAtDesc() ?: return null
+        val topCards = cards.findAllByOrderByPublishedAtDescIdDesc(PageRequest.of(0, TOP_CARDS))
+        return buildHtml(briefing, topCards, "미리보기", "#")
+    }
+
+    /**
+     * 관리자 — 지정 주소로 최신 브리핑 1건 테스트 발송(구독 여부 무관, 구독자/로그 영향 없음).
+     * 브리핑이 있으면 true. 인사말은 이메일 앞부분, 구독취소는 더미.
+     */
+    @Transactional(readOnly = true)
+    fun sendTest(toEmail: String): Boolean {
+        val briefing = briefings.findTopByOrderByGeneratedAtDesc() ?: return false
+        val topCards = cards.findAllByOrderByPublishedAtDescIdDesc(PageRequest.of(0, TOP_CARDS))
+        val html = buildHtml(briefing, topCards, greetingOf(toEmail), "#")
+        emailService.sendNewsletterHtml(toEmail, subjectFor(briefing) + " (테스트)", html)
+        return true
+    }
+
+    private fun subjectFor(briefing: MarketBriefing): String =
+        "[aixnative] 오늘의 시장 브리핑" + (briefing.headline?.let { " — $it" } ?: "")
+
+    /** 인사말 이름 — 이메일 @앞부분(표시명 컬럼 없음). */
+    private fun greetingOf(email: String): String = email.substringBefore('@').ifBlank { "구독자" }
+
+    /** 브리핑 엔티티 + 딜카드 → 인라인 CSS HTML. sections/watchlist/risks JSON 을 파싱해 모두 렌더. */
+    private fun buildHtml(
+        briefing: MarketBriefing,
+        topCards: List<MarketFeedItem>,
+        greetingName: String,
+        unsubUrl: String,
+    ): String {
+        val dateLabel = briefing.briefingDate.format(dateFmt)
+        return NewsletterEmail.render(
+            dateLabel = dateLabel,
+            greetingName = greetingName,
+            headline = briefing.headline,
+            outlook = briefing.outlook,
+            sections = parseList(briefing.sectionsJson),
+            watchlist = parseList(briefing.watchlistJson),
+            risks = parseList(briefing.risksJson),
+            articleCount = briefing.articleCount,
+            topCards = topCards,
+            appUrl = baseUrl,
+            unsubUrl = unsubUrl,
+        )
+    }
+
+    private inline fun <reified T> parseList(json: String?): List<T> {
+        if (json.isNullOrBlank()) return emptyList()
+        return runCatching { objectMapper.readValue(json, object : TypeReference<List<T>>() {}) }
+            .getOrDefault(emptyList())
     }
 
     private companion object {

@@ -252,7 +252,8 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
           </div>
 
           <div className="actions">
-            <div className="stage-grid" role="list" aria-label="분석 파이프라인 (순서대로)">
+            <p className="stage-caption">권장 순서 · <b>각 단계는 독립 실행</b> 가능 — 1번부터 안 해도, 원하는 단계만 바로 실행하세요.</p>
+            <div className="stage-grid" role="list" aria-label="분석 파이프라인 — 권장 순서, 각 단계 독립 실행 가능">
               {STAGES.map((s, i) => (
                 <Fragment key={s.type}>
                   {i > 0 && <span className="stage-arrow" aria-hidden="true">↓</span>}

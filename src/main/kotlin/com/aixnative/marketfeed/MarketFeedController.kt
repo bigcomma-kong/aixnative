@@ -122,6 +122,7 @@ class MarketFeedAdminController(
 @RequestMapping("/api/ingest")
 class MarketFeedIngestController(
     private val ingestService: MarketFeedIngestService,
+    private val newsletter: NewsletterService,
     private val props: MarketFeedProperties,
 ) {
     @PostMapping("/market-feed")
@@ -135,5 +136,19 @@ class MarketFeedIngestController(
                 .body(ApiResponse.fail("수집 트리거가 비활성이거나 토큰이 올바르지 않습니다."))
         }
         return ResponseEntity.ok(ApiResponse.ok(ingestService.ingest(purge, notify)))
+    }
+
+    /** 뉴스레터 테스트 발송(서버 트리거, 공유 토큰 보호). 최신 브리핑을 지정 1개 주소로만 보낸다. */
+    @PostMapping("/newsletter-test")
+    fun newsletterTest(
+        @RequestHeader(name = "X-Ingest-Token", required = false) token: String?,
+        @RequestParam email: String,
+    ): ResponseEntity<ApiResponse<Map<String, Boolean>>> {
+        if (!props.ingestEndpointEnabled || token.isNullOrBlank() || token != props.ingestToken) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.fail("트리거가 비활성이거나 토큰이 올바르지 않습니다."))
+        }
+        val sent = newsletter.sendTest(email.trim())
+        return ResponseEntity.ok(ApiResponse.ok(mapOf("sent" to sent)))
     }
 }

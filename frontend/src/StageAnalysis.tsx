@@ -21,6 +21,13 @@ function signalClass(v: string): string {
   return 'cond'
 }
 
+/** 신뢰도 배지 — HIGH=초록 / MEDIUM=주황 / LOW=빨강. 단계 제목 옆 노출. */
+function ConfBadge({ c }: { c: string | null }) {
+  if (!c) return null
+  const sig = c.toUpperCase() === 'HIGH' ? 'G' : c.toUpperCase() === 'LOW' ? 'R' : 'Y'
+  return <span className={`conf-badge ${signalClass(sig)}`}>신뢰도 {c}</span>
+}
+
 /**
  * 단계별 AI 결과 인라인 렌더. 라이브 분석(UnderwriteView)·이력/관리자 모달(ResultModal) 공용.
  * 프롬프트가 생성하는 표·플래그·매크로를 그대로 화면에 그린다(생성됐는데 버려지던 데이터 복구).
@@ -44,7 +51,7 @@ export function StageAnalysis({ type, analysis, provider }: { type?: string; ana
     const comps = list('comps')
     return (
       <section className="ai-block">
-        <div className="section-title">시장조사</div>
+        <div className="section-title">시장조사 <ConfBadge c={val('confidence')} /></div>
         {(str('region') || str('house_view')) && (
           <p><b>{str('region') ?? '권역'}</b> · House View {str('house_view') ?? '-'}</p>
         )}
@@ -98,7 +105,6 @@ export function StageAnalysis({ type, analysis, provider }: { type?: string; ana
           </div>
         )}
         {str('conclusion') && <p className="guideline">{str('conclusion')}</p>}
-        {val('confidence') && <p className="conf-note">신뢰도 {val('confidence')}</p>}
       </section>
     )
   }
@@ -115,7 +121,7 @@ export function StageAnalysis({ type, analysis, provider }: { type?: string; ana
     const ratingClass = (r: string): string => (r === 'GREEN' ? 'go' : r === 'RED' ? 'no' : 'cond')
     return (
       <section className="ai-block">
-        <div className="section-title">1차 스크리닝</div>
+        <div className="section-title">1차 스크리닝 <ConfBadge c={val('confidence')} /></div>
         {str('verdict') && (
           <Verdict analysis={{ recommendation: str('verdict') ?? undefined, recommendation_reason: str('verdict_reason') ?? undefined }} />
         )}
@@ -134,10 +140,17 @@ export function StageAnalysis({ type, analysis, provider }: { type?: string; ana
           </div>
         )}
 
-        {/* 핵심 근거 — 신규: key_points 불릿 / 구버전 저장분: thesis 문단 폴백 */}
+        {str('investment_thesis') && (
+          <div className="scr-section">
+            <div className="section-title">투자 논리</div>
+            <p className="narrative">{str('investment_thesis')}</p>
+          </div>
+        )}
+
+        {/* 추가 핵심 근거 — key_points 불릿 / 구버전 저장분: thesis 문단 폴백 */}
         {points.length > 0 ? (
           <ul className="bullet-list">{points.map((p, i) => <li key={i}>{String(p)}</li>)}</ul>
-        ) : str('thesis') ? (
+        ) : !str('investment_thesis') && str('thesis') ? (
           <p className="narrative">{str('thesis')}</p>
         ) : null}
 
@@ -193,7 +206,6 @@ export function StageAnalysis({ type, analysis, provider }: { type?: string; ana
             <ul className="check-list">{nextSteps.map((s, i) => <li key={i}>{String(s)}</li>)}</ul>
           </div>
         )}
-        {val('confidence') && <p className="conf-note">신뢰도 {val('confidence')}</p>}
       </section>
     )
   }
@@ -212,7 +224,7 @@ export function StageAnalysis({ type, analysis, provider }: { type?: string; ana
     ]
     return (
       <section className="ai-block">
-        <div className="section-title">투심 메모</div>
+        <div className="section-title">투심 메모 <ConfBadge c={val('confidence')} /></div>
         {str('thesis') && <p className="narrative">{str('thesis')}</p>}
 
         {exec && (

@@ -501,6 +501,13 @@ td.warn { color: var(--no); font-weight: 600; }
 
 /* 신뢰도 표기 */
 .conf-note { font-size: 0.78rem; color: var(--ink-faint); margin: 0; }
+.conf-badge {
+  margin-left: 0.5rem; font-size: 0.68rem; font-weight: 700; padding: 0.1rem 0.5rem; border-radius: 999px;
+  vertical-align: middle; text-transform: none; letter-spacing: 0;
+}
+.conf-badge.go { background: var(--go-tint); color: var(--go); }
+.conf-badge.cond { background: var(--cond-tint); color: oklch(45% 0.1 70); }
+.conf-badge.no { background: var(--no-tint); color: var(--no); }
 
 /* 투심 Exec Summary 등 키-값 표 */
 .kv-table td { padding: 0.5rem 0.6rem; border-top: 1px solid var(--line); font-size: 0.88rem; text-align: left; }
@@ -752,7 +759,8 @@ textarea {
 textarea:hover { border-color: var(--ink-faint); }
 textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-ring); }
 
-/* 분석 파이프라인 — 1→2→3→4 순서가 보이도록 세로 번호 흐름 + 단계 사이 화살표 */
+/* 분석 파이프라인 — 1→2→3→4 권장 흐름(번호·화살표). 단, 각 단계 독립 실행 가능. */
+.stage-caption { margin: 0 0 0.5rem; font-size: 0.74rem; color: var(--ink-faint); line-height: 1.4; }
 .stage-grid { display: flex; flex-direction: column; gap: 0.3rem; }
 .stage-arrow { align-self: center; color: var(--ink-faint); font-size: 0.85rem; line-height: 1; }
 .stage-btn {
@@ -998,6 +1006,13 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 .checkout-policy ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.25rem; }
 .checkout-policy li { font-size: 0.74rem; color: var(--ink-soft); line-height: 1.45; }
 .checkout-policy li b { color: var(--ink); }
+
+/* 관리자 — 뉴스레터 미리보기/테스트 발송 도구 */
+.nl-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.nl-test-email {
+  flex: 1; min-width: 180px; padding: 0.5rem 0.7rem;
+  border: 1px solid var(--line); border-radius: var(--r-sm, 8px); font-size: 0.88rem;
+}
 
 /* 간편 소셜 로그인 */
 .social-login { margin-top: 1.1rem; }

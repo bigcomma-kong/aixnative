@@ -109,10 +109,10 @@ class ReportService(
     private fun StringBuilder.appendScreening(a: JsonNode) {
         verdict(a.txt("verdict"), a.txt("verdict_reason"))
         appendKpiTable(a.get("metrics"))
-        // 핵심 근거 — 신규: key_points 불릿 / 구버전 저장분: thesis 문단 폴백.
-        val keyPoints = a.get("key_points")?.takeIf { it.isArray && it.size() > 0 }?.map { it.asText() }
-        if (keyPoints != null) listBlock("핵심 근거", keyPoints)
-        else a.txt("thesis")?.let { append("<p>${esc(it)}</p>") }
+        (a.txt("investment_thesis") ?: a.txt("thesis"))?.let { append("<h3>투자 논리</h3><p>${esc(it)}</p>") }
+        // 추가 핵심 근거 — key_points 불릿(있으면).
+        a.get("key_points")?.takeIf { it.isArray && it.size() > 0 }?.map { it.asText() }
+            ?.let { listBlock("핵심 근거", it) }
         appendBenchmarkTable(a.get("benchmark_eval"))
         listBlock("진행 조건", a.get("conditions")?.map { it.asText() }?.filter { it.isNotBlank() })
         listBlock("Green Flags", a.get("green_flags")?.map { it.asText() })
@@ -166,6 +166,8 @@ class ReportService(
                 append("</tbody></table>")
             }
         }
+        a.txt("lp_alignment")?.let { append("<h3>LP 정합성</h3><p>${esc(it)}</p>") }
+        confidenceNote(a)
     }
 
     private fun StringBuilder.appendProFormaTable(pf: JsonNode) {

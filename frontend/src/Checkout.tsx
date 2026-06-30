@@ -133,8 +133,8 @@ export function Checkout({ creditBalance, customerEmail, onClose }: CheckoutProp
               <p><b>환불 안내</b></p>
               <ul>
                 <li>일회성 충전이며 자동 결제·구독이 아닙니다.</li>
-                <li>환불은 <b>결제 후 7일 이내</b> 가능합니다.</li>
-                <li><b>크레딧을 사용(차감)한 경우 환불되지 않습니다.</b> (미사용 크레딧만 환불 대상)</li>
+                <li>환불은 <b>결제 후 7일 이내</b>, <b>구매한 크레딧을 전혀 사용하지 않은 경우에만</b> 가능합니다.</li>
+                <li><b>크레딧을 일부라도 사용하면 해당 결제 건은 환불되지 않습니다.</b> (부분 환불 없음)</li>
                 <li>환불 요청은 결제 계정 이메일로 문의해 주세요.</li>
               </ul>
               <p className="checkout-fineprint">결제는 토스페이먼츠로 안전하게 처리됩니다.</p>

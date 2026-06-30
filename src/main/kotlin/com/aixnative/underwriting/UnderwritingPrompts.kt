@@ -30,13 +30,16 @@ object UnderwritingPrompts {
             "[가이드라인]\n" + guidelines + "\n" +
             "[출력 스키마]\n" +
             "{\n" +
-            "  \"summary\": \"Base Case 핵심 3~5문장(한국어)\",\n" +
-            "  \"guideline_check\": \"IRR/EM/DSCR/LTV/CoC 가이드라인 충족 여부 서술(한국어)\",\n" +
-            "  \"key_drivers\": [ \"IRR 에 민감한 변수(민감도·시나리오 근거, 한국어)\" ],\n" +
-            "  \"key_risks\": [ { \"risk\": \"\", \"impact\": \"HIGH|MEDIUM|LOW\" } ],\n" +
+            "  \"summary\": \"Base Case 핵심 4~6문장 — 매입구조·핵심 수익지표(IRR/EM/DSCR/CoC)·Exit 가정·하방 내성(한국어)\",\n" +
+            "  \"guideline_check\": \"IRR/EM/DSCR/LTV/CoC 각 항목별 충족/미달을 수치와 함께 항목별로 서술(한국어)\",\n" +
+            "  \"key_drivers\": [ \"IRR 에 민감한 변수 + 왜 민감한지(민감도·시나리오 근거). 통상 3~5개(한국어)\" ],\n" +
+            "  \"key_risks\": [ { \"risk\": \"리스크 + 영향 경로(한국어)\", \"impact\": \"HIGH|MEDIUM|LOW\" } ],\n" +
             "  \"recommendation\": \"GO|GO_WITH_CONDITIONS|NO_GO\",\n" +
-            "  \"recommendation_reason\": \"사유(한국어)\"\n" +
+            "  \"recommendation_reason\": \"사유 2~3문장 — 수익지표 평가 + 핵심 리스크 + 조건(한국어)\"\n" +
             "}\n\n" +
+            "[판단 지침 — 기관 IC 깊이]\n" +
+            "- summary 는 표면 수치 나열이 아니라 '이 딜이 목표수익을 어떻게/얼마나 견고하게 달성하는지'를 서술. 민감도에서 IRR·DSCR 에 가장 민감한 변수와 하방 시나리오 내성을 명시.\n" +
+            "- key_drivers 3~5개, key_risks 3~5개 — 각각 구체적 변수·영향 경로로(예: 'Exit Cap +50bps 시 IRR -X%p'). 단 <FACTS> 의 확정 수치만 인용, 새 숫자 생성 금지.\n\n" +
             "[문서명] " + (docName ?: "(이름없음)") + "\n\n" +
             "<FACTS>\n" +
             factsText +
@@ -66,21 +69,24 @@ object UnderwritingPrompts {
             "                \"cap_rate_pct\": null, \"occupancy_pct\": null, \"walt_yr\": null,\n" +
             "                \"top1_tenant_pct\": null, \"loss_to_lease_pct\": null, \"opex_ratio_pct\": null },\n" +
             "  \"benchmark_eval\": [ { \"metric\": \"cap_rate\", \"value\": null, \"guideline\": \"\", \"rating\": \"GREEN|YELLOW|RED\" } ],\n" +
-            "  \"key_points\": [ \"투자 논리 핵심 근거 한 줄(≤50자, 한국어)\" ],\n" +
-            "  \"red_flags\": [ { \"code\": \"R1\", \"flag\": \"\", \"impact\": \"HIGH|MEDIUM|LOW\", \"verify\": \"검증 필요사항\" } ],\n" +
-            "  \"green_flags\": [ \"긍정 요인(한국어)\" ],\n" +
+            "  \"investment_thesis\": \"투자 논리 — 입지·자산 특성(준공연도·권역·앵커/소유주)·Cap Rate 시장 맥락·핵심 수익성 쟁점을 2~4문장(한국어)\",\n" +
+            "  \"key_points\": [ \"추가 핵심 근거 한 줄(선택, 한국어)\" ],\n" +
+            "  \"red_flags\": [ { \"code\": \"R1\", \"flag\": \"리스크·데이터 갭 요약\", \"impact\": \"HIGH|MEDIUM|LOW\", \"verify\": \"확보해야 할 구체 문서·데이터(예: 'IM·최근 3년 운영 NOI 제출', 'Rent Roll: 임차인명·계약금액·만기·신용도')\" } ],\n" +
+            "  \"green_flags\": [ \"긍정 요인 한 줄(한국어)\" ],\n" +
             "  \"verdict\": \"GO|CONDITIONAL|NO_GO\",\n" +
-            "  \"verdict_reason\": \"핵심 결론 1~2문장(≤90자, 한국어)\",\n" +
-            "  \"conditions\": [ \"CONDITIONAL 시 충족 조건 한 줄(≤60자, 한국어) — GO/NO_GO 면 빈 배열\" ],\n" +
-            "  \"next_steps\": [ \"다음 단계 권고 한 줄(한국어)\" ],\n" +
+            "  \"verdict_reason\": \"판정 사유 2~3문장 — 표면 지표 평가 + 핵심 미검증 리스크 + 검증 후 재평가 방향(한국어)\",\n" +
+            "  \"conditions\": [ \"CONDITIONAL 시 충족 조건 한 줄(한국어) — GO/NO_GO 면 빈 배열\" ],\n" +
+            "  \"next_steps\": [ \"다음 단계 — 구체 행동 + 확보 자료(예: 'IM 청구: 최근 3년 운영 NOI·임차료·공실 현황')\" ],\n" +
             "  \"confidence\": \"HIGH|MEDIUM|LOW\"\n" +
             "}\n\n" +
-            "[판단 지침]\n" +
-            "- 모든 서술은 짧고 스캔 가능하게. 긴 문단(주저리주저리) 금지 — key_points 는 3~4개의 짧은 근거 한 줄로, 문장을 이어붙이지 말 것.\n" +
-            "- Cap Rate 가이드라인 미달 → RED. Loss-to-Lease 큰 경우 업사이드(green_flags)\n" +
-            "- WALT 짧음·Top1 집중 과다(50%+)·신규공급 과다·OpEx 비정상은 Red Flag\n" +
-            "- Dealbreaker(환경/권리분쟁/WALT 1년미만+핵심만기임박/호가 시장+20%) 발견 시 verdict=NO_GO\n" +
-            "- 표면 지표 미달이나 업사이드 발굴 시 CONDITIONAL 가능. 데이터 부족 시 confidence 낮춤\n\n" +
+            "[판단 지침 — 기관 IC 수준의 깊이]\n" +
+            "- investment_thesis: 입지·신축여부·앵커/임차인·Cap Rate 시장 위치·핵심 수익성 쟁점을 2~4문장으로. 표면 지표만 나열하지 말고 '무엇을 검증해야 투자가 성립하는지'를 제시.\n" +
+            "- red_flags: 데이터 갭·검증 과제를 빠짐없이 식별 — 통상 5~8개. 신축/안정화 공실, 임차인 구성·자체사용 비중, 운영비(NOI margin), Top1 집중·갱신, 신규공급 경쟁, 취득가 정당성, Rent Roll 미확인 등. 각 verify 에 요청할 구체 문서·데이터를 명시.\n" +
+            "- green_flags: 실질 긍정 요인 3~5개(신축 CapEx 여유·입지·WALT·Loss-to-Lease 업사이드 등).\n" +
+            "- next_steps: 5~6단계 — 각 단계에 구체 행동과 확보 자료를 적시(호가 확보 → IM 청구 → Rent Roll → 운영비 검증 → 경쟁 공급 평가 → 금융구조·DCF 재평가).\n" +
+            "- 데이터가 벤치마크 역산 추정이면 metrics 에 값을 채우되 confidence=LOW 로 낮추고, 그 사실을 red_flag(HIGH)로 명시(예: 'NOI·공실·WALT 모두 벤치마크 역산 추정 — 공식 IM·실적 NOI 제출').\n" +
+            "- Cap Rate 가이드라인 미달 → RED. Loss-to-Lease 큰 경우 업사이드(green_flags). WALT 짧음·Top1 50%+·신규공급 과다·OpEx 비정상은 Red Flag.\n" +
+            "- Dealbreaker(환경/권리분쟁/WALT 1년미만+핵심만기임박/호가 시장+20%) 발견 시 verdict=NO_GO. 표면 미달이나 업사이드면 CONDITIONAL.\n\n" +
             "[문서명] " + (docName ?: "(이름없음)") + "\n\n" +
             "<DOCUMENT>\n" +
             documentText +
@@ -105,15 +111,20 @@ object UnderwritingPrompts {
             "[출력 스키마]\n" +
             "{\n" +
             "  \"region\": \"권역명(예: 서울 GBD)\",\n" +
-            "  \"fundamentals\": \"공실률·평당 임대료·신규 공급·렌트프리 등 권역 현황(한국어)\",\n" +
-            "  \"assumption_check\": [ { \"assumption\": \"검증 대상 가정\", \"market\": \"시장 데이터\", \"verdict\": \"GREEN|YELLOW|RED\" } ],\n" +
+            "  \"fundamentals\": \"권역 현황 2~4문장 — 총 stock·Class 분포·공실률 추이·평당 임대료·신규 공급 파이프라인·렌트프리(한국어)\",\n" +
+            "  \"assumption_check\": [ { \"assumption\": \"검증 대상 가정(시장임대료/Exit Cap/임대료인상률/공실 등)\", \"market\": \"시장 데이터·벤치마크\", \"verdict\": \"GREEN|YELLOW|RED\" } ],\n" +
             "  \"comps\": [ { \"name\": \"거래 사례\", \"region\": \"\", \"price_per_pyeong_manwon\": null, \"cap_rate_pct\": null } ],\n" +
-            "  \"macro\": \"금리·수요·공급·정책 등 매크로 맥락(한국어)\",\n" +
+            "  \"macro\": \"매크로 맥락 2~3문장 — 기준금리·국고채·수요·공급·정책(한국어)\",\n" +
             "  \"house_view\": \"Bullish|Neutral|Bearish\",\n" +
-            "  \"house_view_reason\": \"근거(한국어)\",\n" +
-            "  \"conclusion\": \"종합 결론 — 매입 가정이 시장으로 지지되는지(한국어)\",\n" +
+            "  \"house_view_reason\": \"하우스뷰 근거 2~3문장(한국어)\",\n" +
+            "  \"conclusion\": \"종합 결론 2~3문장 — 매입 가정이 시장으로 지지되는지 + 핵심 미검증 변수(한국어)\",\n" +
             "  \"confidence\": \"HIGH|MEDIUM|LOW\"\n" +
             "}\n\n" +
+            "[판단 지침 — 기관 리서치 깊이]\n" +
+            "- assumption_check 는 핵심 매입 가정을 빠짐없이 검증 — 통상 4~6개(시장임대료·Exit Cap·임대료 인상률·공실·운영비·신규공급 흡수).\n" +
+            "- comps 는 동권역·동유형 거래사례를 가능한 한 제시(3개 이상). 데이터 없으면 벤치마크 기반 '(추정)' 표기 + confidence 낮춤.\n" +
+            "- 자산유형 고유지표(호텔 ADR/Occ/RevPAR, 물류 삼중순임대·임대료, 리테일 매출연동임대)를 fundamentals·assumption_check 에 반영.\n" +
+            "- 표면 서술 금지 — '무엇이 가정을 지지/반박하는지'와 '추가로 확인할 시장 데이터'를 구체적으로.\n\n" +
             "[문서명] " + (docName ?: "(이름없음)") + "\n\n" +
             "<ASSET>\n" +
             assetFacts +
@@ -135,15 +146,20 @@ object UnderwritingPrompts {
             "- LP(출자자) 관점 유지, 리스크는 솔직히, DD 미완료 항목은 영향도와 함께 명시.\n\n" +
             "[출력 스키마] (highlights 는 위 A~G 본문의 핵심을 함축)\n" +
             "{\n" +
-            "  \"thesis\": \"딜 논리 1문장(한국어)\",\n" +
+            "  \"thesis\": \"딜 논리 1~2문장(한국어)\",\n" +
             "  \"exec_summary\": { \"asset\": \"\", \"price\": \"\", \"strategy\": \"\", \"expected_return\": \"\", \"recommendation\": \"\" },\n" +
-            "  \"highlights\": [ \"투자 하이라이트(한국어)\" ],\n" +
-            "  \"risk_matrix\": [ { \"risk\": \"\", \"likelihood\": \"高|中|低\", \"impact\": \"高|中|低\", \"mitigation\": \"\" } ],\n" +
-            "  \"lp_alignment\": \"LP 관점 정합성(한국어)\",\n" +
+            "  \"highlights\": [ \"투자 하이라이트 — A~G(자산·임대·시장·재무·리스크·LP·자금조달) 핵심을 함축. 통상 4~6개(한국어)\" ],\n" +
+            "  \"risk_matrix\": [ { \"risk\": \"\", \"likelihood\": \"높음|중간|낮음\", \"impact\": \"높음|중간|낮음\", \"mitigation\": \"구체 완화책\" } ],\n" +
+            "  \"lp_alignment\": \"LP 관점 정합성 2~3문장 — 펀드 만기·분배 일정·비중·우선순위와의 부합(한국어)\",\n" +
             "  \"recommendation\": \"STRONG_BUY|CONDITIONAL|HOLD|PASS\",\n" +
             "  \"conditions\": [ \"조건부 추천 시 충족 조건(한국어)\" ],\n" +
-            "  \"recommendation_reason\": \"사유(한국어)\"\n" +
+            "  \"recommendation_reason\": \"사유 2~3문장 — 종합 평가 + 핵심 리스크 + 조건(한국어)\",\n" +
+            "  \"confidence\": \"HIGH|MEDIUM|LOW\"\n" +
             "}\n\n" +
+            "[판단 지침 — 기관 IC 깊이]\n" +
+            "- highlights 4~6개로 A~G 본문을 함축(자산개요·임대현황·시장정합·재무·리스크·LP·자금조달).\n" +
+            "- risk_matrix 5~7개 — 각 리스크에 발생가능성·영향·구체 완화책(mitigation)을 명시. likelihood/impact 는 반드시 '높음|중간|낮음' 한글로(한자 금지).\n" +
+            "- 앞 단계(스크리닝·시장조사·언더라이팅)의 미검증 항목·DD 미완료 항목을 risk_matrix·conditions 에 반영.\n\n" +
             "[문서명] " + (docName ?: "(이름없음)") + "\n\n" +
             "<FACTS>\n" +
             factsText +
