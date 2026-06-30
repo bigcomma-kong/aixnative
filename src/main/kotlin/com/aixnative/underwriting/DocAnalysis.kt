@@ -115,7 +115,15 @@ data class DocAnalyzeResponse(
     val analysis: JsonNode? = null,
     val analysisRaw: String? = null,
     val calc: JsonNode? = null,
+    /** 분석에 주입된 실측 시장데이터(공공 API). 프론트에서 "실측·확정" 카드로 노출. 없으면 빈 리스트. */
+    val marketFacts: List<MarketFact> = emptyList(),
     val provider: String,
     val creditBalance: Int,
     val disclaimer: String,
+)
+
+/** 사용자에게 보여줄 실측 시장 사실 한 건. source=출처 헤더, detail=값(요약). */
+data class MarketFact(
+    val source: String,
+    val detail: String,
 )

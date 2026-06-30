@@ -148,6 +148,9 @@ class UnderwritingService(
         // BOV·DEV 단계는 구조화 입력으로 코드가 수치를 확정하고(calc) <DATA> 에 주입한다(정밀화).
         // 나머지 단계는 자유 텍스트(documentText) 필수.
         var calc: Any? = null
+        // 분기에서 실제로 주입한 실측 fact 만 누적(더블 호출 없음) → 응답에 실어 "실측·확정" 카드로 노출.
+        val marketFactsBuf = StringBuilder()
+        fun mf(s: String): String = s.also { if (it.isNotBlank()) marketFactsBuf.append(it) }
         val prompt = when (type) {
             DocAnalysisType.BOV -> {
                 val input = req.bov ?: throw BadRequestException("매각 BOV 는 평가 입력(noi·시장 Cap 등)이 필요합니다.")
@@ -164,7 +167,7 @@ class UnderwritingService(
                 calc = r
                 UnderwritingPrompts.bovNarrative(
                     DocCalcFacts.bovFacts(input, used, r, req.documentText) +
-                        marketDataService.marketFacts(req.location, assetType),
+                        mf(marketDataService.marketFacts(req.location, assetType)),
                     req.dealName, CreGuidelines.bovGuidelineText(assetType),
                 )
             }
@@ -188,9 +191,9 @@ class UnderwritingService(
                 calc = r
                 UnderwritingPrompts.devFeasibility(
                     DocCalcFacts.devFacts(input, r, req.documentText) +
-                        marketDataService.marketFacts(req.location, assetType) +
-                        marketDataService.landComparablesFactLine(req.location) +
-                        marketDataService.landValuationFactLine(req.parcelAddress),
+                        mf(marketDataService.marketFacts(req.location, assetType)) +
+                        mf(marketDataService.landComparablesFactLine(req.location)) +
+                        mf(marketDataService.landValuationFactLine(req.parcelAddress)),
                     req.dealName, CreGuidelines.devFeasibilityGuidelineText(assetType),
                 )
             }
@@ -224,8 +227,8 @@ class UnderwritingService(
                 calc = r
                 UnderwritingPrompts.priceForecast(
                     DocCalcFacts.priceFacts(input, marketCap, stats, r, req.documentText) +
-                        marketDataService.marketFacts(req.location, assetType) +
-                        marketDataService.landValuationFactLine(req.parcelAddress),
+                        mf(marketDataService.marketFacts(req.location, assetType)) +
+                        mf(marketDataService.landValuationFactLine(req.parcelAddress)),
                     req.dealName,
                 )
             }
@@ -239,9 +242,9 @@ class UnderwritingService(
                         UnderwritingPrompts.buildingResearch(doc, req.dealName)
                     DocAnalysisType.TAX_PRICE_DIAGNOSIS ->
                         UnderwritingPrompts.taxPriceDiagnosis(
-                            doc + marketDataService.marketFacts(req.location, assetType) +
-                                marketDataService.landComparablesFactLine(req.location) +
-                                marketDataService.landValuationFactLine(req.parcelAddress),
+                            doc + mf(marketDataService.marketFacts(req.location, assetType)) +
+                                mf(marketDataService.landComparablesFactLine(req.location)) +
+                                mf(marketDataService.landValuationFactLine(req.parcelAddress)),
                             req.dealName,
                         )
                     DocAnalysisType.AM_QUARTERLY ->
@@ -250,7 +253,7 @@ class UnderwritingService(
                         UnderwritingPrompts.holdSellRefi(doc, req.dealName, CreGuidelines.holdSellRefiGuidelineText())
                     DocAnalysisType.MARKET_RESEARCH_DEEP ->
                         UnderwritingPrompts.marketResearchDeep(
-                            doc + marketDataService.marketFacts(req.location ?: req.assetType, req.assetType),
+                            doc + mf(marketDataService.marketFacts(req.location ?: req.assetType, req.assetType)),
                             req.dealName,
                         )
                     else -> error("unreachable: $type")
@@ -268,11 +271,13 @@ class UnderwritingService(
         }
 
         val parsed = tryParseJson(ai.text)
+        val marketFacts = parseMarketFacts(marketFactsBuf.toString())
         val resultPayload = linkedMapOf<String, Any?>(
             "analysisType" to type.name,
             "analysis" to parsed,
             "analysisRaw" to if (parsed == null) ai.text else null,
             "calc" to calc,
+            "marketFacts" to marketFacts,
             "provider" to ai.provider,
             "disclaimer" to Disclaimer.TEXT,
         )
@@ -291,10 +296,33 @@ class UnderwritingService(
             analysis = parsed,
             analysisRaw = if (parsed == null) ai.text else null,
             calc = calc?.let { objectMapper.valueToTree(it) },
+            marketFacts = marketFacts,
             provider = ai.provider,
             creditBalance = creditService.balance(current.tenantId, current.userId),
             disclaimer = Disclaimer.TEXT,
         )
+    }
+
+    /**
+     * 프롬프트에 주입된 실측 fact 문자열(`\n[출처] 내용 …AI지시문`)을 사용자 노출용으로 파싱.
+     * 줄 단위로 `[출처] 내용` 을 뽑고, AI 전용 지시문 꼬리("…인용하세요" 등)는 잘라낸다.
+     */
+    private fun parseMarketFacts(raw: String): List<MarketFact> {
+        if (raw.isBlank()) return emptyList()
+        return raw.split("\n").mapNotNull { line ->
+            val t = line.trim()
+            if (!t.startsWith("[")) return@mapNotNull null
+            val close = t.indexOf(']')
+            if (close <= 0) return@mapNotNull null
+            val source = t.substring(1, close).trim()
+            var detail = t.substring(close + 1).trim()
+            // AI 전용 지시문 꼬리 제거(데이터 포맷은 우리 통제 — 알려진 마커에서 컷).
+            for (cut in listOf("위 거래는", "위 토지", "위는 공식", "— 위", "추정 대신")) {
+                val idx = detail.indexOf(cut)
+                if (idx > 0) { detail = detail.substring(0, idx).trim().trimEnd(';', '·', '-', ' '); break }
+            }
+            if (detail.isBlank()) null else MarketFact(source = source, detail = detail)
+        }
     }
 
     /**
