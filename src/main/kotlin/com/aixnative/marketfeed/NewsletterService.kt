@@ -18,6 +18,7 @@ class NewsletterService(
     private val subscribers: NewsSubscriberRepository,
     private val briefings: MarketBriefingRepository,
     private val cards: MarketFeedRepository,
+    private val sendLog: NewsletterSendLogRepository,
     private val emailService: EmailService,
     @Value("\${app.base-url:http://localhost:8080}") private val baseUrl: String,
 ) {
@@ -54,9 +55,9 @@ class NewsletterService(
 
     /**
      * 최신 브리핑 + 상위 딜을 활성 구독자 전원에게 발송. 구독자/브리핑 없으면 0.
-     * 발송 실패는 개별 graceful — 한 명 실패가 전체를 막지 않는다.
+     * 발송 실패는 개별 graceful — 한 명 실패가 전체를 막지 않는다. 발송 건마다 로그를 남긴다.
      */
-    @Transactional(readOnly = true)
+    @Transactional
     fun broadcastLatest(): Int {
         val briefing = briefings.findTopByOrderByGeneratedAtDesc() ?: return 0
         val recipients = subscribers.findAllByActiveTrue()
@@ -67,13 +68,39 @@ class NewsletterService(
         var sent = 0
         for (sub in recipients) {
             val body = buildBody(briefing, topCards, sub.unsubToken)
-            runCatching { emailService.sendNewsletter(sub.email, subject, body) }
-                .onSuccess { sent++ }
+            val ok = runCatching { emailService.sendNewsletter(sub.email, subject, body) }
                 .onFailure { log.warn("[newsletter] 발송 실패 to={}: {}", sub.email, it.message) }
+                .isSuccess
+            if (ok) sent++
+            sendLog.save(
+                NewsletterSendLog(
+                    email = sub.email,
+                    subject = subject.take(300),
+                    status = if (ok) "SENT" else "FAILED",
+                    briefingId = briefing.id,
+                ),
+            )
         }
-        log.info("[newsletter] {}명에게 브리핑 발송", sent)
+        log.info("[newsletter] {}/{}명 발송", sent, recipients.size)
         return sent
     }
+
+    /** 관리자 — 구독자 전체(최신 가입순). */
+    @Transactional(readOnly = true)
+    fun listSubscribers(): List<NewsSubscriberView> =
+        subscribers.findAll().sortedByDescending { it.id }.map {
+            NewsSubscriberView(it.email, it.active, it.createdAt)
+        }
+
+    /** 관리자 — 활성 구독자 수. */
+    @Transactional(readOnly = true)
+    fun activeCount(): Long = subscribers.countByActiveTrue()
+
+    /** 관리자 — 최근 발송 로그. */
+    @Transactional(readOnly = true)
+    fun recentSendLog(limit: Int): List<NewsletterSendLogView> =
+        sendLog.findAllByOrderBySentAtDescIdDesc(PageRequest.of(0, limit.coerceIn(1, 500)))
+            .map { NewsletterSendLogView(it.email, it.subject, it.status, it.sentAt) }
 
     private fun buildBody(briefing: MarketBriefing, topCards: List<MarketFeedItem>, token: String): String = buildString {
         briefing.headline?.let { appendLine(it); appendLine() }
