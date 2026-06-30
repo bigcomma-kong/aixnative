@@ -164,6 +164,24 @@ class UnderwritingServiceTest(
     }
 
     @Test
+    fun `딜 단계 합본 - 같은 딜의 완료 단계를 모아 반환(테넌트 스코프)`() {
+        asTenant()
+        creditService.grantSignupCredits(tenantId, userId)
+        service.analyze(AnalysisType.SCREENING, req)
+        service.analyze(AnalysisType.MARKET_STUDY, req)
+
+        val ds = service.dealStages("테스트딜")
+        assertEquals("테스트딜", ds.dealName)
+        val types = ds.stages.map { it.analysisType }.toSet()
+        assertTrue(types.contains("SCREENING") && types.contains("MARKET_STUDY"))
+        assertTrue(ds.stages.all { it.result != null && it.request != null }) // 결과·입력 JSON 포함
+
+        // 다른 테넌트는 같은 딜명을 조회해도 빈 결과(격리)
+        TenantContext.set(TenantContext.Current(99L, 99L, "x@example.com"))
+        assertTrue(service.dealStages("테스트딜").stages.isEmpty())
+    }
+
+    @Test
     fun `중복 가드는 과금하지 않는다`() {
         asTenant()
         creditService.grantSignupCredits(tenantId, userId)

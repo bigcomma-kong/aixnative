@@ -95,7 +95,7 @@ function UsageResults() {
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [open, setOpen] = useState<{ run: RunSummary; result: unknown } | null>(null)
+  const [open, setOpen] = useState<{ run: RunSummary; result: unknown; request: unknown } | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
 
   useEffect(() => {
@@ -109,7 +109,7 @@ function UsageResults() {
     setBusyId(run.id); setError(null)
     try {
       const detail = await api.run(run.id)
-      setOpen({ run, result: detail.result })
+      setOpen({ run, result: detail.result, request: detail.request })
     } catch (e: unknown) {
       setError(e instanceof ApiError ? e.message : '결과를 불러오지 못했습니다.')
     } finally {
@@ -140,7 +140,7 @@ function UsageResults() {
           </tbody>
         </table>
       )}
-      {open && <ResultModal run={open.run} result={open.result} onClose={() => setOpen(null)} />}
+      {open && <ResultModal run={open.run} result={open.result} request={open.request} onClose={() => setOpen(null)} />}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import {
   api, ApiError,
-  type AnalysisType, type AnalyzeResponse, type Analysis, type DuplicateCheck, type GuidelineSummary, type ProForma, type ProFormaResponse,
+  type AnalysisType, type AnalyzeResponse, type Analysis, type DealStage, type DuplicateCheck, type GuidelineSummary, type ProForma, type ProFormaResponse,
   type RunResult, type RunSummary, type Scenario, type UnderwriteInput,
 } from './api'
 import { CashflowChart } from './Chart'
@@ -85,15 +85,60 @@ interface Results {
   analysis?: Analysis | null
   analysisRaw?: string | null
   provider?: string
+  /** 이 결과를 만든 입력값(폼 또는 저장된 이력) — 결과와 함께 표시해 "무엇을 입력했는지" 보이게. */
+  inputs?: UnderwriteInput | null
+}
+
+/** 입력 요약 카드용 — (키, 라벨, 접미사). 값이 빈 항목은 표시하지 않음. */
+const INPUT_FIELDS: { key: keyof UnderwriteInput; label: string; suffix?: string }[] = [
+  { key: 'assetType', label: '자산유형' },
+  { key: 'location', label: '위치' },
+  { key: 'askingPriceEok', label: '매입가', suffix: '억' },
+  { key: 'noiEok', label: 'NOI', suffix: '억' },
+  { key: 'ltvPct', label: 'LTV', suffix: '%' },
+  { key: 'loanRatePct', label: '대출금리', suffix: '%' },
+  { key: 'exitCapPct', label: 'Exit Cap', suffix: '%' },
+  { key: 'holdYears', label: '보유', suffix: '년' },
+  { key: 'rentGrowthPct', label: '임대성장', suffix: '%' },
+]
+
+/** 저장된 단계(DealStage) → 결과 패널 표시용 Results. 탭 전환 시 사용. */
+function resultsFromStage(s: DealStage): Results {
+  const r = s.result
+  return {
+    runId: s.runId,
+    analysisType: s.analysisType,
+    proForma: r?.proForma as ProForma,
+    scenarios: r?.scenarios ?? [],
+    guidelineChecks: r?.guidelineChecks,
+    disclaimer: r?.disclaimer ?? '',
+    analysis: r?.analysis ?? null,
+    analysisRaw: r?.analysisRaw ?? null,
+    provider: r?.provider,
+    inputs: s.request,
+  }
 }
 
 export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: UnderwriteViewProps) {
   const [form, setForm] = useState<FormState>(INITIAL)
   const [results, setResults] = useState<Results | null>(null)
+  // 현재 딜의 완료된 단계 모음(합본 탭) — 같은 딜명으로 스크리닝·시장조사 등을 따로 했어도 한 화면에서 전환.
+  const [stageMap, setStageMap] = useState<Partial<Record<AnalysisType, DealStage>>>({})
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<'none' | 'proforma' | AnalysisType>('none')
   const [reportBusy, setReportBusy] = useState(false)
   const [historyVersion, setHistoryVersion] = useState(0)
+
+  /** 딜명으로 완료된 단계들을 모아 탭에 채운다(무과금). 실패해도 단일 결과 표시엔 지장 없음. */
+  async function loadDealStages(dealName?: string | null) {
+    if (!dealName) { setStageMap({}); return }
+    try {
+      const ds = await api.dealStages(dealName)
+      const map: Partial<Record<AnalysisType, DealStage>> = {}
+      for (const s of ds.stages) map[s.analysisType] = s
+      setStageMap(map)
+    } catch { /* 합본 탭은 보조 — 무시 */ }
+  }
 
   function set<K extends keyof FormState>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }))
@@ -137,8 +182,10 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
     setError(null)
     setBusy('proforma')
     try {
-      const res: ProFormaResponse = await api.proforma(buildInput())
-      setResults({ proForma: res.proForma, scenarios: res.scenarios, guidelineChecks: res.guidelineChecks, disclaimer: res.disclaimer })
+      const input = buildInput()
+      const res: ProFormaResponse = await api.proforma(input)
+      setResults({ proForma: res.proForma, scenarios: res.scenarios, guidelineChecks: res.guidelineChecks, disclaimer: res.disclaimer, inputs: input })
+      void loadDealStages(input.dealName)
     } catch (err: unknown) {
       setError(err instanceof ApiError ? err.message : '계산 중 오류가 발생했습니다.')
     } finally {
@@ -162,10 +209,11 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
       setResults({
         runId: res.runId, analysisType: res.analysisType,
         proForma: res.proForma, scenarios: res.scenarios, guidelineChecks: res.guidelineChecks, disclaimer: res.disclaimer,
-        analysis: res.analysis, analysisRaw: res.analysisRaw, provider: res.provider,
+        analysis: res.analysis, analysisRaw: res.analysisRaw, provider: res.provider, inputs: input,
       })
       onCreditBalance(res.creditBalance)
       setHistoryVersion((v) => v + 1)
+      void loadDealStages(input.dealName)
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 402) {
         onNeedCredits()
@@ -209,7 +257,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
         <form className="card input-panel" onSubmit={(e) => { e.preventDefault(); runProforma() }}>
           <div className="form-head">
             <span className="section-title" style={{ margin: 0 }}>딜 입력 <span className="req-legend"><span className="req">*</span> 필수</span></span>
-            <button type="button" className="btn-link" onClick={() => { setForm(INITIAL); setResults(null); setError(null) }}>
+            <button type="button" className="btn-link" onClick={() => { setForm(INITIAL); setResults(null); setError(null); setStageMap({}) }}>
               초기화
             </button>
           </div>
@@ -278,7 +326,13 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
 
         <div className="card">
           {results ? (
-            <ResultPanel results={results} onReport={openReport} reportBusy={reportBusy} />
+            <ResultPanel
+              results={results}
+              stageMap={stageMap}
+              onSelectStage={(type) => { const s = stageMap[type]; if (s) setResults(resultsFromStage(s)) }}
+              onReport={openReport}
+              reportBusy={reportBusy}
+            />
           ) : (
             <div className="result-empty">
               <div className="empty-state">
@@ -306,7 +360,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
         </div>
       </div>
 
-      <HistoryPanel version={historyVersion} onOpen={(r, runId) => setResults({ ...r, runId })} />
+      <HistoryPanel version={historyVersion} onOpen={(r, runId, request) => { setResults({ ...r, runId, inputs: request }); void loadDealStages(request?.dealName) }} />
 
       {busy !== 'none' && (
         <div className="analyze-overlay" role="alertdialog" aria-busy="true" aria-live="assertive" aria-label="분석 진행 중">
@@ -327,7 +381,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
   )
 }
 
-function HistoryPanel({ version, onOpen }: { version: number; onOpen: (r: RunResult, runId: number) => void }) {
+function HistoryPanel({ version, onOpen }: { version: number; onOpen: (r: RunResult, runId: number, request: UnderwriteInput | null) => void }) {
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [error, setError] = useState<string | null>(null)
   const [compareOpen, setCompareOpen] = useState(false)
@@ -343,7 +397,7 @@ function HistoryPanel({ version, onOpen }: { version: number; onOpen: (r: RunRes
   async function open(id: number) {
     try {
       const detail = await api.run(id)
-      if (detail.result) onOpen(detail.result, detail.id)
+      if (detail.result) onOpen(detail.result, detail.id, detail.request)
     } catch (err: unknown) {
       setError(err instanceof ApiError ? err.message : '이력 상세 조회 실패')
     }
@@ -407,7 +461,13 @@ function fmtDscr(d: number): string {
   return Number.isFinite(d) ? `${d}` : '-'
 }
 
-function ResultPanel({ results, onReport, reportBusy }: { results: Results; onReport: () => void; reportBusy: boolean }) {
+function ResultPanel({ results, stageMap, onSelectStage, onReport, reportBusy }: {
+  results: Results
+  stageMap: Partial<Record<AnalysisType, DealStage>>
+  onSelectStage: (type: AnalysisType) => void
+  onReport: () => void
+  reportBusy: boolean
+}) {
   const p = results.proForma
   const md = minDscr(p)
   const stageLabel = results.analysisType ? (STAGE_LABEL[results.analysisType] ?? results.analysisType) : null
@@ -423,22 +483,20 @@ function ResultPanel({ results, onReport, reportBusy }: { results: Results; onRe
           )}
         </div>
       )}
+      <StageTabs stageMap={stageMap} active={results.analysisType} onSelect={onSelectStage} />
+      {results.inputs && <InputSummary inputs={results.inputs} />}
       {results.analysis && <Verdict analysis={results.analysis} />}
 
       <section>
-        <div className="metrics">
-          <Metric hero ko="레버리지 IRR" en="Levered IRR" v={`${p.leveredIrrPct}%`}
-            hint="대출 포함 자기자본 연환산 수익률" />
-          <Metric ko="투자 배수" en="Equity Multiple" v={`${p.equityMultiple}x`}
-            hint="투입 원금 대비 총 회수 배수" />
-          <Metric ko="매입 수익률" en="Going-in Cap" v={`${p.goingInCapPct}%`}
-            hint="1년차 NOI ÷ 매입가" />
-          <Metric ko="원가 수익률" en="Yield on Cost" v={`${p.yieldOnCostPct}%`}
-            hint="NOI ÷ 총투자비(취득비 포함)" />
-          <Metric ko="최소 DSCR" en="Debt Coverage" v={md != null ? `${md.toFixed(2)}x` : '-'}
-            hint="NOI ÷ 이자 · 높을수록 안전" />
-          <Metric ko="투입 자기자본" en="Equity" v={`${p.equityEok}억`}
-            hint="총투자비 − 대출" />
+        <div className="metric-heroes">
+          <HeroMetric label="레버리지 IRR" value={`${p.leveredIrrPct}%`} status={irrStatus(p.leveredIrrPct)} />
+          <HeroMetric label="투자 배수" value={`${p.equityMultiple}x`} status={emStatus(p.equityMultiple)} />
+        </div>
+        <div className="metric-mini-row">
+          <MiniMetric label="매입 수익률" value={`${p.goingInCapPct}%`} />
+          <MiniMetric label="원가 수익률" value={`${p.yieldOnCostPct}%`} />
+          <MiniMetric label="최소 DSCR" value={md != null ? `${md.toFixed(2)}x` : '–'} status={md != null ? dscrStatus(md) : undefined} />
+          <MiniMetric label="투입 자기자본" value={`${p.equityEok}억`} />
         </div>
       </section>
 
@@ -505,16 +563,86 @@ function ResultPanel({ results, onReport, reportBusy }: { results: Results; onRe
   )
 }
 
-/** 지표 타일 — 한글 이름(주) + 영문 캡션(부) + 한 줄 의미. 가독성 위해 영문 약어 단독 노출 지양. */
-function Metric({ ko, en, v, hint, hero }: { ko: string; en: string; v: string; hint: string; hero?: boolean }) {
+/**
+ * 단계 탭 — 한 딜의 완료된 단계(스크리닝·시장조사·언더라이팅·투심)를 한 화면에서 전환.
+ * 완료된 단계만 클릭 가능(✓), 미실행 단계는 비활성('미실행' — 좌측 버튼으로 실행). 완료가 0개면 숨김.
+ */
+function StageTabs({ stageMap, active, onSelect }: {
+  stageMap: Partial<Record<AnalysisType, DealStage>>
+  active?: string
+  onSelect: (type: AnalysisType) => void
+}) {
+  const doneCount = STAGES.filter((s) => stageMap[s.type]).length
+  if (doneCount === 0) return null
   return (
-    <div className={`metric${hero ? ' hero' : ''}`}>
-      <span className="m-top">
-        <span className="m-ko">{ko}</span>
-        <span className="m-en">{en}</span>
-      </span>
-      <span className="v">{v}</span>
-      <span className="m-hint">{hint}</span>
+    <div className="stage-tabs" role="tablist" aria-label="분석 단계">
+      {STAGES.map((s) => {
+        const done = !!stageMap[s.type]
+        const isActive = active === s.type
+        return (
+          <button
+            key={s.type} type="button" role="tab" aria-selected={isActive}
+            className={`stage-tab${isActive ? ' active' : ''}${done ? '' : ' undone'}`}
+            disabled={!done} onClick={() => done && onSelect(s.type)}
+            title={done ? s.label : `${s.label} — 미실행 (좌측에서 실행)`}
+          >
+            <span className="st-label">{s.label}</span>
+            <span className="st-mark">{done ? '✓' : '미실행'}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** 입력 요약 — 이 결과를 만든 딜 입력값을 결과 상단에 표시(이력에서 다시 열 때 "무엇을 입력했는지" 확인). */
+function InputSummary({ inputs }: { inputs: UnderwriteInput }) {
+  const rows = INPUT_FIELDS
+    .map((f) => ({ label: f.label, value: inputs[f.key], suffix: f.suffix }))
+    .filter((r) => r.value != null && r.value !== '' && !(typeof r.value === 'number' && !Number.isFinite(r.value)))
+  if (rows.length === 0) return null
+  return (
+    <section className="input-recap">
+      <div className="section-title">입력 요약{inputs.dealName ? ` · ${inputs.dealName}` : ''}</div>
+      <div className="recap-grid">
+        {rows.map((r) => (
+          <div key={r.label} className="recap-cell">
+            <span className="rc-k">{r.label}</span>
+            <span className="rc-v num">{String(r.value)}{r.suffix ?? ''}</span>
+          </div>
+        ))}
+      </div>
+      {inputs.notes && <p className="recap-notes">메모 · {inputs.notes}</p>}
+    </section>
+  )
+}
+
+/** 지표 양호도 — 색·배지 판정(보수적 CRE 임계값). */
+type MStatus = 'good' | 'warn' | 'neutral'
+const irrStatus = (v: number): MStatus => (v >= 12 ? 'good' : v < 8 ? 'warn' : 'neutral')
+const emStatus = (v: number): MStatus => (v >= 1.8 ? 'good' : v < 1.3 ? 'warn' : 'neutral')
+const dscrStatus = (v: number): MStatus => (v >= 1.25 ? 'good' : v < 1.0 ? 'warn' : 'neutral')
+
+/** 핵심 지표 — 큰 숫자 + 양호/주의 색·배지. */
+function HeroMetric({ label, value, status }: { label: string; value: string; status: MStatus }) {
+  const badge = status === 'good' ? '양호' : status === 'warn' ? '주의' : null
+  return (
+    <div className={`hero-metric ${status}`}>
+      <span className="hm-label">{label}</span>
+      <div className="hm-row">
+        <span className="hm-value">{value}</span>
+        {badge && <span className={`hm-badge ${status}`}>{status === 'good' ? '▲' : '▼'} {badge}</span>}
+      </div>
+    </div>
+  )
+}
+
+/** 보조 지표 — 컴팩트 라벨 + 값(필요 시 색). */
+function MiniMetric({ label, value, status }: { label: string; value: string; status?: MStatus }) {
+  return (
+    <div className="mini-metric">
+      <span className="mm-label">{label}</span>
+      <span className={`mm-value${status && status !== 'neutral' ? ` ${status}` : ''}`}>{value}</span>
     </div>
   )
 }

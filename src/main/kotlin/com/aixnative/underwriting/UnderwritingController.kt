@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 /**
@@ -81,6 +82,14 @@ class UnderwritingController(
     @GetMapping("/report/{runId}", produces = [MediaType.TEXT_HTML_VALUE])
     fun report(@PathVariable runId: Long): ResponseEntity<String> =
         ResponseEntity.ok().contentType(MediaType.TEXT_HTML).body(reportService.buildHtml(runId))
+
+    /**
+     * 무료 — 한 딜의 완료된 단계(스크리닝·시장조사·언더라이팅·투심) 모음. 합본 탭 화면용.
+     * 저장된 결과 조립일 뿐 AI 미호출. 테넌트 스코프(다른 사용자 딜은 보이지 않음).
+     */
+    @GetMapping("/deal-stages")
+    fun dealStages(@RequestParam dealName: String): ApiResponse<DealStagesResponse> =
+        ApiResponse.ok(service.dealStages(dealName))
 
     /** 내 분석 이력 목록 (최신순). */
     @GetMapping("/runs")

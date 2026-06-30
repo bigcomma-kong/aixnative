@@ -297,6 +297,20 @@ export interface AnalyzeResponse {
 /** IM 분석 단계. 백엔드 AnalysisType enum 과 일치. */
 export type AnalysisType = 'SCREENING' | 'MARKET_STUDY' | 'UNDERWRITING' | 'IC_MEMO'
 
+/** 한 딜의 완료된 단계 1건 — 합본 탭 화면용. result 는 저장된 결과(= RunResult). */
+export interface DealStage {
+  analysisType: AnalysisType
+  runId: number
+  request: UnderwriteInput | null
+  result: RunResult | null
+}
+
+/** 한 딜에 대해 완료된 파이프라인 단계 모음. */
+export interface DealStagesResponse {
+  dealName: string | null
+  stages: DealStage[]
+}
+
 /** 중복 분석 사전 확인 — 동일 입력으로 최근 같은 단계를 실행했는지. */
 export interface DuplicateCheck {
   duplicate: boolean
@@ -819,6 +833,10 @@ export const api = {
   runs: (): Promise<RunSummary[]> => request('/api/underwriting/runs'),
 
   run: (id: number): Promise<RunDetail> => request(`/api/underwriting/runs/${id}`),
+
+  /** 한 딜의 완료된 단계 모음(합본 탭). 무과금. */
+  dealStages: (dealName: string): Promise<DealStagesResponse> =>
+    request(`/api/underwriting/deal-stages?dealName=${encodeURIComponent(dealName)}`),
 
   history: (): Promise<BillingHistory> => request('/api/billing/history'),
 

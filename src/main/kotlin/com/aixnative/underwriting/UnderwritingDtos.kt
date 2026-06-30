@@ -104,6 +104,20 @@ data class RunSummary(
     val createdAt: Instant?,
 )
 
+/** 한 딜의 단계별 최신 성공 결과 1건 — 합본 화면(탭)용. result 는 저장된 결과 JSON(= RunResult). */
+data class DealStage(
+    val analysisType: String,
+    val runId: Long,
+    val request: JsonNode?,
+    val result: JsonNode?,
+)
+
+/** 한 딜에 대해 완료된 파이프라인 단계 모음(스크리닝·시장조사·언더라이팅·투심). 단계별 1건(최신 성공). */
+data class DealStagesResponse(
+    val dealName: String?,
+    val stages: List<DealStage>,
+)
+
 /** 분석 이력 상세 — 저장된 입력/결과 JSON 포함. */
 data class RunDetail(
     val id: Long,

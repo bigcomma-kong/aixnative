@@ -380,6 +380,24 @@ class UnderwritingService(
         )
     }
 
+    /**
+     * 한 딜의 완료된 파이프라인 단계 모음(합본 탭 화면용). 단계별 최신 성공 결과를 한 번에 반환.
+     * 무과금·테넌트 스코프. 같은 딜명으로 스크리닝·시장조사 등을 따로 실행했어도 한 화면에서 모아 볼 수 있게 한다.
+     */
+    fun dealStages(dealName: String): DealStagesResponse {
+        val latest = aiToolRunService.latestSuccessRunsForDeal(dealName)
+        val stages = AnalysisType.PIPELINE.mapNotNull { type ->
+            val run = latest[type.tool] ?: return@mapNotNull null
+            DealStage(
+                analysisType = type.name,
+                runId = requireNotNull(run.id),
+                request = run.requestJson?.let { runCatching { objectMapper.readTree(it) }.getOrNull() },
+                result = run.resultJson?.let { runCatching { objectMapper.readTree(it) }.getOrNull() },
+            )
+        }
+        return DealStagesResponse(dealName, stages)
+    }
+
     /** 분석 이력 상세 — 저장된 입력/결과 JSON 을 그대로 반환. 테넌트 스코프(IDOR 차단). */
     fun getRun(id: Long): RunDetail {
         val r = aiToolRunService.get(id)

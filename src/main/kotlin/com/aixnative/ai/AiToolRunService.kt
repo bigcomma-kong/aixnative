@@ -88,6 +88,25 @@ class AiToolRunService(private val repository: AiToolRunRepository) {
         )
     }
 
+    /**
+     * 같은 딜의 단계별 최신 성공 런(tool → AiToolRun). 테넌트/유저 스코프.
+     * 결과 합본 화면(딜 한 건의 스크리닝·시장조사·언더라이팅·투심을 한 번에)에서 사용.
+     */
+    @Transactional(readOnly = true)
+    fun latestSuccessRunsForDeal(dealName: String): Map<String, AiToolRun> {
+        val current = TenantContext.require()
+        val runs = repository.findByTenantIdAndOwnerUserIdAndDealNameAndDeletedAtIsNullOrderByIdDesc(
+            current.tenantId,
+            current.userId,
+            dealName,
+        )
+        val latest = LinkedHashMap<String, AiToolRun>()
+        for (run in runs) {
+            if (run.status == RunStatus.SUCCESS && !latest.containsKey(run.tool)) latest[run.tool] = run
+        }
+        return latest
+    }
+
     /** 어드민 전용 — 전 테넌트 활성 런(테넌트 격리 의도적 우회). 호출부가 ADMIN 가드. */
     @Transactional(readOnly = true)
     fun listAllAdmin(): List<AiToolRun> = repository.findByDeletedAtIsNullOrderByIdDesc()
