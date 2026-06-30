@@ -508,7 +508,12 @@ function DeepReportPanel({ report, saved = false, onClose }: { report: MarketDee
         </div>
       )}
 
-      {report.summary && <p className="deep-summary">{report.summary}</p>}
+      {report.summary && (
+        <div className="deep-thesis">
+          <span className="deep-thesis-k">핵심 논지</span>
+          <p className="deep-summary">{report.summary}</p>
+        </div>
+      )}
 
       {report.sectors.length > 0 && (
         <div className="deep-board">
@@ -521,7 +526,10 @@ function DeepReportPanel({ report, saved = false, onClose }: { report: MarketDee
                   {s.stance && <span className="ds-stance">{s.stance}</span>}
                 </div>
                 {s.score != null && (
-                  <div className="ds-bar"><span style={{ width: `${Math.max(0, Math.min(100, s.score))}%` }} /><em>{s.score}</em></div>
+                  <div className="ds-bar-row">
+                    <div className="ds-bar"><span style={{ width: `${Math.max(0, Math.min(100, s.score))}%` }} /></div>
+                    <span className="ds-score">{s.score}</span>
+                  </div>
                 )}
                 {s.note && <p className="ds-note">{s.note}</p>}
               </div>

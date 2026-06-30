@@ -304,7 +304,11 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
           </div>
 
           <div className="actions">
-            <p className="stage-caption">권장 순서 · <b>각 단계는 독립 실행</b> 가능 — 1번부터 안 해도, 원하는 단계만 바로 실행하세요.</p>
+            <button type="submit" className="btn-ghost free-calc" disabled={busy !== 'none'}>
+              {busy === 'proforma' ? '계산 중…' : 'ProForma 계산 (무료)'}
+              <span className="free-calc-sub">IRR·DSCR 등 지표 — 크레딧 차감 없음</span>
+            </button>
+            <p className="stage-caption">무료 계산으로 지표를 먼저 본 뒤 <b>AI 분석</b>을 실행하세요 · <b>각 단계 독립 실행</b> 가능.</p>
             <div className="stage-grid" role="list" aria-label="분석 파이프라인 — 권장 순서, 각 단계 독립 실행 가능">
               {STAGES.map((s, i) => (
                 <Fragment key={s.type}>
@@ -320,9 +324,6 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
                 </Fragment>
               ))}
             </div>
-            <button type="submit" className="btn-ghost" disabled={busy !== 'none'}>
-              {busy === 'proforma' ? '계산 중…' : 'ProForma만 계산 (무료)'}
-            </button>
             <p className="hint">단계마다 AI 1회 호출 = 분석별 1~5크레딧. 같은 딜 이름으로 단계를 쌓으면 보고서에 합본됩니다.</p>
           </div>
           {error && <p className="error">{error}</p>}

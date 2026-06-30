@@ -892,7 +892,15 @@ textarea:hover { border-color: var(--ink-faint); }
 textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-ring); }
 
 /* 분석 파이프라인 — 1→2→3→4 권장 흐름(번호·화살표). 단, 각 단계 독립 실행 가능. */
-.stage-caption { margin: 0 0 0.5rem; font-size: 0.74rem; color: var(--ink-faint); line-height: 1.4; }
+/* 무료 ProForma — 권장 첫 단계(맨 위, 무위험). 유료 단계와 구분되게 액센트 틴트 + 2줄. */
+.free-calc {
+  display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
+  padding: 0.7rem 1rem; font-weight: 700;
+  background: var(--accent-tint); color: var(--accent); border: 1px solid var(--accent-ring);
+}
+.free-calc:hover:not(:disabled) { background: color-mix(in oklch, var(--accent) 14%, var(--surface)); }
+.free-calc-sub { font-size: 0.72rem; font-weight: 500; color: var(--ink-soft); }
+.stage-caption { margin: 0.7rem 0 0.5rem; font-size: 0.74rem; color: var(--ink-faint); line-height: 1.4; }
 .stage-grid { display: flex; flex-direction: column; gap: 0.3rem; }
 .stage-arrow { align-self: center; color: var(--ink-faint); font-size: 0.85rem; line-height: 1; }
 .stage-btn {
@@ -1929,7 +1937,16 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
   font-family: var(--font-display); font-size: clamp(1.25rem, 1rem + 1.2vw, 1.7rem);
   letter-spacing: -0.02em; line-height: 1.2; margin: 0 0 0.5rem;
 }
-.deep-summary { color: var(--ink-soft); line-height: 1.6; margin: 0 0 1.3rem; max-width: 80ch; }
+/* 핵심 논지 — 회색 통문단 대신 하우스뷰 콜아웃 */
+.deep-thesis {
+  margin: 0 0 1.3rem; background: var(--surface-sunken);
+  border-left: 3px solid var(--accent); border-radius: var(--r-sm); padding: 0.75rem 1rem;
+}
+.deep-thesis-k {
+  display: inline-block; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 0.3rem;
+}
+.deep-summary { color: var(--ink); line-height: 1.7; margin: 0; max-width: 80ch; }
 .deep-sections { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem 1.4rem; }
 .deep-section h4 { font-size: 0.92rem; letter-spacing: -0.01em; margin: 0 0 0.35rem; color: var(--accent-press); }
 .deep-section p { color: var(--ink); font-size: 0.88rem; line-height: 1.55; margin: 0; }
@@ -1966,9 +1983,13 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 .deep-sector.up .ds-stance { color: oklch(45% 0.13 150); background: oklch(94% 0.05 150); }
 .deep-sector.down .ds-stance { color: oklch(48% 0.18 25); background: oklch(95% 0.04 25); }
 .deep-sector.neutral .ds-stance { color: var(--ink-faint); background: var(--accent-tint); }
-.ds-bar { position: relative; height: 5px; border-radius: 99px; background: var(--accent-tint); margin: 0.5rem 0; }
+/* 점수 바 + 숫자를 한 줄로(절대배치 제거 → 위 줄과 겹침 해결) */
+.ds-bar-row { display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0; }
+.ds-bar { flex: 1; height: 5px; border-radius: 99px; background: var(--accent-tint); }
 .ds-bar span { display: block; height: 100%; border-radius: 99px; background: var(--accent); }
-.ds-bar em { position: absolute; right: 0; top: -1.05rem; font-size: 0.72rem; font-style: normal; color: var(--ink-faint); }
+.ds-score { flex: none; font-size: 0.74rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink-soft); min-width: 1.6rem; text-align: right; }
+.deep-sector.up .ds-bar span { background: oklch(64% 0.15 150); }
+.deep-sector.down .ds-bar span { background: oklch(62% 0.2 25); }
 .ds-note { font-size: 0.8rem; color: var(--ink-soft); line-height: 1.45; margin: 0.3rem 0 0; }
 
 .deep-scn-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8rem; }
