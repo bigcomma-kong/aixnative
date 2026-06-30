@@ -117,9 +117,11 @@ object CreGuidelines {
     // 신규 트랙 가이드라인 텍스트
     // ════════════════════════════════════════════════════════════════════
 
-    /** 매각 BOV 가이드라인 — 할인율 밴드·매각방식·매도자 우선순위·Quick-Hit 리스크 */
-    fun bovGuidelineText(assetType: String?): String =
-        """
+    /** 매각 BOV 가이드라인 — 할인율 밴드·매각방식·매도자 우선순위·Quick-Hit 리스크 (자산유형 분기) */
+    fun bovGuidelineText(assetType: String?): String {
+        val applied = assetApplyBlock(assetType) +
+            "\n- DCF 할인율 기본 ${bovDefaultDiscountPct(assetType)}%, Exit Cap 기본 ${bovDefaultExitCapPct(assetType)}% (시장 변동 시 조정)"
+        return applied + "\n\n" + """
         [매각 BOV 가이드라인 (한국 2026)]
         - 자산유형별 DCF 할인율: 코어오피스 7.5~8.5%, 코어물류 8.0~9.0%, 호텔 9.5~11.0%
         - Exit Cap: 시장 Cap + 25~50bps (보수적)
@@ -144,6 +146,7 @@ object CreGuidelines {
         - Stabilized NOI 불확실 → 12M Trailing + Forward 12M 평균
         - 조기상환 페널티 미공개 → 5~10% 가정
         """.trimIndent()
+    }
 
     /** BOV DCF 할인율 기본값 (자산유형별 밴드 중앙값, %) */
     fun bovDefaultDiscountPct(assetType: String?): Double {
@@ -186,9 +189,9 @@ object CreGuidelines {
         [민감도] Exit Cap ±50~100bps / 임대료 ±50bps / 금리 ±100bps
         """.trimIndent().format(REFI_DSCR, OPERATION_DSCR, SELL_IRR_SPREAD_BPS, REFI_DSCR, REFI_IRR_IMPROVE_BPS)
 
-    /** 개발사업 타당성 가이드라인 */
+    /** 개발사업 타당성 가이드라인 (자산유형 분기 — 대상 자산의 안정화 벤치마크·고유지표 주입) */
     fun devFeasibilityGuidelineText(assetType: String?): String =
-        """
+        assetApplyBlock(assetType) + "\n\n" + """
         [개발 타당성 가이드라인 (한국 2026)]
         - 총사업비 구성: 토지(매입+취득세+등기+멸실/보상) + 공사(직공+부대+설계감리+인플레) + 금융비(PF이자+수수료+보증료) + 마케팅/기타 + 우발비 5~10%%
         - 평당 공사비(만원): 오피스PB 850~1,100 / 오피스A 700~900 / 물류A 280~360 / 콜드체인 450~600 / 호텔4-5성 1,500~2,200 / 호텔비즈 900~1,400 / 리테일 800~1,200
@@ -247,19 +250,46 @@ object CreGuidelines {
             MIN_EM, MAX_LTV_PCT, MIN_DSCR, MIN_COC_PCT,
         )
 
+    /**
+     * 자산유형별 벤치마크 + 유형 "고유 지표" 블록. 유형마다 분석·검증 항목이 달라지도록 다줄로 방출한다.
+     * (호텔=ADR·Occ·RevPAR·GOP, 물류=삼중순임대·임대료·스펙, 리테일=매출연동임대·점유비, 오피스=WALT·Loss-to-Lease)
+     */
     private fun benchmarkByAsset(assetType: String?): String {
         val t = (assetType ?: "").lowercase()
         return when {
-            t.contains("office") || t.contains("오피스") ->
-                "- 오피스 PB급 Cap 4.0~4.8% / A급 4.8~5.5%, 서울코어 평당 1,200~2,500만원, Occ 88~90%+"
-            t.contains("logi") || t.contains("물류") ->
-                "- 물류 Class A 수도권 Cap 4.5~5.5%, 평당 350~500만원, Occ 90%+"
-            t.contains("hotel") || t.contains("호텔") ->
-                "- 호텔 4-5성 서울 Cap 6.0~7.5%, ADR 25만원+, Occ 72%+"
-            t.contains("retail") || t.contains("리테일") ->
-                "- 리테일 Cap 5.0~6.5% (입지 편차 큼), 핵심상권 우선"
+            t.contains("office") || t.contains("오피스") -> """
+                - [오피스] Cap: PB급 4.0~4.8% / A급 4.8~5.5% / B급 5.5~6.5%
+                - 평당 매매가: 서울 코어(GBD·CBD·YBD) 1,200~2,500만원, 분당/판교 900~1,400만원
+                - 임대: 명목 Occ 88~92%, 렌트프리(2~4개월) 반영한 실효임대료, 전용률·평당 관리비
+                - 유형 고유지표: WALT(가중평균잔여임차기간), Top1 임차 집중도, Loss-to-Lease(갱신 인상여력)
+            """.trimIndent()
+            t.contains("logi") || t.contains("물류") -> """
+                - [물류] Cap: 수도권 Class A 4.5~5.5% / 상온 일반 5.5~6.5% / 저온(콜드체인) 5.0~6.0%
+                - 평당 매매가 350~500만원(콜드체인 프리미엄), 임대료 평당 월 3.5~5.5만원, Occ 90%+
+                - 임대구조: 삼중순임대(Triple-Net — 임차인이 세금·보험·관리비 부담) 여부, 단일 vs 멀티임차, 임차인 신용
+                - 유형 고유지표: 천장고·바닥하중·도크 수, 인터체인지 접근성, 임대료 상승률(연 3~4%)
+            """.trimIndent()
+            t.contains("hotel") || t.contains("호텔") -> """
+                - [호텔] Cap: 서울 4-5성 6.0~7.5% / 비즈니스 7.0~8.5%
+                - 운영지표(필수): ADR(객실단가, 4-5성 서울 25만원+), 점유율 Occ 70~78%, RevPAR(=ADR×Occ)
+                - 손익구조: GOP 마진 35~45%, 위탁운영(브랜드·수수료) vs 임대(고정·변동임대료) 구분
+                - 유형 고유지표: 객실수·등급, RevPAR 인덱스(경쟁군 대비), 식음·부대 매출 비중, RevPAR 인상률 3~5%
+            """.trimIndent()
+            t.contains("retail") || t.contains("리테일") -> """
+                - [리테일] Cap 5.0~6.5%(입지 편차 큼), 핵심상권/스트리트/근린 구분
+                - 임대구조: 기준임대료 + 매출연동임대(Percentage Rent), 임차인 매출(Sales/㎡)·점유비(Occupancy Cost) 점검
+                - 임대: 앵커 임차인·MD 구성, 공실·중도해지율, 임차인 매출 추세
+                - 유형 고유지표: 유동인구·집객력, 온라인 잠식 노출, 앵커 만기 집중
+            """.trimIndent()
             else ->
-                "- 오피스 4.0~5.5% / 물류 4.5~6.0% / 호텔 6.0~8.5% (자산유형 확인 필요)"
+                "- 오피스 4.0~5.5% / 물류 4.5~6.0% / 호텔 6.0~8.5% / 리테일 5.0~6.5% (자산유형 확인 필요 — 유형 확정 시 고유지표 분석)"
         }
     }
+
+    /** BOV·개발 트랙에 주입할 "이 자산유형 적용" 블록 — 유형별 할인율·Exit Cap 기본값 + 고유지표. */
+    private fun assetApplyBlock(assetType: String?): String =
+        """
+        [이 자산유형 적용 — %s 기준]
+        %s
+        """.trimIndent().format(assetType ?: "유형 미지정", benchmarkByAsset(assetType))
 }

@@ -29,17 +29,34 @@ class CreditServiceTest(
     @Test
     fun `debit decrements balance and empties after N analyses`() {
         creditService.grantSignupCredits(tenantId, userId)
-        repeat(5) { creditService.debitForAnalysis(tenantId, userId) }
+        repeat(5) { creditService.debitForAnalysis(tenantId, userId, 1) }
         assertEquals(0, creditService.balance(tenantId, userId))
     }
 
     @Test
     fun `debit with empty balance raises 402 paywall error`() {
         creditService.grantSignupCredits(tenantId, userId)
-        repeat(5) { creditService.debitForAnalysis(tenantId, userId) }
+        repeat(5) { creditService.debitForAnalysis(tenantId, userId, 1) }
         assertFailsWith<InsufficientCreditsException> {
-            creditService.debitForAnalysis(tenantId, userId)
+            creditService.debitForAnalysis(tenantId, userId, 1)
         }
+    }
+
+    @Test
+    fun `debit by N decrements by that amount`() {
+        creditService.grantSignupCredits(tenantId, userId) // 5 (test profile)
+        creditService.debitForAnalysis(tenantId, userId, 3)
+        assertEquals(2, creditService.balance(tenantId, userId))
+    }
+
+    @Test
+    fun `debit raises 402 when balance is below the cost`() {
+        creditService.grantSignupCredits(tenantId, userId) // 5
+        creditService.debitForAnalysis(tenantId, userId, 3) // 2 left
+        assertFailsWith<InsufficientCreditsException> {
+            creditService.debitForAnalysis(tenantId, userId, 5) // needs 5, has 2
+        }
+        assertEquals(2, creditService.balance(tenantId, userId)) // unchanged on failure
     }
 
     @Test

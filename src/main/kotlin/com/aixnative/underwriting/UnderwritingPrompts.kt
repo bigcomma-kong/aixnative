@@ -66,15 +66,17 @@ object UnderwritingPrompts {
             "                \"cap_rate_pct\": null, \"occupancy_pct\": null, \"walt_yr\": null,\n" +
             "                \"top1_tenant_pct\": null, \"loss_to_lease_pct\": null, \"opex_ratio_pct\": null },\n" +
             "  \"benchmark_eval\": [ { \"metric\": \"cap_rate\", \"value\": null, \"guideline\": \"\", \"rating\": \"GREEN|YELLOW|RED\" } ],\n" +
-            "  \"thesis\": \"투자 논리 후보 2~3문장(한국어)\",\n" +
+            "  \"key_points\": [ \"투자 논리 핵심 근거 한 줄(≤50자, 한국어)\" ],\n" +
             "  \"red_flags\": [ { \"code\": \"R1\", \"flag\": \"\", \"impact\": \"HIGH|MEDIUM|LOW\", \"verify\": \"검증 필요사항\" } ],\n" +
             "  \"green_flags\": [ \"긍정 요인(한국어)\" ],\n" +
             "  \"verdict\": \"GO|CONDITIONAL|NO_GO\",\n" +
-            "  \"verdict_reason\": \"3문장 이내 사유(한국어)\",\n" +
-            "  \"next_steps\": [ \"다음 단계 권고(한국어)\" ],\n" +
+            "  \"verdict_reason\": \"핵심 결론 1~2문장(≤90자, 한국어)\",\n" +
+            "  \"conditions\": [ \"CONDITIONAL 시 충족 조건 한 줄(≤60자, 한국어) — GO/NO_GO 면 빈 배열\" ],\n" +
+            "  \"next_steps\": [ \"다음 단계 권고 한 줄(한국어)\" ],\n" +
             "  \"confidence\": \"HIGH|MEDIUM|LOW\"\n" +
             "}\n\n" +
             "[판단 지침]\n" +
+            "- 모든 서술은 짧고 스캔 가능하게. 긴 문단(주저리주저리) 금지 — key_points 는 3~4개의 짧은 근거 한 줄로, 문장을 이어붙이지 말 것.\n" +
             "- Cap Rate 가이드라인 미달 → RED. Loss-to-Lease 큰 경우 업사이드(green_flags)\n" +
             "- WALT 짧음·Top1 집중 과다(50%+)·신규공급 과다·OpEx 비정상은 Red Flag\n" +
             "- Dealbreaker(환경/권리분쟁/WALT 1년미만+핵심만기임박/호가 시장+20%) 발견 시 verdict=NO_GO\n" +

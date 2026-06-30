@@ -7,4 +7,7 @@ interface NewsSubscriberRepository : JpaRepository<NewsSubscriber, Long> {
     fun findByUnsubToken(token: String): NewsSubscriber?
     fun findAllByActiveTrue(): List<NewsSubscriber>
     fun countByActiveTrue(): Long
+
+    /** 계정 삭제 정리용 — 해당 이메일 구독 삭제. */
+    fun deleteByEmail(email: String)
 }

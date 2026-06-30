@@ -4,6 +4,7 @@ import com.aixnative.common.tenant.TenantContext
 import com.aixnative.common.web.NotFoundException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Duration
 import java.time.Instant
 
 /**
@@ -68,6 +69,23 @@ class AiToolRunService(private val repository: AiToolRunRepository) {
             }
         }
         return latest
+    }
+
+    /**
+     * 최근 [withinMinutes] 분 내 같은 도구의 성공 런(테넌트/유저 스코프, 최신순).
+     * 중복 분석 가드용 — 호출부가 requestJson 을 비교해 동일 입력 재실행을 판정.
+     */
+    @Transactional(readOnly = true)
+    fun findRecentByTool(tool: String, withinMinutes: Long): List<AiToolRun> {
+        val current = TenantContext.require()
+        val cutoff = Instant.now().minus(Duration.ofMinutes(withinMinutes))
+        return repository.findByTenantIdAndOwnerUserIdAndToolAndStatusAndCreatedAtAfterAndDeletedAtIsNullOrderByIdDesc(
+            current.tenantId,
+            current.userId,
+            tool,
+            RunStatus.SUCCESS,
+            cutoff,
+        )
     }
 
     /** 어드민 전용 — 전 테넌트 활성 런(테넌트 격리 의도적 우회). 호출부가 ADMIN 가드. */

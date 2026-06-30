@@ -15,6 +15,8 @@ interface MarketFeedViewProps {
   onCreditBalance: (balance: number) => void
   /** 크레딧 소진(402) 시 중앙 페이월 안내 노출. */
   onNeedCredits: () => void
+  /** 분석유형 id → 크레딧 단가(서버 단일 소스). 미로딩 시 숫자 생략. */
+  toolCosts?: Record<string, number>
 }
 
 const PAGE_SIZE = 60
@@ -26,7 +28,8 @@ type AssetFilter = (typeof ASSET_FILTERS)[number]
  * 브리핑으로 큰 그림을 보고, 자산유형으로 딜을 좁혀 그 자리에서 AI 분석으로 진입.
  * 데이터는 스케줄러가 매일 자동 수집(이력 누적) — 관리자는 즉시 수집/추가/삭제.
  */
-export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeedCredits }: MarketFeedViewProps) {
+export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeedCredits, toolCosts }: MarketFeedViewProps) {
+  const deepCost = toolCosts?.['MARKET_DEEP_REPORT']
   const [items, setItems] = useState<MarketFeedItem[]>([])
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
@@ -267,7 +270,7 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeed
             <span>무료 브리핑보다 깊은 섹터·모멘텀·액션 리포트 — Claude 기반</span>
           </div>
           <button className="btn-primary" onClick={() => void runDeepReport()} disabled={deepBusy}>
-            {deepBusy ? 'AI 분석 중…' : 'AI 심층 분석 · 1크레딧'}
+            {deepBusy ? 'AI 분석 중…' : `AI 심층 분석 · ${deepCost != null ? `${deepCost}크레딧` : '크레딧'}`}
           </button>
         </div>
       )}

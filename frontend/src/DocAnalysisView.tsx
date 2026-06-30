@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { TrustBadge } from './TrustBadge'
 import {
   api, ApiError, isBovCalc, isBizHealthCalc, isPriceForecastCalc,
   type BizHealthCalc, type BovInput, type DealExtract, type DevFeasibilityInput, type DocAnalysisType, type DocAnalyzeInput,
@@ -12,6 +13,13 @@ interface DocAnalysisViewProps {
   onNeedCredits: () => void
   /** 시장 피드 '이 딜 분석하기'로 들어올 때 딜/기사 원문. 들어오면 자동으로 추출 실행. */
   initialDealText?: string
+  /** 분석유형 id → 크레딧 단가(서버 단일 소스). 미로딩 시 숫자 생략. */
+  toolCosts?: Record<string, number>
+}
+
+/** "N크레딧" 라벨 — 단가 미로딩 시 숫자 생략. */
+function creditLabel(cost?: number): string {
+  return cost != null ? `${cost}크레딧` : '크레딧'
 }
 
 interface DocTypeMeta {
@@ -128,7 +136,7 @@ function verdictTone(verdict?: string): 'go' | 'no' | 'cond' {
   return 'cond'
 }
 
-export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealText }: DocAnalysisViewProps) {
+export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealText, toolCosts }: DocAnalysisViewProps) {
   const [type, setType] = useState<DocAnalysisType>('DEV_FEASIBILITY')
   const [dealName, setDealName] = useState('')
   const [assetType, setAssetType] = useState<string>('오피스')
@@ -312,6 +320,13 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
         </div>
       </div>
 
+      <ol className="use-steps" aria-label="사용 방법">
+        <li><span className="us-n">1</span><span className="us-t"><b>분석 선택</b> 10종 중 목적에 맞는 분석을 고릅니다</span></li>
+        <li><span className="us-n">2</span><span className="us-t"><b>입력</b> <span className="req">*</span> 표시는 필수, 나머지는 선택입니다</span></li>
+        <li><span className="us-n">3</span><span className="us-t"><b>실행</b> 분석별 1~5크레딧 — 결과는 우측·이력에 저장됩니다</span></li>
+      </ol>
+      <p className="use-tip">처음이라면 위 <b>딜/기사 붙여넣기</b>로 시작하면 핵심 값이 자동으로 채워집니다 (무료).</p>
+
       <div className="layout">
         <form className="card input-panel" onSubmit={(e) => { e.preventDefault(); run() }}>
           <div className="deal-ingest">
@@ -335,17 +350,31 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
             {DOC_TYPES.map((d) => (
               <button key={d.type} type="button" className="doc-type-btn" aria-pressed={type === d.type}
                 onClick={() => selectType(d.type)}>
-                <span className="dt-label">{d.label}</span>
+                <span className="dt-top">
+                  <span className="dt-label">{d.label}</span>
+                  {toolCosts?.[d.type] != null && <span className="dt-cost">{toolCosts[d.type]}크레딧</span>}
+                </span>
                 <span className="dt-hint">{d.hint}</span>
               </button>
             ))}
           </div>
 
+          <div className="doc-guide" role="note">
+            <div className="dg-row"><span className="dg-k">필요 입력</span><span className="dg-v">{meta.needs}</span></div>
+            <div className="dg-row"><span className="dg-k">산출</span><span className="dg-v">{meta.gives}</span></div>
+          </div>
+
           <div className="form-grid">
-            <div className="full">
-              <label htmlFor="docDeal">딜/자산 이름 (선택)</label>
+            <div>
+              <label htmlFor="docDeal">딜/자산 이름 <span className="opt">(선택)</span></label>
               <input id="docDeal" value={dealName} onChange={(e) => setDealName(e.target.value)} placeholder="예: 강남 오피스" />
             </div>
+            {!ddMode && (
+              <div>
+                <label htmlFor="docLoc">위치 / 권역 <span className="opt">(선택 · 실측 검증)</span></label>
+                <input id="docLoc" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="예: 서울 강남구, 판교" />
+              </div>
+            )}
             <div className="full">
               <label>자산유형</label>
               <div className="seg" role="group" aria-label="자산유형">
@@ -354,15 +383,9 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
                 ))}
               </div>
             </div>
-            {!ddMode && (
-              <div className="full">
-                <label htmlFor="docLoc">위치 / 권역 (선택 · 넣으면 실측 검증)</label>
-                <input id="docLoc" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="예: 서울 강남구, 판교" />
-              </div>
-            )}
             {parcelMode && (
               <div className="full">
-                <label htmlFor="parcelAddr">필지 주소 (선택 · 공시지가·용도지역 조회)</label>
+                <label htmlFor="parcelAddr">필지 주소 <span className="opt">(선택 · 공시지가·용도지역 조회)</span></label>
                 <input id="parcelAddr" value={parcelAddress} onChange={(e) => setParcelAddress(e.target.value)}
                   placeholder="번지까지: 예 서울 강남구 역삼동 736-1" />
               </div>
@@ -370,12 +393,12 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
             {ddMode && (
               <>
                 <div className="full">
-                  <label htmlFor="ddBizNo">사업자등록번호 *</label>
+                  <label htmlFor="ddBizNo">사업자등록번호 <span className="req">*</span></label>
                   <input id="ddBizNo" value={bizNo} onChange={(e) => setBizNo(e.target.value)}
                     placeholder="10자리 (예: 124-81-00998)" inputMode="numeric" />
                 </div>
                 <div className="full">
-                  <label htmlFor="ddName">상호 (선택 · 기업정보·규모 조회)</label>
+                  <label htmlFor="ddName">상호 <span className="opt">(선택 · 기업정보·규모 조회)</span></label>
                   <input id="ddName" value={counterpartyName} onChange={(e) => setCounterpartyName(e.target.value)}
                     placeholder="예: 삼성전자주식회사" />
                 </div>
@@ -387,7 +410,7 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
                 <div className="calc-grid">
                   {(type === 'BOV' ? BOV_FIELDS : DEV_FIELDS).map((f) => (
                     <div key={f.k} className="calc-field">
-                      <label htmlFor={`calc-${f.k}`}>{f.label}{f.req ? ' *' : ''}</label>
+                      <label htmlFor={`calc-${f.k}`}>{f.label}{f.req ? <span className="req"> *</span> : <span className="opt"> (선택)</span>}</label>
                       <input id={`calc-${f.k}`} type="number" inputMode="decimal" step="any"
                         value={calcValues[f.k] ?? ''} placeholder={f.def ?? (f.hint ?? '')}
                         onChange={(e) => setCalcValues((s) => ({ ...s, [f.k]: e.target.value }))} />
@@ -399,7 +422,7 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
             )}
             {forecastMode && (
               <div className="full" ref={forecastRef}>
-                <label>가격 예측 입력 (NOI·연면적 중 하나는 필수)</label>
+                <label>가격 예측 입력 <span className="req">* NOI·연면적 중 하나 필수</span></label>
                 <div className="calc-grid">
                   {FORECAST_FIELDS.map((f) => (
                     <div key={f.k} className="calc-field">
@@ -415,7 +438,9 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
               </div>
             )}
             <div className="full">
-              <label htmlFor="docText">{calcMode || ddMode || forecastMode ? '추가 컨텍스트 (선택)' : '분석 대상 정보 *'}</label>
+              <label htmlFor="docText">{calcMode || ddMode || forecastMode
+                ? <>추가 컨텍스트 <span className="opt">(선택)</span></>
+                : <>분석 대상 정보 <span className="req">*</span></>}</label>
               <textarea id="docText" rows={calcMode || ddMode || forecastMode ? 3 : 6} value={documentText} onChange={(e) => setDocumentText(e.target.value)}
                 placeholder={calcMode || ddMode || forecastMode ? '정성 정보(포지셔닝·매도자 우선순위·인허가 상황 등)를 자유롭게 덧붙이면 서술 품질이 올라갑니다. 핵심 사실은 위 입력으로 확정합니다.' : meta.placeholder} />
             </div>
@@ -423,12 +448,13 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
 
           <div className="actions">
             <button type="submit" className="btn-primary" disabled={busy}>
-              {busy ? '분석 중…' : `${meta.label} 분석 · 1크레딧`}
+              {busy ? '분석 중…' : `${meta.label} 분석 · ${creditLabel(toolCosts?.[type])}`}
             </button>
             <p className="hint">{calcMode || ddMode || forecastMode
-              ? '핵심 사실은 코드·공공데이터로 확정하고(환각 차단), AI 는 그 확정 사실을 근거로 서술·판정만 합니다. 같은 딜 이름으로 쌓으면 이력에서 함께 보입니다.'
+              ? '정성 정보를 자유롭게 덧붙이면 서술 품질이 올라갑니다. 같은 딜 이름으로 쌓으면 이력에서 함께 보입니다.'
               : '자유 텍스트로 자산·운영·토지 정보를 입력하면 단계별 전문 분석을 생성합니다. 같은 딜 이름으로 쌓으면 이력에서 함께 보입니다.'}</p>
           </div>
+          {(calcMode || ddMode || forecastMode) && <TrustBadge />}
           {error && <p className="error">{error}</p>}
         </form>
 
@@ -436,34 +462,42 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
           {result ? (
             <DocResult res={result} label={DOC_LABEL[result.analysisType] ?? result.analysisType} />
           ) : (
-            <div className="result-empty">
-              <div className="empty-state">
-                <div className="empty-ico" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <path d="M14 2v6h6M9 13h6M9 17h4" />
-                  </svg>
-                </div>
-                <h3>심화 분석 결과가 여기에 표시됩니다</h3>
-                <p>분석 유형을 선택하고 대상 정보를 입력해 실행하세요. BOV·개발 타당성·세무·시장조사·실사를 지원합니다.</p>
-                <div className="empty-preview" aria-hidden="true">
-                  <div className="empty-prev-metrics">
-                    {['가치평가', '판정', '근거'].map((k) => (
-                      <div className="epm" key={k}><span className="epm-k">{k}</span><span className="epm-bar" /></div>
-                    ))}
-                  </div>
-                  <div className="empty-prev-chart">
-                    {[52, 40, 66, 48, 72].map((h, i) => <i key={i} style={{ height: `${h}%` }} />)}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <ResultPreview meta={meta} />
           )}
         </div>
       </div>
 
       <DocHistoryPanel version={historyVersion} />
     </>
+  )
+}
+
+/** 결과 전 우측 패널 — 선택한 분석에 맞춘 '결과 미리보기'(고스트)로 허전함 제거 + 무엇이 나오는지 안내. */
+function ResultPreview({ meta }: { meta: DocTypeMeta }) {
+  return (
+    <div className="rp">
+      <div className="rp-top">
+        <div className="empty-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <path d="M14 2v6h6M9 13h6M9 17h4" />
+          </svg>
+        </div>
+        <div>
+          <h3>{meta.label} · 결과 미리보기</h3>
+          <p>{meta.gives} — 왼쪽에 입력하고 실행하면 이 자리에 채워집니다.</p>
+        </div>
+      </div>
+      <div className="rp-skeleton" aria-hidden="true">
+        <div className="rp-metrics">
+          {['가치평가', '가격범위', '판정'].map((k) => (
+            <div className="rp-card" key={k}><span>{k}</span><i /></div>
+          ))}
+        </div>
+        <div className="rp-verdict"><span /><i /></div>
+        <div className="rp-lines">{[100, 86, 94, 72, 88].map((w, i) => <span key={i} style={{ width: `${w}%` }} />)}</div>
+      </div>
+    </div>
   )
 }
 

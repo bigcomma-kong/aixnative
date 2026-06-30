@@ -45,6 +45,16 @@ class UnderwritingController(
     ): ApiResponse<UnderwriteResponse> = ApiResponse.ok(service.analyze(type, req))
 
     /**
+     * 무료 — 중복 분석 사전 확인. 동일 입력으로 최근(기본 60분) 같은 단계를 이미 실행했는지 알려준다.
+     * AI·크레딧 미사용. 프런트가 실행 직전 호출해 재실행 전 사용자 확인을 받는 용도.
+     */
+    @PostMapping("/analyze/{type}/check-duplicate")
+    fun checkDuplicate(
+        @PathVariable type: AnalysisType,
+        @Valid @RequestBody req: UnderwriteRequest,
+    ): ApiResponse<DuplicateCheckResponse> = ApiResponse.ok(service.checkDuplicate(type, req))
+
+    /**
      * 과금 — 문서/텍스트 기반 분석 단계(매입 추가분 + 신규 트랙).
      * UNDERWRITING_GUIDE / BUILDING_RESEARCH / TAX_PRICE_DIAGNOSIS / BOV / AM_QUARTERLY /
      * HOLD_SELL_REFI / DEV_FEASIBILITY / MARKET_RESEARCH_DEEP. 각 호출 = 1 크레딧(성공 시).

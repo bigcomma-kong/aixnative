@@ -3,6 +3,8 @@ import type { AuthResult } from './api'
 
 interface LandingViewProps {
   onAuthed: (result: AuthResult) => void
+  /** 소셜 로그인 실패 시 메시지(App 해시 파싱). */
+  oauthError?: string | null
 }
 
 /* ── 작은 인라인 아이콘(외부 라이브러리 없이) ── */
@@ -96,7 +98,7 @@ const FEATURES = [
 
 const STEPS = [
   { n: '01', title: '딜 입력', desc: '매입가 - NOI - Cap - LTV - 금리 - 출구 Cap 한 번 입력.' },
-  { n: '02', title: '1클릭 분석', desc: 'ProForma는 무료, AI 심사는 버튼 한 번 = 1크레딧.' },
+  { n: '02', title: '원클릭 분석', desc: 'ProForma는 무료, AI 심사는 버튼 한 번 = 분석별 1~5크레딧.' },
   { n: '03', title: '보고서 확보', desc: '지표 - 차트 - AI 내러티브 - 투심 메모를 즉시 확인하고 공유.' },
 ] as const
 
@@ -109,7 +111,15 @@ const STATS = [
 
 const TRUST = ['자산운용', '디벨로퍼', 'REIT', 'PE / 펀드', '중개법인']
 
-export function LandingView({ onAuthed }: LandingViewProps) {
+/** 전문가 의뢰 vs aixnative — 가격 정당화(숫자는 예시 범위). */
+const COMPARE = [
+  { item: '언더라이팅', detail: 'IRR · DSCR · 민감도', them: '컨설팅 자문 수십만~수백만 원 · 수일', us: '1분 · 3크레딧 (약 3천 원)' },
+  { item: '투심(IC) 메모', detail: 'IC 상정용 종합', them: '애널리스트 수 시간 작업', us: '1분 · 5크레딧' },
+  { item: '매각 BOV 평가', detail: '3-Method 가치범위', them: '감정 · 매각자문 수십만 원+ · 수일', us: '1분 · 5크레딧' },
+  { item: '시장 리서치', detail: '권역 · 매크로 · 하우스뷰', them: '리서치하우스 리포트 · 구독', us: '무료 브리핑 + 심층 5크레딧' },
+] as const
+
+export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
   function focusAuth() {
     document.getElementById('auth')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     setTimeout(() => document.getElementById('email')?.focus(), 450)
@@ -200,12 +210,39 @@ export function LandingView({ onAuthed }: LandingViewProps) {
         <div className="steps-grid">
           {STEPS.map((s) => (
             <div className="step" key={s.n}>
-              <span className="step-n num">{s.n}</span>
-              <h3 className="step-title">{s.title}</h3>
+              <span className="step-n num">{s.n}. {s.title}</span>
               <p className="step-desc">{s.desc}</p>
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="vcompare reveal" aria-labelledby="vc-h">
+        <div className="feat-head">
+          <span className="eyebrow">비용 비교</span>
+          <h2 id="vc-h" className="feat-h">전문가 vs aixnative</h2>
+          <span className="vc-badge">수일 → 1분 · 비용 한 자릿수 천 원대</span>
+        </div>
+        <div className="vc-table" role="table" aria-label="전문가 의뢰와 aixnative 비교">
+          <div className="vc-row vc-row-head" role="row">
+            <span className="vc-cell vc-item" role="columnheader">산출물</span>
+            <span className="vc-cell vc-them" role="columnheader">전문가 / 컨설팅</span>
+            <span className="vc-cell vc-us" role="columnheader">aixnative</span>
+          </div>
+          {COMPARE.map((r) => (
+            <div className="vc-row" role="row" key={r.item}>
+              <span className="vc-cell vc-item" role="cell">
+                <strong>{r.item}</strong><span className="vc-detail">{r.detail}</span>
+              </span>
+              <span className="vc-cell vc-them" role="cell">{r.them}</span>
+              <span className="vc-cell vc-us" role="cell"><Check /> {r.us}</span>
+            </div>
+          ))}
+        </div>
+        <p className="vc-foot">
+          전문가 한 건 비용으로 수십 건을 돌려봅니다.
+          <span className="vc-disc"> * 비용·소요 시간은 예시이며 실제는 사례마다 다릅니다.</span>
+        </p>
       </section>
 
       <section className="auth-section reveal" aria-labelledby="auth-h">
@@ -214,22 +251,22 @@ export function LandingView({ onAuthed }: LandingViewProps) {
           <p className="auth-section-sub">가입 즉시 무료 크레딧. 카드 등록은 필요 없습니다.</p>
           <ul className="auth-bullets">
             <li><Check /> ProForma 지표는 언제나 무료</li>
-            <li><Check /> AI 분석 = 버튼 한 번, 1크레딧</li>
+            <li><Check /> AI 분석 = 버튼 한 번, 분석별 1~5크레딧</li>
             <li><Check /> 보고서 즉시 확인하고 공유</li>
           </ul>
         </div>
         <div className="hero-auth">
-          <AuthView onAuthed={onAuthed} />
+          <AuthView onAuthed={onAuthed} initialError={oauthError} />
         </div>
       </section>
 
       <footer className="landing-footer">
         <div className="brand">aix<span>native</span></div>
-        <p className="landing-disc">
-          * 본 서비스는 정보 제공 목적이며 투자자문이 아닙니다.<br />모든 투자 판단의 책임은 이용자에게 있습니다.
+        <p className="landing-disc" >
+          * 본 서비스는 정보 제공 목적이며 투자자문이 아닙니다. 투자 판단의 책임은 이용자에게 있습니다.
         </p>
         <p className="landing-contact">
-          문의는 <a href="mailto:admin@aixnative.com">admin@aixnative.com</a> 로 연락해 주세요.
+          문의 : <a href="mailto:admin@aixnative.com">admin@aixnative.com</a>
         </p>
         <p className="landing-copy">© aixnative</p>
       </footer>

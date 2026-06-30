@@ -16,7 +16,9 @@ interface CreditLedgerRepository : JpaRepository<CreditLedger, Long> {
     /** Ledger entries newest-first. Ordered by id (monotonic) so same-instant rows stay stable. */
     fun findByTenantIdAndUserIdOrderByIdDesc(tenantId: Long, userId: Long): List<CreditLedger>
 
-      
+    /** 어드민 전용 — 전 사용자 최근 원장(테넌트 격리 의도적 우회). 최신순 상한. */
+    fun findTop300ByOrderByIdDesc(): List<CreditLedger>
 
-
+    /** 계정 삭제 정리용 — 해당 사용자의 원장 전부 삭제. */
+    fun deleteByUserId(userId: Long)
 }

@@ -92,7 +92,29 @@ marketfeed:
 
 # Freemium: free AI-analysis credits granted at signup.
 billing:
-  free-signup-credits: ${FREE_SIGNUP_CREDITS:5}
+  free-signup-credits: ${FREE_SIGNUP_CREDITS:15}
+
+# 크레딧 충전 결제(토스페이먼츠). 일회성 충전. 키는 전부 env/Secret Manager(절대 커밋 금지).
+# clientKey 만 프론트 노출(공개), secretKey 는 서버 전용. 미설정 시 결제 비활성(graceful).
+# 테스트키로 시작 → 사업자등록·PG 심사 후 라이브키로 교체. secret-key 없으면 /config 가 configured=false.
+toss:
+  client-key: ${TOSS_CLIENT_KEY:}
+  secret-key: ${TOSS_SECRET_KEY:}
+  api-url: ${TOSS_API_URL:https://api.tosspayments.com}
+
+# 간편 소셜 로그인(구글/카카오/네이버). 키는 전부 env/Secret Manager(신규 발급, 절대 커밋 금지).
+# 미설정 제공자는 graceful — 해당 버튼이 프론트에서 자동 숨김. 카카오 secret(보안키)은 선택.
+# 각 제공자 콘솔에 등록할 Redirect URI = {APP_BASE_URL}/api/auth/oauth/{google|kakao|naver}/callback
+oauth:
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:}
+    client-secret: ${GOOGLE_CLIENT_SECRET:}
+  kakao:
+    client-id: ${KAKAO_CLIENT_ID:}
+    client-secret: ${KAKAO_CLIENT_SECRET:}
+  naver:
+    client-id: ${NAVER_CLIENT_ID:}
+    client-secret: ${NAVER_CLIENT_SECRET:}
 
 # 실측 시장데이터 공공 API 키 (전부 신규 발급 + env — MASTERN 키 복사 금지).
 # 미설정 시 해당 소스는 graceful degrade(건너뜀) → 분석은 AI 추정 흐름으로 계속.

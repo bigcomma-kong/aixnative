@@ -20,4 +20,8 @@ class BillingController(private val billingService: BillingService) {
         val current = TenantContext.require()
         return ApiResponse.ok(billingService.history(current.tenantId, current.userId))
     }
+
+    /** 분석별 크레딧 단가 + 가입 무료 지급량(프론트 표시용 단일 소스). */
+    @GetMapping("/pricing")
+    fun pricing(): ApiResponse<PricingResponse> = ApiResponse.ok(billingService.pricing())
 }

@@ -73,7 +73,10 @@ export function CreditHistoryView({ onSync }: CreditHistoryViewProps) {
               {data.entries.map((e) => (
                 <tr key={e.id}>
                   <td>{new Date(e.createdAt).toLocaleString('ko-KR')}</td>
-                  <td>{REASON_LABEL[e.reason] ?? e.reason}</td>
+                  <td>
+                    {REASON_LABEL[e.reason] ?? e.reason}
+                    {e.ref && <span className="ledger-ref">{e.ref}</span>}
+                  </td>
                   <td className={`num ${e.delta >= 0 ? 'pos' : 'neg'}`}>{e.delta >= 0 ? `+${e.delta}` : e.delta}</td>
                 </tr>
               ))}

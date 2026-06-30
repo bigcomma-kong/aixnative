@@ -8,11 +8,29 @@ import { CreditHistoryView } from './CreditHistoryView'
 import { AdminView } from './AdminView'
 import { ResetPasswordView } from './ResetPasswordView'
 import { Paywall } from './Paywall'
+import { Checkout } from './Checkout'
+import { PaymentResult, readPaymentCallback, type PaymentCallback } from './PaymentResult'
 
 /** 메일의 `/?reset=<token>` 링크로 진입했는지 — 부팅 시 한 번 읽는다. */
 function readResetToken(): string | null {
   const t = new URLSearchParams(window.location.search).get('reset')
   return t && t.trim() ? t : null
+}
+
+/**
+ * 소셜 로그인 콜백 해시(`/#token=` 또는 `/#oauth_error=`) 소비. 부팅 시 한 번.
+ * 해시(프래그먼트)는 서버로 전송되지 않아 토큰이 로그/Referer 에 남지 않는다. 읽은 뒤 즉시 URL 정리.
+ */
+function consumeOAuthHash(): { token?: string; error?: string } {
+  const raw = window.location.hash.replace(/^#/, '')
+  if (!raw) return {}
+  const h = new URLSearchParams(raw)
+  const token = h.get('token')
+  const error = h.get('oauth_error')
+  if (token || error) {
+    window.history.replaceState(null, '', window.location.pathname + window.location.search)
+  }
+  return { token: token ?? undefined, error: error ?? undefined }
 }
 
 type Plan = 'FREE' | 'PAID'
@@ -30,13 +48,36 @@ function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [booting, setBooting] = useState(true)
   const [tab, setTab] = useState<Tab>('feed')
+  // 분석별 크레딧 단가(서버 단일 소스). 로그인 후 1회 로드해 버튼 라벨에 사용.
+  const [toolCosts, setToolCosts] = useState<Record<string, number>>({})
   // 메일의 비밀번호 재설정 링크로 들어온 경우, 인증 상태와 무관하게 재설정 화면을 띄운다.
   const [resetToken, setResetToken] = useState<string | null>(() => readResetToken())
   // 시장 피드 '이 딜 분석하기' → 심화 분석으로 넘길 딜 원문(진입 신호).
   const [dealSeed, setDealSeed] = useState<string | undefined>(undefined)
+  // 소셜 로그인 콜백 해시 소비(부팅 시 1회). 토큰이 있으면 세션 복원 흐름이 그대로 받아간다.
+  const [oauthHash] = useState(() => consumeOAuthHash())
+  const oauthError: string | null = oauthHash.error ?? null
 
   // 크레딧 소진 시(어느 분석 버튼이든 402) 화면 중앙에 페이월 안내를 띄운다.
   const [showPaywall, setShowPaywall] = useState(false)
+  // 크레딧 충전 결제 모달.
+  const [showCheckout, setShowCheckout] = useState(false)
+  // 토스 결제 후 리다이렉트 콜백(?pay=1&...) — 부팅 시 한 번 읽는다.
+  const [paymentCb, setPaymentCb] = useState<PaymentCallback | null>(() => readPaymentCallback())
+
+  function openCheckout() {
+    setShowPaywall(false)
+    setShowCheckout(true)
+  }
+
+  // 결제 결과 화면 닫기: URL 의 ?pay= 쿼리를 제거하고 잔액을 서버값으로 재동기화.
+  function closePaymentResult() {
+    setPaymentCb(null)
+    window.history.replaceState(null, '', window.location.pathname)
+    if (tokenStore.get()) {
+      api.me().then((me) => patchSession({ creditBalance: me.creditBalance })).catch(() => {})
+    }
+  }
 
   function analyzeDeal(sourceText: string) {
     setDealSeed(sourceText)
@@ -51,6 +92,8 @@ function App() {
 
   // 앱 시작 시 저장된 토큰이 있으면 세션 복원. (plan 은 결제 도입 전까지 FREE; 사용 내역에서 서버값으로 보정)
   useEffect(() => {
+    // 소셜 로그인 콜백으로 받은 토큰을 먼저 저장 → 아래 복원 흐름이 그대로 사용.
+    if (oauthHash.token) tokenStore.set(oauthHash.token)
     if (!tokenStore.get()) {
       setBooting(false)
       return
@@ -80,6 +123,12 @@ function App() {
     }
   }, [needsVerifyRefresh])
 
+  // 세션이 생기면 가격표를 1회 로드(정적 — 모든 유저 동일). 실패 시 라벨은 숫자 생략 폴백.
+  useEffect(() => {
+    if (!session || Object.keys(toolCosts).length > 0) return
+    api.pricing().then((p) => setToolCosts(p.toolCosts)).catch(() => {})
+  }, [session, toolCosts])
+
   function onAuthed(result: AuthResult) {
     setSession({
       email: result.email,
@@ -108,7 +157,17 @@ function App() {
 
   if (resetToken) return <ResetPasswordView token={resetToken} onDone={closeReset} />
   if (booting) return <div className="spinner">불러오는 중…</div>
-  if (!session) return <LandingView onAuthed={onAuthed} />
+  // 토스 결제 리다이렉트로 돌아온 경우: 승인검증·결과 화면을 최우선 표시(로그인 여부 무관).
+  if (paymentCb) {
+    return (
+      <PaymentResult
+        cb={paymentCb}
+        onConfirmed={(balance) => patchSession({ creditBalance: balance })}
+        onDone={closePaymentResult}
+      />
+    )
+  }
+  if (!session) return <LandingView onAuthed={onAuthed} oauthError={oauthError} />
 
   const initial = session.email.trim().charAt(0).toUpperCase() || '?'
   const isAdmin = session.role === 'ADMIN'
@@ -137,6 +196,7 @@ function App() {
               <>
                 {session.plan === 'FREE' && <span className="plan-pill free">무료</span>}
                 크레딧 <b className="num">{session.creditBalance}</b>
+                <button type="button" className="btn-topup" onClick={openCheckout}>충전</button>
               </>
             )}
           </span>
@@ -154,23 +214,25 @@ function App() {
 
       {!isAdmin && session.emailVerified && session.creditBalance <= 0 && (
         <div className="paywall-bar">
-          <Paywall creditBalance={0} variant="banner" />
+          <Paywall creditBalance={0} variant="banner" onTopUp={openCheckout} />
         </div>
       )}
 
-      <main>
+      <main className={tab === 'feed' ? 'wide' : undefined}>
         {tab === 'feed' && (
           <MarketFeedView
             isAdmin={isAdmin}
             onAnalyzeDeal={analyzeDeal}
             onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
             onNeedCredits={handleNeedCredits}
+            toolCosts={toolCosts}
           />
         )}
         {tab === 'underwrite' && (
           <UnderwriteView
             onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
             onNeedCredits={handleNeedCredits}
+            toolCosts={toolCosts}
           />
         )}
         {tab === 'advanced' && (
@@ -178,6 +240,7 @@ function App() {
             onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
             onNeedCredits={handleNeedCredits}
             initialDealText={dealSeed}
+            toolCosts={toolCosts}
           />
         )}
         {tab === 'credits' && (
@@ -197,12 +260,16 @@ function App() {
           onClick={() => setShowPaywall(false)}
         >
           <div className="paywall-modal" onClick={(e) => e.stopPropagation()}>
-            <Paywall creditBalance={0} variant="card" />
+            <Paywall creditBalance={0} variant="card" onTopUp={openCheckout} />
             <button type="button" className="btn-ghost paywall-modal-close" onClick={() => setShowPaywall(false)}>
               닫기
             </button>
           </div>
         </div>
+      )}
+
+      {showCheckout && (
+        <Checkout creditBalance={session.creditBalance} customerEmail={session.email} onClose={() => setShowCheckout(false)} />
       )}
     </>
   )

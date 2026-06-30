@@ -13,6 +13,27 @@
 | `JWT_ACCESS_TTL_MINUTES` | `120` | access 토큰 만료(분) |
 | `FREE_SIGNUP_CREDITS` | `5` | 가입 시 무료 부여 크레딧 수 |
 
+## 결제 (크레딧 충전, 토스페이먼츠 — 선택, 미설정 시 결제 비활성/`configured=false`)
+> 일회성 충전. **테스트키로 시작 → 사업자등록·PG 심사 후 라이브키로 교체.** 키는 전부 env/Secret Manager(절대 커밋 금지).
+> `clientKey` 만 프론트 노출(공개), `secretKey` 는 서버 전용(승인검증·노출 금지). 승인은 전부 서버에서 검증한다.
+
+| ENV | 기본값 | 용도 |
+|---|---|---|
+| `TOSS_CLIENT_KEY` | (빈 값) | 토스 클라이언트 키(`test_ck_...`/`live_ck_...`). 프론트 결제창 SDK 초기화 |
+| `TOSS_SECRET_KEY` | (빈 값) | 토스 시크릿 키(`test_sk_...`/`live_sk_...`). 서버 승인검증. **미설정 시 결제 비활성** |
+| `TOSS_API_URL` | `https://api.tosspayments.com` | 토스 결제 API 베이스 URL |
+
+## 간편 소셜 로그인 (구글/카카오/네이버 — 선택, 미설정 제공자는 버튼 자동 숨김)
+> 키는 전부 신규 발급 + env/Secret Manager(절대 커밋 금지). 각 제공자 콘솔에 **Redirect URI** 등록 필수:
+> `{APP_BASE_URL}/api/auth/oauth/{google|kakao|naver}/callback`
+> (운영=`https://aixnative.com/...`, 테스트=현재 run.app URL/.../callback). 콜백은 SPA 로 `#token=` 해시 전달 → 우리 JWT 로그인.
+
+| ENV | 기본값 | 용도 |
+|---|---|---|
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | (빈 값) | Google Cloud Console → OAuth 2.0 클라이언트. scope: openid·email·profile |
+| `KAKAO_CLIENT_ID` / `KAKAO_CLIENT_SECRET` | (빈 값) | 카카오 developers REST API 키(=client-id). **secret(보안키)은 선택** — id 만으로 동작. 이메일 동의항목(account_email) 활성화 권장 |
+| `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` | (빈 값) | 네이버 개발자센터 애플리케이션. 둘 다 필수 |
+
 ## AI (선택 — 미설정 시 Claude provider `isConfigured=false`)
 > 인증은 둘 중 하나. **OAuth 토큰이 설정되면 그쪽이 우선**(Bearer + oauth beta 헤더), 아니면 API 키(x-api-key).
 

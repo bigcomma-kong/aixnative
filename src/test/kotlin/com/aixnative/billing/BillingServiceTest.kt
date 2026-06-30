@@ -34,7 +34,7 @@ class BillingServiceTest(
     fun `history returns plan, live balance and newest-first ledger`() {
         val (tenantId, userId) = newUser()
         creditService.grantSignupCredits(tenantId, userId) // +5
-        creditService.debitForAnalysis(tenantId, userId) // -1
+        creditService.debitForAnalysis(tenantId, userId, 1) // -1
 
         val result = billingService.history(tenantId, userId)
 

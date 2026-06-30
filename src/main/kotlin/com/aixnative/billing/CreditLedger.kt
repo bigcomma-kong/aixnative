@@ -33,6 +33,10 @@ class CreditLedger(
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 40)
     var reason: CreditReason,
+
+    /** 변동 출처/경로(선택). 충전=결제수단·금액, 관리자 조정=관리자 식별 등. 표시 전용. */
+    @Column(length = 200)
+    var ref: String? = null,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

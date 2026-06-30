@@ -2,6 +2,7 @@ package com.aixnative.billing
 
 import com.aixnative.account.UserRepository
 import com.aixnative.common.web.NotFoundException
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -16,7 +17,11 @@ import org.springframework.transaction.annotation.Transactional
 class BillingService(
     private val ledger: CreditLedgerRepository,
     private val users: UserRepository,
+    @Value("\${billing.free-signup-credits}") private val freeSignupCredits: Int,
 ) {
+
+    /** 가격표 + 가입 무료 지급량 — 프론트가 1회 로드해 버튼/안내 라벨에 사용(하드코딩 제거). */
+    fun pricing(): PricingResponse = PricingResponse(ToolPricing.all(), freeSignupCredits)
 
     @Transactional(readOnly = true)
     fun history(tenantId: Long, userId: Long): BillingHistoryResponse {
@@ -27,6 +32,7 @@ class BillingService(
                 id = requireNotNull(it.id),
                 delta = it.delta,
                 reason = it.reason,
+                ref = it.ref,
                 createdAt = requireNotNull(it.createdAt),
             )
         }

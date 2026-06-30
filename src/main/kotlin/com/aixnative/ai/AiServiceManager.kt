@@ -45,6 +45,9 @@ class AiServiceManager(
         val candidates = selectCandidates(preferred)
         check(candidates.isNotEmpty()) { "설정된 AI 서비스가 없습니다. API 키를 설정하세요." }
 
+        // 모든 프롬프트에 공통 표기 규칙 주입 — 모델이 한자를 섞어 쓰는 문제 차단(순한글 강제).
+        val effectivePrompt = prompt + LANG_RULE
+
         val startedAt = System.currentTimeMillis()
         var lastError: Exception? = null
 
@@ -57,7 +60,7 @@ class AiServiceManager(
             val timeout = minOf(props.providerTimeoutMs, remaining)
             try {
                 log.info("[AI] {} 시도 (timeout {}ms / 남은 {}ms)", provider.name, timeout, remaining)
-                val text = callWithTimeout(provider, prompt, timeout)
+                val text = callWithTimeout(provider, effectivePrompt, timeout)
                 log.info("[AI] {} 성공", provider.name)
                 return AiResult(provider.name, text)
             } catch (e: Exception) {
@@ -100,5 +103,11 @@ class AiServiceManager(
 
     private companion object {
         const val AI_CALL_THREADS = 16
+
+        /** 공통 표기 규칙 — 한자 혼용 차단(순한글). 영문 약어·숫자·고유명사 원문은 예외. */
+        const val LANG_RULE =
+            "\n\n[표기 규칙] 모든 서술과 JSON 문자열 값은 순수 한글로 작성한다. " +
+            "한자(漢字)·중국어·일본어 문자를 절대 사용하지 않는다(예: '優位'→'우위', '對備'→'대비'). " +
+            "영문 약어(IRR·NOI·Cap·DSCR·LTV·GBD·CBD 등)·숫자·고유명사 원문은 그대로 둔다."
     }
 }

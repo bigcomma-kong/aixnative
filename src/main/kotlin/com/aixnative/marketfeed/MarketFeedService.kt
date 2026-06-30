@@ -5,6 +5,7 @@ import com.aixnative.ai.AiToolRunService
 import com.aixnative.ai.RunStatus
 import com.aixnative.billing.CreditGate
 import com.aixnative.billing.CreditService
+import com.aixnative.billing.ToolPricing
 import com.aixnative.common.Disclaimer
 import com.aixnative.common.tenant.TenantContext
 import com.aixnative.common.web.BadRequestException
@@ -46,7 +47,7 @@ class MarketFeedService(
         if (cards.isEmpty()) throw BadRequestException("분석할 시장 데이터가 아직 없습니다. 잠시 후 다시 시도해 주세요.")
         val briefing = briefingRepository.findTopByOrderByGeneratedAtDesc()
 
-        val ai = creditGate.charge { aiServiceManager.complete(deepReportPrompt(cards, briefing, focus)) }
+        val ai = creditGate.charge(ToolPricing.costOf(DEEP_REPORT_TOOL)) { aiServiceManager.complete(deepReportPrompt(cards, briefing, focus)) }
         val node = extractJson(ai.text)?.let { objectMapper.readTree(it) }
 
         val current = TenantContext.require()

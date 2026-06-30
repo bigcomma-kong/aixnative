@@ -74,18 +74,18 @@ class UnderwritingServiceTest(
     }
 
     @Test
-    fun `analyze 성공 - 1 크레딧 차감 + AI 내러티브 파싱 + 이력 기록`() {
+    fun `analyze 성공 - UNDERWRITING 3 크레딧 차감 + AI 내러티브 파싱 + 이력 기록`() {
         asTenant()
         creditService.grantSignupCredits(tenantId, userId)
 
-        val res = service.analyze(req)
+        val res = service.analyze(req) // 기본 = UNDERWRITING (3크레딧)
 
-        assertEquals(4, res.creditBalance) // 5 → 4
+        assertEquals(2, res.creditBalance) // 5 → 2
         assertEquals("FakeClaude", res.provider)
         assertNotNull(res.analysis)
         assertEquals("GO", res.analysis!!.get("recommendation").asText())
         assertEquals(7112.8, res.proForma.totalInvestEok, 0.05)
-        assertEquals(4, creditService.balance(tenantId, userId))
+        assertEquals(2, creditService.balance(tenantId, userId))
     }
 
     @Test
@@ -121,7 +121,7 @@ class UnderwritingServiceTest(
         val res = service.analyze(AnalysisType.MARKET_STUDY, req)
 
         assertEquals("MARKET_STUDY", res.analysisType)
-        assertEquals(4, res.creditBalance)
+        assertEquals(3, res.creditBalance) // 5 → 3 (MARKET_STUDY = 2크레딧)
         assertEquals("MARKET_STUDY", service.listRuns().first().tool)
     }
 
@@ -138,6 +138,38 @@ class UnderwritingServiceTest(
         assertTrue(html.contains("테스트딜"))
         assertTrue(html.contains("Levered IRR"))
         assertTrue(html.contains("언더라이팅")) // 단계 라벨 섹션
+    }
+
+    @Test
+    fun `중복 분석 가드 - 동일 입력 재실행만 감지(단계·입력·테넌트 스코프)`() {
+        asTenant()
+        creditService.grantSignupCredits(tenantId, userId)
+        val res = service.analyze(AnalysisType.MARKET_STUDY, req)
+
+        // 동일 입력·동일 단계 → 중복
+        val dup = service.checkDuplicate(AnalysisType.MARKET_STUDY, req)
+        assertTrue(dup.duplicate)
+        assertEquals(res.runId, dup.lastRunId)
+        assertEquals(60L, dup.withinMinutes)
+
+        // 다른 단계 → 중복 아님
+        assertTrue(!service.checkDuplicate(AnalysisType.SCREENING, req).duplicate)
+
+        // 입력 변경 → 중복 아님
+        assertTrue(!service.checkDuplicate(AnalysisType.MARKET_STUDY, req.copy(askingPriceEok = 9999.0)).duplicate)
+
+        // 다른 테넌트 → 중복 아님(스코프 격리)
+        TenantContext.set(TenantContext.Current(99L, 99L, "x@example.com"))
+        assertTrue(!service.checkDuplicate(AnalysisType.MARKET_STUDY, req).duplicate)
+    }
+
+    @Test
+    fun `중복 가드는 과금하지 않는다`() {
+        asTenant()
+        creditService.grantSignupCredits(tenantId, userId)
+        val before = creditService.balance(tenantId, userId)
+        service.checkDuplicate(AnalysisType.MARKET_STUDY, req)
+        assertEquals(before, creditService.balance(tenantId, userId)) // 변동 없음
     }
 
     @Test

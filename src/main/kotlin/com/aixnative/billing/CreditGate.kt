@@ -14,9 +14,10 @@ import org.springframework.stereotype.Component
 annotation class RequiresCredit
 
 /**
- * Credit gate primitive: pre-checks balance (fast 402 on empty), runs the work,
- * and debits exactly one credit only on success. The current tenant/user is
- * resolved from [TenantContext], so all charges are tenant-scoped.
+ * Credit gate primitive: pre-checks balance (fast 402 when it can't cover [cost]),
+ * runs the work, and debits exactly [cost] credits only on success. The current
+ * tenant/user is resolved from [TenantContext], so all charges are tenant-scoped.
+ * Per-analysis cost comes from [ToolPricing]; callers pass the resolved amount.
  */
 @Component
 class CreditGate(private val creditService: CreditService) {
@@ -25,22 +26,21 @@ class CreditGate(private val creditService: CreditService) {
         const val ADMIN_ROLE = "ADMIN"
     }
 
-    fun <T> charge(block: () -> T): T {
+    fun <T> charge(cost: Int, block: () -> T): T {
         val current = TenantContext.require()
         // ADMIN runs with unlimited credits — never balance-checked, never debited.
         if (current.role == ADMIN_ROLE) {
             return block()
         }
         // Fail fast with 402 before doing any expensive work.
-        if (creditService.balance(current.tenantId, current.userId) <= 0) {
-            throw InsufficientCreditsException()
-        }
+        val balance = creditService.balance(current.tenantId, current.userId)
+        if (balance < cost) throw InsufficientCreditsException.forRequirement(cost, balance)
         val result = block()
-        // Debit exactly one credit only after the work succeeded (failed analyses are free).
+        // Debit only after the work succeeded (failed analyses are free).
         // Note: balance-check and debit run in separate transactions — the same TOCTOU
         // window documented in CreditService applies here. Acceptable for v1 (1 user/tenant);
         // harden with a row lock / DB check constraint when team plans land.
-        creditService.debitForAnalysis(current.tenantId, current.userId)
+        creditService.debitForAnalysis(current.tenantId, current.userId, cost)
         return result
     }
 }

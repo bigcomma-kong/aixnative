@@ -7,6 +7,7 @@ import com.aixnative.ai.AiToolRunService
 import com.aixnative.ai.RunStatus
 import com.aixnative.billing.CreditGate
 import com.aixnative.billing.CreditService
+import com.aixnative.billing.ToolPricing
 import com.aixnative.common.Disclaimer
 import com.aixnative.common.tenant.TenantContext
 import com.aixnative.common.web.BadRequestException
@@ -79,7 +80,8 @@ class UnderwritingService(
                 )
             AnalysisType.MARKET_STUDY ->
                 UnderwritingPrompts.marketStudy(
-                    assetFacts + marketDataService.marketFacts(req.location, req.assetType),
+                    assetFacts + marketDataService.marketFacts(req.location, req.assetType) +
+                        "\n\n[자산유형 벤치마크·고유지표]\n" + CreGuidelines.benchmarkText(req.assetType),
                     req.dealName,
                 )
             AnalysisType.IC_MEMO ->
@@ -89,7 +91,7 @@ class UnderwritingService(
         // 크레딧 게이트: 잔액 확인 → AI 호출 → 성공 시에만 1 크레딧 차감.
         // AI 호출 실패(키/모델/rate limit/타임아웃)는 generic 500 대신 503 + 사유로 변환(크레딧 미차감).
         val ai = try {
-            creditGate.charge { aiServiceManager.complete(prompt) }
+            creditGate.charge(ToolPricing.costOf(type.name)) { aiServiceManager.complete(prompt) }
         } catch (e: InsufficientCreditsException) {
             throw e // 402 페이월은 그대로
         } catch (e: Exception) {
@@ -262,7 +264,7 @@ class UnderwritingService(
         }
 
         val ai = try {
-            creditGate.charge { aiServiceManager.complete(prompt) }
+            creditGate.charge(ToolPricing.costOf(type.name)) { aiServiceManager.complete(prompt) }
         } catch (e: InsufficientCreditsException) {
             throw e
         } catch (e: Exception) {
@@ -350,6 +352,23 @@ class UnderwritingService(
         )
     }
 
+    /**
+     * 중복 분석 사전 확인(과금·AI 미사용). 동일 입력으로 [DUPLICATE_WINDOW_MIN]분 내 같은 단계를
+     * 이미 성공 실행했는지 본다. 저장된 requestJson 과 현재 요청 직렬화 결과를 비교(같은 직렬화기 →
+     * 동일 사용자 입력이면 동일 문자열). 테넌트/유저 스코프(다른 테넌트 이력은 보지 않음).
+     */
+    fun checkDuplicate(type: AnalysisType, req: UnderwriteRequest): DuplicateCheckResponse {
+        val currentJson = objectMapper.writeValueAsString(req)
+        val recent = aiToolRunService.findRecentByTool(type.tool, DUPLICATE_WINDOW_MIN)
+        val match = recent.firstOrNull { it.requestJson == currentJson }
+        return DuplicateCheckResponse(
+            duplicate = match != null,
+            lastRunId = match?.id,
+            lastRunAt = match?.createdAt,
+            withinMinutes = DUPLICATE_WINDOW_MIN,
+        )
+    }
+
     /** 내 분석 이력 목록 (테넌트 스코프, 최신순). */
     fun listRuns(): List<RunSummary> = aiToolRunService.listMine().map { r ->
         RunSummary(
@@ -424,5 +443,8 @@ class UnderwritingService(
     private companion object {
         /** 딜 추출 입력 상한(프롬프트 비대·타임아웃 방지). */
         const val MAX_EXTRACT_CHARS = 8000
+
+        /** 중복 분석 가드 시간창(분) — 이 안에 동일 입력 재실행이면 사전 경고. */
+        const val DUPLICATE_WINDOW_MIN = 60L
     }
 }

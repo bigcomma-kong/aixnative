@@ -1,16 +1,36 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import {
   api, ApiError,
-  type AnalysisType, type AnalyzeResponse, type Analysis, type GuidelineSummary, type ProForma, type ProFormaResponse,
+  type AnalysisType, type AnalyzeResponse, type Analysis, type DuplicateCheck, type GuidelineSummary, type ProForma, type ProFormaResponse,
   type RunResult, type RunSummary, type Scenario, type UnderwriteInput,
 } from './api'
 import { CashflowChart } from './Chart'
 import { DealCompare } from './DealCompare'
+import { StageAnalysis, Verdict } from './StageAnalysis'
 
 interface UnderwriteViewProps {
   onCreditBalance: (balance: number) => void
   /** 크레딧 소진(402) 시 중앙 페이월 안내 노출. */
   onNeedCredits: () => void
+  /** 분석유형 id → 크레딧 단가(서버 단일 소스). 미로딩 시 숫자 생략. */
+  toolCosts?: Record<string, number>
+}
+
+/** "N크레딧" 라벨 — 단가 미로딩 시 숫자 생략("크레딧"). */
+function creditLabel(cost?: number): string {
+  return cost != null ? `${cost}크레딧` : '크레딧'
+}
+
+/** 중복 분석 재실행 확인 — 동일 입력으로 최근 같은 단계를 했을 때 과금 전 사용자 확인. */
+function confirmRerun(type: AnalysisType, dup: DuplicateCheck): boolean {
+  const when = dup.lastRunAt
+    ? new Date(dup.lastRunAt).toLocaleString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+    : `최근 ${dup.withinMinutes}분 내`
+  const label = STAGE_LABEL[type] ?? type
+  return window.confirm(
+    `${when}에 동일 입력으로 '${label}' 분석을 이미 실행했습니다.\n` +
+    '데이터 변경이 없다면 결과가 거의 같고 크레딧만 추가로 차감됩니다.\n\n그래도 다시 분석할까요?',
+  )
 }
 
 interface FormState {
@@ -29,9 +49,9 @@ interface FormState {
 
 const ASSET_TYPES = ['오피스', '물류', '호텔', '리테일'] as const
 
-/** IM 분석 파이프라인 단계 (각 1 크레딧). */
+/** IM 분석 파이프라인 단계 (분석별 차등 크레딧 — 단가는 서버 ToolPricing). */
 const STAGES: { type: AnalysisType; label: string; hint: string }[] = [
-  { type: 'SCREENING', label: '1차 스크리닝', hint: '지표·Flag·Go/No-Go' },
+  { type: 'SCREENING', label: '스크리닝', hint: '지표·Flag·Go/No-Go' },
   { type: 'MARKET_STUDY', label: '시장조사', hint: '권역·가정 검증' },
   { type: 'UNDERWRITING', label: '언더라이팅', hint: 'IRR·DSCR 결론' },
   { type: 'IC_MEMO', label: '투심 메모', hint: 'IC 상정용 종합' },
@@ -67,7 +87,7 @@ interface Results {
   provider?: string
 }
 
-export function UnderwriteView({ onCreditBalance, onNeedCredits }: UnderwriteViewProps) {
+export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: UnderwriteViewProps) {
   const [form, setForm] = useState<FormState>(INITIAL)
   const [results, setResults] = useState<Results | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -130,9 +150,15 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits }: UnderwriteVie
     const invalid = validate(true)
     if (invalid) { setError(invalid); return }
     setError(null)
+    const input = buildInput()
+    // 중복 분석 가드 — 동일 입력으로 최근 같은 단계를 이미 했으면 과금 전 확인(가드 실패는 분석을 막지 않음).
+    try {
+      const dup = await api.checkDuplicate(type, input)
+      if (dup.duplicate && !confirmRerun(type, dup)) return
+    } catch { /* 가드는 보조 안내일 뿐 — 실패해도 분석 진행 */ }
     setBusy(type)
     try {
-      const res: AnalyzeResponse = await api.analyzeStage(type, buildInput())
+      const res: AnalyzeResponse = await api.analyzeStage(type, input)
       setResults({
         runId: res.runId, analysisType: res.analysisType,
         proForma: res.proForma, scenarios: res.scenarios, guidelineChecks: res.guidelineChecks, disclaimer: res.disclaimer,
@@ -226,19 +252,25 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits }: UnderwriteVie
           </div>
 
           <div className="actions">
-            <div className="stage-grid">
-              {STAGES.map((s) => (
-                <button key={s.type} type="button" className="stage-btn"
-                  onClick={() => runStage(s.type)} disabled={busy !== 'none'}>
-                  <span className="stage-label">{busy === s.type ? '분석 중…' : s.label}</span>
-                  <span className="stage-hint">{s.hint} · 1크레딧</span>
-                </button>
+            <div className="stage-grid" role="list" aria-label="분석 파이프라인 (순서대로)">
+              {STAGES.map((s, i) => (
+                <Fragment key={s.type}>
+                  {i > 0 && <span className="stage-arrow" aria-hidden="true">↓</span>}
+                  <button type="button" className="stage-btn" role="listitem"
+                    onClick={() => runStage(s.type)} disabled={busy !== 'none'}>
+                    <span className="stage-num" aria-hidden="true">{i + 1}</span>
+                    <span className="stage-text">
+                      <span className="stage-label">{busy === s.type ? '분석 중…' : s.label}</span>
+                      <span className="stage-hint">{s.hint} · {creditLabel(toolCosts?.[s.type])}</span>
+                    </span>
+                  </button>
+                </Fragment>
               ))}
             </div>
             <button type="submit" className="btn-ghost" disabled={busy !== 'none'}>
               {busy === 'proforma' ? '계산 중…' : 'ProForma만 계산 (무료)'}
             </button>
-            <p className="hint">각 단계는 AI 1회 호출 = 1 크레딧. 같은 딜 이름으로 단계를 쌓으면 보고서에 합본됩니다.</p>
+            <p className="hint">단계마다 AI 1회 호출 = 분석별 1~5크레딧. 같은 딜 이름으로 단계를 쌓으면 보고서에 합본됩니다.</p>
           </div>
           {error && <p className="error">{error}</p>}
         </form>
@@ -394,15 +426,18 @@ function ResultPanel({ results, onReport, reportBusy }: { results: Results; onRe
 
       <section>
         <div className="metrics">
-          <div className="metric hero">
-            <span className="k">Levered IRR</span>
-            <span className="v">{p.leveredIrrPct}%</span>
-          </div>
-          <Metric k="Equity Multiple" v={`${p.equityMultiple}x`} />
-          <Metric k="Going-in Cap" v={`${p.goingInCapPct}%`} />
-          <Metric k="Yield on Cost" v={`${p.yieldOnCostPct}%`} />
-          <Metric k="최소 DSCR" v={md != null ? `${md.toFixed(2)}x` : '-'} />
-          <Metric k="Equity" v={`${p.equityEok}억`} />
+          <Metric hero ko="레버리지 IRR" en="Levered IRR" v={`${p.leveredIrrPct}%`}
+            hint="대출 포함 자기자본 연환산 수익률" />
+          <Metric ko="투자 배수" en="Equity Multiple" v={`${p.equityMultiple}x`}
+            hint="투입 원금 대비 총 회수 배수" />
+          <Metric ko="매입 수익률" en="Going-in Cap" v={`${p.goingInCapPct}%`}
+            hint="1년차 NOI ÷ 매입가" />
+          <Metric ko="원가 수익률" en="Yield on Cost" v={`${p.yieldOnCostPct}%`}
+            hint="NOI ÷ 총투자비(취득비 포함)" />
+          <Metric ko="최소 DSCR" en="Debt Coverage" v={md != null ? `${md.toFixed(2)}x` : '-'}
+            hint="NOI ÷ 이자 · 높을수록 안전" />
+          <Metric ko="투입 자기자본" en="Equity" v={`${p.equityEok}억`}
+            hint="총투자비 − 대출" />
         </div>
       </section>
 
@@ -469,77 +504,18 @@ function ResultPanel({ results, onReport, reportBusy }: { results: Results; onRe
   )
 }
 
-/** 단계별 AI 결과 인라인 렌더. 상세 합본은 '투자 보고서 보기' 참조. */
-function StageAnalysis({ type, analysis, provider }: { type?: string; analysis: Analysis; provider?: string }) {
-  const a = analysis as unknown as Record<string, unknown>
-  const str = (k: string): string | null => (typeof a[k] === 'string' && a[k] ? (a[k] as string) : null)
-  const list = (k: string): unknown[] => (Array.isArray(a[k]) ? (a[k] as unknown[]) : [])
-
-  if (type === 'MARKET_STUDY') {
-    return (
-      <section className="ai-block">
-        <div className="section-title">시장조사</div>
-        {(str('region') || str('house_view')) && (
-          <p><b>{str('region') ?? '권역'}</b> · House View {str('house_view') ?? '-'}</p>
-        )}
-        {str('fundamentals') && <p className="narrative">{str('fundamentals')}</p>}
-        {str('conclusion') && <p className="guideline">{str('conclusion')}</p>}
-      </section>
-    )
-  }
-
-  if (type === 'SCREENING') {
-    const green = list('green_flags')
-    const red = list('red_flags')
-    return (
-      <section className="ai-block">
-        <div className="section-title">1차 스크리닝</div>
-        {str('verdict') && (
-          <Verdict analysis={{ recommendation: str('verdict') ?? undefined, recommendation_reason: str('verdict_reason') ?? undefined }} />
-        )}
-        {str('thesis') && <p className="narrative">{str('thesis')}</p>}
-        {green.length > 0 && (
-          <div>
-            <div className="section-title">Green Flags</div>
-            <div className="chips">{green.map((g, i) => <span key={i} className="chip">{String(g)}</span>)}</div>
-          </div>
-        )}
-        {red.length > 0 && (
-          <div>
-            <div className="section-title">Red Flags</div>
-            {red.map((r, i) => {
-              const o = r as Record<string, unknown>
-              return <div key={i} className="risk"><span className="r-name">{String(o.flag ?? '')}</span><span className="r-impact">{String(o.impact ?? '')}</span></div>
-            })}
-          </div>
-        )}
-      </section>
-    )
-  }
-
-  if (type === 'IC_MEMO') {
-    const highlights = list('highlights')
-    return (
-      <section className="ai-block">
-        <div className="section-title">투심 메모</div>
-        {str('thesis') && <p className="narrative">{str('thesis')}</p>}
-        {highlights.length > 0 && (
-          <div>
-            <div className="section-title">투자 하이라이트</div>
-            <ul>{highlights.map((h, i) => <li key={i}>{String(h)}</li>)}</ul>
-          </div>
-        )}
-        {str('lp_alignment') && <p className="guideline">{str('lp_alignment')}</p>}
-      </section>
-    )
-  }
-
-  // UNDERWRITING (기본/레거시)
-  return <AiNarrative analysis={analysis} provider={provider} />
-}
-
-function Metric({ k, v }: { k: string; v: string }) {
-  return <div className="metric"><span className="k">{k}</span><span className="v">{v}</span></div>
+/** 지표 타일 — 한글 이름(주) + 영문 캡션(부) + 한 줄 의미. 가독성 위해 영문 약어 단독 노출 지양. */
+function Metric({ ko, en, v, hint, hero }: { ko: string; en: string; v: string; hint: string; hero?: boolean }) {
+  return (
+    <div className={`metric${hero ? ' hero' : ''}`}>
+      <span className="m-top">
+        <span className="m-ko">{ko}</span>
+        <span className="m-en">{en}</span>
+      </span>
+      <span className="v">{v}</span>
+      <span className="m-hint">{hint}</span>
+    </div>
+  )
 }
 
 /** 가이드라인 적합성 — 코드가 임계값과 대조한 결정론적 판정(PASS/WARN/FAIL). AI 판단 아님. */
@@ -567,51 +543,6 @@ function GuidelineFit({ summary }: { summary: GuidelineSummary }) {
           ))}
         </tbody>
       </table>
-    </section>
-  )
-}
-
-interface VerdictStyle { cls: 'go' | 'cond' | 'no'; mark: string; label: string }
-function verdictStyle(rec?: string): VerdictStyle {
-  if (rec === 'GO') return { cls: 'go', mark: 'GO', label: '투자 적격' }
-  if (rec === 'NO_GO') return { cls: 'no', mark: 'NO', label: '투자 부적격' }
-  return { cls: 'cond', mark: '!', label: '조건부 검토' }
-}
-
-function Verdict({ analysis }: { analysis: Analysis }) {
-  if (!analysis.recommendation) return null
-  const s = verdictStyle(analysis.recommendation)
-  return (
-    <div className={`verdict ${s.cls}`}>
-      <div className="v-mark">{s.mark}</div>
-      <div>
-        <div className="v-label">{s.label}</div>
-        {analysis.recommendation_reason && <div className="v-reason">{analysis.recommendation_reason}</div>}
-      </div>
-    </div>
-  )
-}
-
-function AiNarrative({ analysis, provider }: { analysis: Analysis; provider?: string }) {
-  return (
-    <section className="ai-block">
-      <div className="section-title">AI 언더라이팅 {provider ? `· ${provider}` : ''}</div>
-      {analysis.summary && <p className="narrative">{analysis.summary}</p>}
-      {analysis.guideline_check && <p className="guideline">{analysis.guideline_check}</p>}
-      {analysis.key_drivers && analysis.key_drivers.length > 0 && (
-        <div>
-          <div className="section-title">주요 동인</div>
-          <div className="chips">{analysis.key_drivers.map((d, i) => <span key={i} className="chip">{d}</span>)}</div>
-        </div>
-      )}
-      {analysis.key_risks && analysis.key_risks.length > 0 && (
-        <div>
-          <div className="section-title">리스크</div>
-          {analysis.key_risks.map((r, i) => (
-            <div key={i} className="risk"><span className="r-name">{r.risk}</span><span className="r-impact">{r.impact}</span></div>
-          ))}
-        </div>
-      )}
     </section>
   )
 }

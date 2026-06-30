@@ -1,17 +1,20 @@
 import { useState, type FormEvent } from 'react'
 import { api, ApiError, tokenStore, type AuthResult } from './api'
+import { SocialLogin } from './SocialLogin'
 
 interface AuthViewProps {
   onAuthed: (result: AuthResult) => void
+  /** 소셜 로그인 콜백 실패 메시지(App 의 해시 파싱 결과). */
+  initialError?: string | null
 }
 
 type Mode = 'login' | 'signup' | 'forgot'
 
-export function AuthView({ onAuthed }: AuthViewProps) {
+export function AuthView({ onAuthed, initialError }: AuthViewProps) {
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(initialError ?? null)
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
 
@@ -113,6 +116,8 @@ export function AuthView({ onAuthed }: AuthViewProps) {
         </button>
         {error && <p className="error">{error}</p>}
       </form>
+
+      <SocialLogin />
 
       {mode === 'login' && (
         <p className="muted auth-switch">

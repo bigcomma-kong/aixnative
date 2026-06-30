@@ -30,11 +30,18 @@ class NotFoundException(message: String = "대상을 찾을 수 없습니다.") 
 class ConflictException(message: String) : ApiException(HttpStatus.CONFLICT, message)
 
 /**
- * 402 — Payment Required. Raised by the credit gate when the tenant has no
- * remaining AI-analysis credits. The client renders the paywall.
+ * 402 — Payment Required. Raised by the credit gate when the tenant can't cover
+ * the analysis cost. The client renders the paywall.
  */
 class InsufficientCreditsException(message: String = "남은 크레딧이 없습니다. 크레딧을 구매해 주세요.") :
-    ApiException(HttpStatus.PAYMENT_REQUIRED, message)
+    ApiException(HttpStatus.PAYMENT_REQUIRED, message) {
+    companion object {
+        /** 차등 과금용 — 필요 크레딧과 현재 잔액을 안내한다. */
+        fun forRequirement(required: Int, balance: Int) = InsufficientCreditsException(
+            "이 분석에는 ${required}크레딧이 필요합니다(현재 잔액 ${balance}). 크레딧을 충전해 주세요.",
+        )
+    }
+}
 
 /** 429 — too many requests (e.g. signup flood from one IP). */
 class TooManyRequestsException(message: String = "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.") :

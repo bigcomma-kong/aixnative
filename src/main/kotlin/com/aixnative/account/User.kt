@@ -17,7 +17,7 @@ import java.time.Instant
 
 enum class UserStatus { ACTIVE, DISABLED }
 
-enum class AuthProvider { LOCAL, GOOGLE, KAKAO }
+enum class AuthProvider { LOCAL, GOOGLE, KAKAO, NAVER }
 
 enum class UserRole { USER, ADMIN }
 
@@ -46,6 +46,10 @@ class User(
     @Enumerated(EnumType.STRING)
     @Column(name = "auth_provider", nullable = false, length = 20)
     var authProvider: AuthProvider = AuthProvider.LOCAL,
+
+    /** 소셜 계정의 제공자 고유 id(sub). LOCAL 은 null. (provider, providerId) 로 재로그인 식별. */
+    @Column(name = "provider_id", length = 100)
+    var providerId: String? = null,
 
     @Column(name = "email_verified", nullable = false)
     var emailVerified: Boolean = false,

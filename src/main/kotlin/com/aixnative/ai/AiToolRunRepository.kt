@@ -1,6 +1,7 @@
 package com.aixnative.ai
 
 import org.springframework.data.jpa.repository.JpaRepository
+import java.time.Instant
 
 interface AiToolRunRepository : JpaRepository<AiToolRun, Long> {
 
@@ -25,4 +26,19 @@ interface AiToolRunRepository : JpaRepository<AiToolRun, Long> {
         ownerUserId: Long,
         dealName: String,
     ): List<AiToolRun>
+
+    /**
+     * 최근 시간창 내 같은 도구의 성공 런(테넌트/유저 스코프), 최신순.
+     * 중복 분석 가드 — 호출부가 requestJson(저장된 원본 입력)을 비교해 동일 입력 재실행을 감지.
+     */
+    fun findByTenantIdAndOwnerUserIdAndToolAndStatusAndCreatedAtAfterAndDeletedAtIsNullOrderByIdDesc(
+        tenantId: Long,
+        ownerUserId: Long,
+        tool: String,
+        status: RunStatus,
+        createdAt: Instant,
+    ): List<AiToolRun>
+
+    /** 계정 삭제 정리용 — 해당 사용자의 모든 분석 런 삭제. */
+    fun deleteByOwnerUserId(ownerUserId: Long)
 }

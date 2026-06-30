@@ -29,12 +29,15 @@ export interface Me {
 
 export type CreditReason = 'SIGNUP_GRANT' | 'AI_ANALYSIS' | 'PURCHASE' | 'ADMIN_ADJUST'
 
+export type UserStatus = 'ACTIVE' | 'DISABLED'
+
 export interface AdminUser {
   id: number
   email: string
   tenantId: number
   plan: 'FREE' | 'PAID'
   role: UserRole
+  status: UserStatus
   emailVerified: boolean
   creditBalance: number
   createdAt: string | null
@@ -56,6 +59,18 @@ export interface AdminRunDetail extends AdminRun {
   resultJson: string | null
 }
 
+/** 관리자 크레딧 내역 1행 — 전 사용자 원장. */
+export interface AdminCreditEntry {
+  id: number
+  tenantId: number
+  userId: number
+  ownerEmail: string | null
+  delta: number
+  reason: CreditReason
+  ref: string | null
+  createdAt: string | null
+}
+
 export interface NewsSubscriber {
   email: string
   active: boolean
@@ -73,6 +88,8 @@ export interface CreditHistoryItem {
   id: number
   delta: number
   reason: CreditReason
+  /** 변동 출처/경로(선택) — 충전 수단·금액, 관리자 조정 식별 등. */
+  ref?: string | null
   createdAt: string
 }
 
@@ -80,6 +97,12 @@ export interface BillingHistory {
   plan: 'FREE' | 'PAID'
   creditBalance: number
   entries: CreditHistoryItem[]
+}
+
+/** 분석별 크레딧 단가표 + 가입 무료 지급량. 키 = 분석유형 id(예: UNDERWRITING, BOV, MARKET_DEEP_REPORT). */
+export interface Pricing {
+  toolCosts: Record<string, number>
+  freeSignupCredits: number
 }
 
 export interface YearRow {
@@ -155,13 +178,106 @@ export interface RiskItem {
   impact: string
 }
 
+/** 스크리닝 핵심지표(9종). AI가 IM에서 추출. */
+export interface ScreeningMetrics {
+  asking_price_eok?: number | null
+  price_per_pyeong_manwon?: number | null
+  noi_eok?: number | null
+  cap_rate_pct?: number | null
+  occupancy_pct?: number | null
+  walt_yr?: number | null
+  top1_tenant_pct?: number | null
+  loss_to_lease_pct?: number | null
+  opex_ratio_pct?: number | null
+}
+
+/** 벤치마크 대조 1행 — 신호등(GREEN/YELLOW/RED). */
+export interface BenchmarkEval {
+  metric: string
+  value?: string | number | null
+  guideline?: string
+  rating?: string
+}
+
+/** 스크리닝 Red Flag — 심각도 + 검증 필요사항. */
+export interface RedFlag {
+  code?: string
+  flag: string
+  impact?: string
+  verify?: string
+}
+
+/** 시장조사 가정 검증 1행 — verdict G/Y/R. */
+export interface AssumptionCheck {
+  assumption: string
+  market?: string
+  verdict?: string
+}
+
+/** 시장조사 거래 사례 1행. */
+export interface Comp {
+  name?: string
+  region?: string
+  price_per_pyeong_manwon?: number | null
+  cap_rate_pct?: number | null
+}
+
+/** 투심메모 리스크 매트릭스 1행. */
+export interface RiskMatrixItem {
+  risk: string
+  likelihood?: string
+  impact?: string
+  mitigation?: string
+}
+
+/** 투심메모 Exec Summary 요약표. */
+export interface ExecSummary {
+  asset?: string
+  price?: string
+  strategy?: string
+  expected_return?: string
+  recommendation?: string
+}
+
+/**
+ * 단계별 AI 결과. 단계마다 사용하는 필드가 다르므로 모두 옵셔널.
+ * UNDERWRITING / SCREENING / MARKET_STUDY / IC_MEMO 필드를 한 타입에 합집합으로 정의한다.
+ */
 export interface Analysis {
+  // UNDERWRITING
   summary?: string
   guideline_check?: string
   key_drivers?: string[]
   key_risks?: RiskItem[]
   recommendation?: string
   recommendation_reason?: string
+  confidence?: string | number
+  // SCREENING
+  asset?: Record<string, unknown>
+  metrics?: ScreeningMetrics
+  benchmark_eval?: BenchmarkEval[]
+  key_points?: string[]
+  red_flags?: RedFlag[]
+  green_flags?: string[]
+  verdict?: string
+  verdict_reason?: string
+  conditions?: string[]
+  next_steps?: string[]
+  thesis?: string
+  // MARKET_STUDY
+  region?: string
+  fundamentals?: string
+  assumption_check?: AssumptionCheck[]
+  comps?: Comp[]
+  macro?: string
+  house_view?: string
+  house_view_reason?: string
+  conclusion?: string
+  // IC_MEMO
+  exec_summary?: ExecSummary
+  highlights?: string[]
+  risk_matrix?: RiskMatrixItem[]
+  lp_alignment?: string
 }
 
 export interface AnalyzeResponse {
@@ -179,6 +295,14 @@ export interface AnalyzeResponse {
 
 /** IM 분석 단계. 백엔드 AnalysisType enum 과 일치. */
 export type AnalysisType = 'SCREENING' | 'MARKET_STUDY' | 'UNDERWRITING' | 'IC_MEMO'
+
+/** 중복 분석 사전 확인 — 동일 입력으로 최근 같은 단계를 실행했는지. */
+export interface DuplicateCheck {
+  duplicate: boolean
+  lastRunId?: number | null
+  lastRunAt?: string | null
+  withinMinutes: number
+}
 
 export interface RunSummary {
   id: number
@@ -554,6 +678,45 @@ export interface DocAnalyzeResponse {
   disclaimer: string
 }
 
+// ── 결제(크레딧 충전, 토스페이먼츠) ──────────────────────────────────────────
+/** 판매 팩(가격표). */
+export interface CreditPack {
+  id: string
+  credits: number
+  amountKrw: number
+  label: string
+}
+/** 결제 SDK 초기화용 — clientKey + 결제 활성 여부(secretKey 미설정 시 false). */
+export interface PaymentConfig {
+  clientKey: string
+  configured: boolean
+}
+/** 주문 생성 결과 — 결제창에 넘길 서버 권위 값. */
+export interface CreateOrderResponse {
+  orderId: string
+  orderName: string
+  amountKrw: number
+  customerKey: string
+}
+/** 승인 결과 — 충전 후 잔액. */
+export interface ConfirmResponse {
+  credits: number
+  creditBalance: number
+  orderName: string
+}
+export type PaymentStatus = 'PENDING' | 'CONFIRMED' | 'FAILED' | 'CANCELED'
+/** 결제 이력 1건. */
+export interface PaymentHistoryItem {
+  orderId: string
+  packLabel: string
+  credits: number
+  amountKrw: number
+  status: PaymentStatus
+  method: string | null
+  approvedAt: string | null
+  createdAt: string | null
+}
+
 /**
  * API 오리진. 기본은 빈 문자열 = same-origin(상대경로 /api, dev 는 Vite 프록시).
  * API 가 별도 호스트면 VITE_API_BASE 로 지정(예: https://api.aixnative.com — 끝에 /api 붙이지 않음).
@@ -631,6 +794,10 @@ export const api = {
   analyzeStage: (type: AnalysisType, input: UnderwriteInput): Promise<AnalyzeResponse> =>
     request(`/api/underwriting/analyze/${type}`, { method: 'POST', body: JSON.stringify(input) }),
 
+  /** 과금 전 중복 확인(무료). 동일 입력 재실행이면 duplicate=true. */
+  checkDuplicate: (type: AnalysisType, input: UnderwriteInput): Promise<DuplicateCheck> =>
+    request(`/api/underwriting/analyze/${type}/check-duplicate`, { method: 'POST', body: JSON.stringify(input) }),
+
   analyzeDoc: (type: DocAnalysisType, input: DocAnalyzeInput): Promise<DocAnalyzeResponse> =>
     request(`/api/underwriting/analyze-doc/${type}`, { method: 'POST', body: JSON.stringify(input) }),
 
@@ -653,6 +820,9 @@ export const api = {
   run: (id: number): Promise<RunDetail> => request(`/api/underwriting/runs/${id}`),
 
   history: (): Promise<BillingHistory> => request('/api/billing/history'),
+
+  /** 분석별 크레딧 단가 + 가입 무료 지급량(버튼 라벨/안내의 단일 소스). */
+  pricing: (): Promise<Pricing> => request('/api/billing/pricing'),
 
   /** 시장 인텔리전스 피드 — 카드 페이지(최신순). page 0-기반(과거 딜 더 보기). */
   marketFeed: (limit = 30, page = 0): Promise<MarketFeedPage> =>
@@ -722,6 +892,17 @@ export const api = {
   adminAdjustCredits: (id: number, delta: number): Promise<AdminUser> =>
     request(`/api/admin/users/${id}/credits`, { method: 'POST', body: JSON.stringify({ delta }) }),
 
+  /** 관리자 — 계정 차단/해제(ACTIVE|DISABLED). */
+  adminSetStatus: (id: number, status: UserStatus): Promise<AdminUser> =>
+    request(`/api/admin/users/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
+
+  /** 관리자 — 계정 영구 삭제(연관 데이터 정리). */
+  adminDeleteUser: (id: number): Promise<{ deleted: boolean }> =>
+    request(`/api/admin/users/${id}`, { method: 'DELETE' }),
+
+  /** 관리자 — 전 사용자 크레딧 원장(최신순). 충전 경로·사유 포함. */
+  adminCredits: (): Promise<AdminCreditEntry[]> => request('/api/admin/credits'),
+
   /** 관리자 — 전 테넌트 모든 분석 데이터. */
   adminRuns: (): Promise<AdminRun[]> => request('/api/admin/runs'),
 
@@ -734,4 +915,33 @@ export const api = {
   /** 관리자 — 뉴스레터 발송 로그(누구에게/언제/성공여부). */
   adminNewsletterSendLog: (limit = 100): Promise<NewsletterSendLogEntry[]> =>
     request(`/api/admin/newsletter/send-log?limit=${limit}`),
+
+  // ── 결제(크레딧 충전) ──
+  /** 결제 SDK 초기화용 — clientKey + 활성 여부. */
+  paymentConfig: (): Promise<PaymentConfig> => request('/api/payments/config'),
+
+  /** 판매 팩(가격표). */
+  creditPacks: (): Promise<CreditPack[]> => request('/api/payments/packs'),
+
+  /** 주문 생성 — 팩 선택 → 결제창에 넘길 orderId/금액. */
+  createOrder: (packId: string): Promise<CreateOrderResponse> =>
+    request('/api/payments/order', { method: 'POST', body: JSON.stringify({ packId }) }),
+
+  /** 결제 승인 — 토스 콜백(paymentKey/orderId/amount) 서버 검증 후 충전. */
+  confirmPayment: (paymentKey: string, orderId: string, amount: number): Promise<ConfirmResponse> =>
+    request('/api/payments/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ paymentKey, orderId, amount }),
+    }),
+
+  /** 내 결제 이력. */
+  paymentHistory: (): Promise<PaymentHistoryItem[]> => request('/api/payments/history'),
+
+  /** 설정된 소셜 로그인 제공자 목록(소문자: google/kakao/naver). 미설정이면 빈 배열. */
+  oauthProviders: (): Promise<string[]> => request('/api/auth/oauth/providers'),
+}
+
+/** 소셜 로그인 시작 URL(브라우저 전체 이동 — fetch 아님). 제공자 인증 페이지로 302. */
+export function oauthAuthorizeUrl(provider: string): string {
+  return `${API_BASE}/api/auth/oauth/${provider}/authorize`
 }

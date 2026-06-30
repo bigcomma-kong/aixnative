@@ -84,6 +84,17 @@ data class UnderwriteResponse(
     val disclaimer: String,
 )
 
+/**
+ * 중복 분석 사전 확인 결과(과금 없음). 동일 입력으로 [withinMinutes] 분 내 같은 단계를 이미
+ * 실행했는지 알려, 프런트가 재실행 전 사용자에게 확인을 받도록 한다.
+ */
+data class DuplicateCheckResponse(
+    val duplicate: Boolean,
+    val lastRunId: Long? = null,
+    val lastRunAt: Instant? = null,
+    val withinMinutes: Long,
+)
+
 /** 분석 이력 목록 항목. */
 data class RunSummary(
     val id: Long,
