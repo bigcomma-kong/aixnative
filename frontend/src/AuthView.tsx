@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { api, ApiError, tokenStore, type AuthResult } from './api'
 import { SocialLogin } from './SocialLogin'
 import { InfoModal, type InfoPage } from './SiteFooter'
@@ -7,12 +7,32 @@ interface AuthViewProps {
   onAuthed: (result: AuthResult) => void
   /** 소셜 로그인 콜백 실패 메시지(App 의 해시 파싱 결과). */
   initialError?: string | null
+  /** 랜딩 상단 '로그인'/'무료로 시작' 이 요청한 탭. */
+  requestMode?: 'login' | 'signup'
+  /** 포커스 트리거(증가할 때마다 requestMode 로 전환 + 이메일 포커스). */
+  focusSignal?: number
 }
 
 type Mode = 'login' | 'signup' | 'forgot'
 
-export function AuthView({ onAuthed, initialError }: AuthViewProps) {
+export function AuthView({ onAuthed, initialError, requestMode, focusSignal }: AuthViewProps) {
   const [mode, setMode] = useState<Mode>('login')
+  // 포커스 직후 카드에 잠깐 하이라이트를 줘 '여기가 로그인 영역' 임을 시각적으로 알린다.
+  const [flash, setFlash] = useState(false)
+
+  // 랜딩 상단 버튼 클릭(focusSignal 증가) → 해당 탭으로 전환하고 이메일에 포커스.
+  // preventScroll 로 스크롤을 다시 튀지 않게 해, 한 번에 로그인 영역이 잡히도록 한다.
+  useEffect(() => {
+    if (!focusSignal) return
+    if (requestMode) setMode(requestMode)
+    setFlash(true)
+    const focusTimer = setTimeout(() => {
+      const el = document.getElementById('email') as HTMLInputElement | null
+      el?.focus({ preventScroll: true })
+    }, 300)
+    const flashTimer = setTimeout(() => setFlash(false), 1100)
+    return () => { clearTimeout(focusTimer); clearTimeout(flashTimer) }
+  }, [focusSignal, requestMode])
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(initialError ?? null)
@@ -95,7 +115,7 @@ export function AuthView({ onAuthed, initialError }: AuthViewProps) {
   }
 
   return (
-    <div className="card auth-card" id="auth">
+    <div className={`card auth-card${flash ? ' auth-flash' : ''}`} id="auth">
       <div className="auth-head">
         <span className="auth-eyebrow">{mode === 'login' ? '로그인' : '무료 가입'}</span>
         <h2 className="auth-title">

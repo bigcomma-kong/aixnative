@@ -165,8 +165,10 @@ class ReportService(
 
     private fun StringBuilder.appendUnderwriting(a: JsonNode) {
         verdict(a.txt("recommendation"), a.txt("recommendation_reason"))
+        // 신규 스캔형 스키마(thesis·strengths·downside) 우선, 구버전(summary·guideline_check) 폴백.
+        a.txt("thesis")?.let { append("<p class='thesis'>${esc(it)}</p>") }
         a.txt("summary")?.let { append("<p>${esc(it)}</p>") }
-        a.txt("guideline_check")?.let { append("<p class='concl'>${esc(it)}</p>") }
+        listBlock("강점", a.get("strengths")?.map { it.asText() })
         listBlock("주요 동인", a.get("key_drivers")?.map { it.asText() })
         a.get("key_risks")?.let { kr ->
             if (kr.isArray && kr.size() > 0) {
@@ -175,6 +177,8 @@ class ReportService(
                 append("</ul>")
             }
         }
+        a.txt("guideline_check")?.let { append("<p class='concl'>${esc(it)}</p>") }
+        a.txt("downside")?.let { append("<p class='concl'>⚠ 하방 · ${esc(it)}</p>") }
     }
 
     private fun StringBuilder.appendIcMemo(a: JsonNode) {

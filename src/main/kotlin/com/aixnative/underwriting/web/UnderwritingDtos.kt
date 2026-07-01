@@ -125,10 +125,14 @@ data class DealSummary(
     /** 완료한 심화분석 종 수(BOV·개발·세무 등). */
     val advancedCount: Int,
     val lastActivityAt: Instant?,
-    /** 최신 런 id — 합본 보고서·이어보기 진입점. */
+    /** 최신 런 id — 합본 보고서·이어보기·결과 보기 진입점. */
     val anchorRunId: Long,
     /** 파이프라인 단계가 하나라도 있으면 합본 보고서 가능. */
     val hasReport: Boolean,
+    /** 언더라이팅 입력 단계가 있어 '이어서 분석'(폼 프리필)이 가능한가. */
+    val canContinue: Boolean = false,
+    /** 이 항목이 딜이 아니라 AI 심층 시장 분석 리포트인가(이어서 분석 대신 '데이터 보기'). */
+    val isMarketReport: Boolean = false,
 )
 
 /** 한 딜의 단계별 최신 성공 결과 1건 — 합본 화면(탭)용. result 는 저장된 결과 JSON(= RunResult). */

@@ -19,9 +19,33 @@ class MarketDataService(
     private val rtmsClient: RtmsClient,
     private val jusoClient: JusoClient,
     private val vWorldClient: VWorldClient,
+    private val buildingRegisterClient: BuildingRegisterClient,
     private val props: MarketDataProperties,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+
+    /**
+     * 건축물대장 실측 한 줄 — 필지주소→juso→건축물대장 표제부(연면적·주용도·준공연도).
+     * DATA_GO_KR 키 재사용. 미설정/미해석 시 빈 문자열(graceful).
+     */
+    fun buildingFactLine(parcelAddress: String?): String {
+        if (parcelAddress.isNullOrBlank() || !props.rtmsEnabled) return ""
+        return try {
+            val parcel = jusoClient.resolveParcel(parcelAddress) ?: return ""
+            val b = buildingRegisterClient.titleInfo(parcel) ?: return ""
+            if (b.mainPurpose == null && b.totAreaSqm == null && b.useAprYear == null) return ""
+            buildString {
+                append("\n[실측 건축물대장 — 출처 국토부] ")
+                b.name?.let { append(it).append(" · ") }
+                b.mainPurpose?.let { append("주용도 ").append(it).append(" · ") }
+                b.totAreaSqm?.let { append("연면적 ").append(it).append("㎡ · ") }
+                b.useAprYear?.let { append("준공 ").append(it).append("년") }
+            }.trimEnd(' ', '·')
+        } catch (e: Exception) {
+            log.warn("[MarketData] buildingFactLine 실패: {}", e.message)
+            ""
+        }
+    }
 
     /**
      * 위치·자산유형 기반 실측 시장 facts 통합 블록. 사용 가능한 소스가 하나도 없으면 빈 문자열.

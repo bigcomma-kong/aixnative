@@ -883,7 +883,7 @@ function DocHistoryPanel({ version }: { version: number }) {
               <tr key={r.id}>
                 <td>{r.dealName ?? '(이름없음)'}</td>
                 <td>{DOC_LABEL[r.tool] ?? r.tool}</td>
-                <td>{r.status}</td>
+                <td><span className={r.status === 'SUCCESS' ? 'st-ok' : 'st-fail'}>{r.status === 'SUCCESS' ? '성공' : r.status === 'FAILED' ? '실패' : r.status}</span></td>
                 <td className="num">{r.createdAt ? new Date(r.createdAt).toLocaleString('ko-KR') : '-'}</td>
               </tr>
             ))}

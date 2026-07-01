@@ -329,7 +329,58 @@ export function StageAnalysis({ type, analysis, provider }: { type?: string; ana
     )
   }
 
-  // UNDERWRITING (기본/레거시)
+  if (type === 'UNDERWRITING') {
+    const strengths = list('strengths')
+    const drivers = list('key_drivers')
+    const risks = list('key_risks')
+    // 신규 스캔형 스키마(thesis·strengths·downside) 유무. 없으면 구버전(summary 블록) 폴백.
+    const hasStructured = str('thesis') != null || strengths.length > 0 || str('downside') != null
+    if (!hasStructured) return <AiNarrative analysis={analysis} provider={provider} />
+    return (
+      <section className="ai-block">
+        <div className="section-title">언더라이팅 결론 <ConfBadge c={val('confidence')} /></div>
+        {str('thesis') && <p className="narrative">{str('thesis')}</p>}
+
+        {strengths.length > 0 && (
+          <div className="scr-section">
+            <div className="section-title">강점</div>
+            <ul className="check-list">{strengths.map((s, i) => <li key={i}>{String(s)}</li>)}</ul>
+          </div>
+        )}
+
+        {drivers.length > 0 && (
+          <div className="scr-section">
+            <div className="section-title">수익 민감 변수</div>
+            <ul className="bullet-list">{drivers.map((d, i) => <li key={i}>{String(d)}</li>)}</ul>
+          </div>
+        )}
+
+        {risks.length > 0 && (
+          <div className="scr-section">
+            <div className="section-title">리스크</div>
+            {risks.map((r, i) => {
+              const o = r as Record<string, unknown>
+              return (
+                <div key={i} className="risk">
+                  <span className="r-name">{cell(o.risk)}</span>
+                  <span className="r-impact"><ImpactBadge v={cell(o.impact)} /></span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {str('downside') && (
+          <div className="uw-downside">
+            <span className="uw-downside-tag">⚠ 하방 시나리오</span>
+            <p>{str('downside')}</p>
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  // 기타/레거시
   return <AiNarrative analysis={analysis} provider={provider} />
 }
 

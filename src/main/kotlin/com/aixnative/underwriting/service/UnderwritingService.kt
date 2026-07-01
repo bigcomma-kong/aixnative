@@ -228,7 +228,7 @@ class UnderwritingService(
                     DocCalcFacts.devFacts(input, r, req.documentText) +
                         mf(marketDataService.marketFacts(req.location, assetType)) +
                         mf(marketDataService.landComparablesFactLine(req.location)) +
-                        mf(marketDataService.landValuationFactLine(req.parcelAddress)),
+                        mf(marketDataService.landValuationFactLine(req.parcelAddress)) + mf(marketDataService.buildingFactLine(req.parcelAddress)),
                     req.dealName, CreGuidelines.devFeasibilityGuidelineText(assetType),
                 )
             }
@@ -263,7 +263,7 @@ class UnderwritingService(
                 UnderwritingPrompts.priceForecast(
                     DocCalcFacts.priceFacts(input, marketCap, stats, r, req.documentText) +
                         mf(marketDataService.marketFacts(req.location, assetType)) +
-                        mf(marketDataService.landValuationFactLine(req.parcelAddress)),
+                        mf(marketDataService.landValuationFactLine(req.parcelAddress)) + mf(marketDataService.buildingFactLine(req.parcelAddress)),
                     req.dealName,
                 )
             }
@@ -279,7 +279,7 @@ class UnderwritingService(
                         UnderwritingPrompts.taxPriceDiagnosis(
                             doc + mf(marketDataService.marketFacts(req.location, assetType)) +
                                 mf(marketDataService.landComparablesFactLine(req.location)) +
-                                mf(marketDataService.landValuationFactLine(req.parcelAddress)),
+                                mf(marketDataService.landValuationFactLine(req.parcelAddress)) + mf(marketDataService.buildingFactLine(req.parcelAddress)),
                             req.dealName,
                         )
                     DocAnalysisType.AM_QUARTERLY ->
@@ -429,6 +429,8 @@ class UnderwritingService(
             val successTools = group.filter { it.status == RunStatus.SUCCESS }.map { it.tool }.toSet()
             val pipeline = AnalysisType.PIPELINE.filter { it.tool in successTools }.map { it.label }
             val advanced = successTools.count { DocAnalysisType.fromTool(it) != null }
+            // 파이프라인·심화가 없고 심층 시장 리포트만 있으면 '딜'이 아니라 시장 분석 항목.
+            val marketReport = pipeline.isEmpty() && advanced == 0 && successTools.contains("MARKET_DEEP_REPORT")
             DealSummary(
                 dealName = name,
                 assetType = req?.get("assetType")?.asText(null)?.takeIf { it.isNotBlank() },
@@ -439,6 +441,8 @@ class UnderwritingService(
                 lastActivityAt = latest.createdAt,
                 anchorRunId = requireNotNull(latest.id),
                 hasReport = pipeline.isNotEmpty(),
+                canContinue = pipeline.isNotEmpty(), // 언더라이팅 단계가 있어야 폼 프리필 가능
+                isMarketReport = marketReport,
             )
         }.sortedByDescending { it.lastActivityAt }
     }

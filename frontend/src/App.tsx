@@ -56,6 +56,13 @@ function App() {
   const [resetToken, setResetToken] = useState<string | null>(() => readResetToken())
   // 시장 피드 '이 딜 분석하기' → 심화 분석으로 넘길 딜 원문(진입 신호).
   const [dealSeed, setDealSeed] = useState<string | undefined>(undefined)
+  // 내 딜 대시보드 '이어서 분석' → 언더라이팅 탭에서 자동 로드할 딜명.
+  const [openDealName, setOpenDealName] = useState<string | undefined>(undefined)
+
+  function continueDeal(dealName: string) {
+    setOpenDealName(dealName)
+    setTab('underwrite')
+  }
   // 소셜 로그인 콜백 해시 소비(부팅 시 1회). 토큰이 있으면 세션 복원 흐름이 그대로 받아간다.
   const [oauthHash] = useState(() => consumeOAuthHash())
   const oauthError: string | null = oauthHash.error ?? null
@@ -231,12 +238,14 @@ function App() {
             toolCosts={toolCosts}
           />
         )}
-        {tab === 'mydeals' && <MyDealsView />}
+        {tab === 'mydeals' && <MyDealsView onContinue={continueDeal} />}
         {tab === 'underwrite' && (
           <UnderwriteView
             onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
             onNeedCredits={handleNeedCredits}
             toolCosts={toolCosts}
+            openDealName={openDealName}
+            onDealOpened={() => setOpenDealName(undefined)}
           />
         )}
         {tab === 'advanced' && (

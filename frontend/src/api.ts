@@ -255,6 +255,8 @@ export interface Analysis {
   // UNDERWRITING
   summary?: string
   guideline_check?: string
+  strengths?: string[]
+  downside?: string
   key_drivers?: string[]
   key_risks?: RiskItem[]
   recommendation?: string
@@ -275,7 +277,8 @@ export interface Analysis {
   investment_thesis?: string
   // MARKET_STUDY
   region?: string
-  fundamentals?: string
+  /** 신규 스키마는 불릿 배열, 구버전은 문자열. StageAnalysis 가 둘 다 렌더. */
+  fundamentals?: string | string[]
   assumption_check?: AssumptionCheck[]
   comps?: Comp[]
   macro?: string
@@ -347,6 +350,10 @@ export interface DealSummary {
   lastActivityAt: string | null
   anchorRunId: number
   hasReport: boolean
+  /** 언더라이팅 입력 단계가 있어 '이어서 분석'이 가능한가. */
+  canContinue: boolean
+  /** 딜이 아니라 AI 심층 시장 분석 리포트인가('이어서 분석' 대신 '데이터 보기'). */
+  isMarketReport: boolean
 }
 
 /** 저장된 분석 결과 페이로드(= AnalyzeResponse 와 동일 구조). */

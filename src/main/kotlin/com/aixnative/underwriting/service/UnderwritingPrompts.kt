@@ -30,18 +30,20 @@ object UnderwritingPrompts {
             COMMON_STRICT_RULES +
             "- <FACTS> 에 없는 새 숫자 생성 절대 금지(수치는 코드 확정값).\n\n" +
             "[가이드라인]\n" + guidelines + "\n" +
-            "[출력 스키마]\n" +
+            "[출력 스키마] — 긴 문단 금지. 각 항목은 스캔되도록 짧게.\n" +
             "{\n" +
-            "  \"summary\": \"Base Case 핵심 4~6문장 — 매입구조·핵심 수익지표(IRR/EM/DSCR/CoC)·Exit 가정·하방 내성(한국어)\",\n" +
-            "  \"guideline_check\": \"IRR/EM/DSCR/LTV/CoC 각 항목별 충족/미달을 수치와 함께 항목별로 서술(한국어)\",\n" +
-            "  \"key_drivers\": [ \"IRR 에 민감한 변수 + 왜 민감한지(민감도·시나리오 근거). 통상 3~5개(한국어)\" ],\n" +
-            "  \"key_risks\": [ { \"risk\": \"리스크 + 영향 경로(한국어)\", \"impact\": \"HIGH|MEDIUM|LOW\" } ],\n" +
+            "  \"thesis\": \"한 줄 결론(1~2문장) — 목표수익 달성 여부와 그 핵심 근거만(한국어). 수치 나열 금지.\",\n" +
+            "  \"strengths\": [ \"이 딜의 강점·방어력 한 줄(3~5개, 한국어) — 예: 'DSCR 1.67~1.88로 부채상환 여력 견조', 'Exit Cap>Going-in Cap 로 보수적 가정'\" ],\n" +
+            "  \"key_drivers\": [ \"IRR·수익에 가장 민감한 변수 + 왜(민감도·시나리오 근거). 3~5개, 각 한 줄(한국어) — 예: 'Exit Cap +25bps 시 IRR -X%p'\" ],\n" +
+            "  \"key_risks\": [ { \"risk\": \"리스크 + 영향 경로 한 줄(한국어)\", \"impact\": \"HIGH|MEDIUM|LOW\" } ],\n" +
+            "  \"downside\": \"하방 시나리오 한 줄 — 최악 케이스의 IRR·EM 과 원금 손실 여부(FACTS 시나리오 수치만, 한국어)\",\n" +
             "  \"recommendation\": \"GO|GO_WITH_CONDITIONS|NO_GO\",\n" +
             "  \"recommendation_reason\": \"사유 2~3문장 — 수익지표 평가 + 핵심 리스크 + 조건(한국어)\"\n" +
             "}\n\n" +
             "[판단 지침 — 기관 IC 깊이]\n" +
-            "- summary 는 표면 수치 나열이 아니라 '이 딜이 목표수익을 어떻게/얼마나 견고하게 달성하는지'를 서술. 민감도에서 IRR·DSCR 에 가장 민감한 변수와 하방 시나리오 내성을 명시.\n" +
-            "- key_drivers 3~5개, key_risks 3~5개 — 각각 구체적 변수·영향 경로로(예: 'Exit Cap +50bps 시 IRR -X%p'). 단 <FACTS> 의 확정 수치만 인용, 새 숫자 생성 금지.\n\n" +
+            "- thesis 는 1~2문장으로 '목표수익을 달성하는가/얼마나 견고한가'만. 지표 수치를 줄줄이 나열하지 말 것(수치는 화면 지표·표에 이미 있음).\n" +
+            "- strengths·key_drivers·key_risks 는 각 3~5개, **한 줄씩**. 표면 수치 나열이 아니라 '방어력/민감도/영향 경로'를 짚되 <FACTS> 확정 수치만 인용, 새 숫자 생성 금지.\n" +
+            "- downside 는 시나리오(하방)의 IRR·EM 을 근거로 원금 손실 가능성 유무를 한 줄로 단정 아닌 경고 톤.\n\n" +
             "[문서명] " + (docName ?: "(이름없음)") + "\n\n" +
             "<FACTS>\n" +
             factsText +

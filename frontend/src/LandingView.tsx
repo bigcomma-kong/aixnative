@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { AuthView } from './AuthView'
+import { SampleShowcase } from './SampleShowcase'
 import { SiteFooter } from './SiteFooter'
 import type { AuthResult } from './api'
 
@@ -147,9 +149,18 @@ const MODES = [
 ] as const
 
 export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
-  function focusAuth() {
+  // 어느 탭(로그인/가입)으로 열지 + 포커스 트리거. nonce 증가로 매 클릭마다 AuthView 가 반응.
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login')
+  const [authFocus, setAuthFocus] = useState(0)
+
+  function focusAuth(mode: 'login' | 'signup') {
+    setAuthMode(mode)
+    setAuthFocus((n) => n + 1)
     document.getElementById('auth')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    setTimeout(() => document.getElementById('email')?.focus(), 450)
+  }
+
+  function scrollToSample() {
+    document.getElementById('sample')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   return (
@@ -159,8 +170,9 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
       <header className="landing-nav">
         <div className="brand">Aix<span>Native</span></div>
         <div className="landing-nav-actions">
-          <button className="btn-link" onClick={focusAuth}>로그인</button>
-          <button className="btn-primary nav-cta" onClick={focusAuth}>무료로 시작</button>
+          <button className="btn-link nav-tool" onClick={scrollToSample}>샘플 결과 보기</button>
+          <button className="btn-link" onClick={() => focusAuth('login')}>로그인</button>
+          <button className="btn-primary nav-cta" onClick={() => focusAuth('signup')}>무료로 시작</button>
         </div>
       </header>
 
@@ -175,8 +187,8 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
             한 번에. 스프레드시트 없이, 투자 의사결정을 더 빠르게.
           </p>
           <div className="hero-cta">
-            <button className="btn-primary hero-cta-main" onClick={focusAuth}>무료로 시작 →</button>
-            <a className="btn-ghost" href="#features">작동 방식 보기</a>
+            <button className="btn-primary hero-cta-main" onClick={() => focusAuth('signup')}>무료로 시작 →</button>
+            <button className="btn-ghost" type="button" onClick={scrollToSample}>샘플 분석 결과 보기</button>
           </div>
           <div className="hero-proof">
             <div className="avatar-stack">
@@ -293,6 +305,19 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
         </p>
       </section>
 
+      <section className="sample reveal" id="sample" aria-labelledby="sample-h">
+        <div className="feat-head">
+          <span className="eyebrow">로그인 없이 미리보기</span>
+          <h2 id="sample-h" className="feat-h">실제 분석 결과를 먼저 보세요</h2>
+          <p className="modes-sub">
+            아래는 실제 AI 분석을 같은 화면 그대로 렌더한 <strong>축약 미리보기</strong>입니다.
+            가입 후 딜을 넣으면 이보다 더 세분화된 전체 결과 — 4단계 분석(스크리닝·시장조사·언더라이팅·투심)에
+            심화 분석 10종까지 — 를 받습니다. 스프레드시트가 아니라 투자 판단이 나옵니다.
+          </p>
+        </div>
+        <SampleShowcase onSignup={() => focusAuth('signup')} />
+      </section>
+
       <section className="auth-section reveal" aria-labelledby="auth-h">
         <div className="auth-section-copy">
           <h2 id="auth-h" className="auth-section-h">지금 첫 딜을<br />심사해 보세요</h2>
@@ -304,7 +329,7 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
           </ul>
         </div>
         <div className="hero-auth">
-          <AuthView onAuthed={onAuthed} initialError={oauthError} />
+          <AuthView onAuthed={onAuthed} initialError={oauthError} requestMode={authMode} focusSignal={authFocus} />
         </div>
       </section>
 

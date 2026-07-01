@@ -15,6 +15,10 @@ interface UnderwriteViewProps {
   onNeedCredits: () => void
   /** 분석유형 id → 크레딧 단가(서버 단일 소스). 미로딩 시 숫자 생략. */
   toolCosts?: Record<string, number>
+  /** 내 딜 대시보드 '이어서 분석' — 이 딜명을 자동 로드(폼 프리필 + 무료 ProForma + 단계 탭). */
+  openDealName?: string
+  /** 로드 완료 후 부모가 신호를 비우도록. */
+  onDealOpened?: () => void
 }
 
 /** "N크레딧" 라벨 — 단가 미로딩 시 숫자 생략("크레딧"). */
@@ -154,7 +158,7 @@ function resultsFromStage(s: DealStage): Results {
   }
 }
 
-export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: UnderwriteViewProps) {
+export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, openDealName, onDealOpened }: UnderwriteViewProps) {
   const [form, setForm] = useState<FormState>(INITIAL)
   const [results, setResults] = useState<Results | null>(null)
   // 현재 딜의 완료된 단계 모음(합본 탭) — 같은 딜명으로 스크리닝·시장조사 등을 따로 했어도 한 화면에서 전환.
@@ -192,6 +196,57 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
       setBusy('none')
     }
   }
+
+  /** '이어서 분석' — 딜의 저장된 단계에서 입력을 복원해 폼 프리필 + 무료 ProForma + 단계 탭 로드(무과금). */
+  async function loadDeal(dealName: string) {
+    setError(null); setIsSample(false); setActiveTab('FINANCE')
+    setBusy('proforma')
+    try {
+      const ds = await api.dealStages(dealName)
+      const map: Partial<Record<AnalysisType, DealStage>> = {}
+      for (const s of ds.stages) map[s.analysisType] = s
+      setStageMap(map)
+      const req = ds.stages.find((s) => s.request && s.request.askingPriceEok != null)?.request
+      if (req) {
+        const f: FormState = {
+          dealName: req.dealName ?? dealName,
+          assetType: req.assetType ?? '오피스',
+          location: req.location ?? '',
+          notes: req.notes ?? '',
+          askingPriceEok: String(req.askingPriceEok ?? ''),
+          noiEok: String(req.noiEok ?? ''),
+          ltvPct: String(req.ltvPct ?? ''),
+          loanRatePct: String(req.loanRatePct ?? ''),
+          exitCapPct: String(req.exitCapPct ?? ''),
+          holdYears: String(req.holdYears ?? '5'),
+          rentGrowthPct: String(req.rentGrowthPct ?? '3'),
+        }
+        setForm(f)
+        const input: UnderwriteInput = {
+          dealName: f.dealName, assetType: f.assetType, location: f.location || undefined,
+          askingPriceEok: Number(f.askingPriceEok), noiEok: Number(f.noiEok),
+          ltvPct: Number(f.ltvPct), loanRatePct: Number(f.loanRatePct), exitCapPct: Number(f.exitCapPct),
+          holdYears: Number(f.holdYears || '5'), rentGrowthPct: Number(f.rentGrowthPct || '3'),
+        }
+        const res = await api.proforma(input)
+        setResults({ proForma: res.proForma, scenarios: res.scenarios, guidelineChecks: res.guidelineChecks, disclaimer: res.disclaimer, inputs: input })
+      } else {
+        setForm((cur) => ({ ...cur, dealName }))
+      }
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.message : '딜을 불러오지 못했습니다.')
+    } finally {
+      setBusy('none')
+    }
+  }
+
+  // 내 딜 대시보드 '이어서 분석' 진입 — openDealName 신호가 오면 그 딜을 로드하고 신호를 비운다.
+  useEffect(() => {
+    if (!openDealName) return
+    void loadDeal(openDealName)
+    onDealOpened?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openDealName])
 
   /** 딜명으로 완료된 단계들을 모아 탭에 채운다(무과금). 실패해도 단일 결과 표시엔 지장 없음. */
   async function loadDealStages(dealName?: string | null) {
@@ -477,7 +532,8 @@ function HistoryPanel({ version, onOpen }: { version: number; onOpen: (r: RunRes
   useEffect(() => {
     let active = true
     api.runs()
-      .then((list) => { if (active) setRuns(list) })
+      // 언더라이팅 이력에는 파이프라인(스크리닝·시장조사·언더라이팅·투심)만 — 심화·시장 분석은 각 메뉴에서.
+      .then((list) => { if (active) setRuns(list.filter((r) => STAGE_LABEL[r.tool])) })
       .catch((err: unknown) => { if (active) setError(err instanceof ApiError ? err.message : '이력 조회 실패') })
     return () => { active = false }
   }, [version])
@@ -511,7 +567,7 @@ function HistoryPanel({ version, onOpen }: { version: number; onOpen: (r: RunRes
               <tr key={r.id}>
                 <td>{r.dealName ?? '(이름없음)'}</td>
                 <td>{STAGE_LABEL[r.tool] ?? r.tool}</td>
-                <td>{r.status}</td>
+                <td><span className={r.status === 'SUCCESS' ? 'st-ok' : 'st-fail'}>{r.status === 'SUCCESS' ? '성공' : r.status === 'FAILED' ? '실패' : r.status}</span></td>
                 <td className="num">{r.createdAt ? new Date(r.createdAt).toLocaleString('ko-KR') : '-'}</td>
                 <td><button className="btn-link" onClick={() => open(r.id)}>열기</button></td>
               </tr>
@@ -562,15 +618,17 @@ function ResultPanel({ results, stageMap, activeTab, onSelectTab, onReport, repo
   return (
     <div className="ai-block">
       <div className="result-head">
-        <button type="button" className="btn-ghost btn-report"
-          onClick={() => downloadUnderwritingXls(p, results.scenarios, results.inputs, results.inputs?.dealName)}
-          title="ProForma 모델을 Excel(.xls)로 저장">Excel 모델</button>
-        {results.runId && (
-          <button type="button" className="btn-ghost btn-report" onClick={onReport} disabled={reportBusy}>
-            {reportBusy ? '보고서 여는 중…' : '투자 보고서 보기'}
-          </button>
-        )}
-        {results.runId && <ShareButton runId={results.runId} />}
+        <span className="result-head-actions">
+          <button type="button" className="btn-ghost btn-report"
+            onClick={() => downloadUnderwritingXls(p, results.scenarios, results.inputs, results.inputs?.dealName)}
+            title="ProForma 모델을 Excel(.xls)로 저장">Excel 모델</button>
+          {results.runId && (
+            <button type="button" className="btn-ghost btn-report" onClick={onReport} disabled={reportBusy}>
+              {reportBusy ? '보고서 여는 중…' : '투자 보고서 보기'}
+            </button>
+          )}
+          {results.runId && <ShareButton runId={results.runId} />}
+        </span>
       </div>
       <StageTabs stageMap={stageMap} active={activeTab} onSelect={onSelectTab} />
       {results.inputs && <InputSummary inputs={results.inputs} />}

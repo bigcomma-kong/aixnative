@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { ReactNode } from 'react'
-import type { Analysis, RunSummary } from './api'
-import { StageAnalysis } from './StageAnalysis'
+import type { Analysis, MarketDeepReport, RunSummary } from './api'
+import { StageAnalysis, Verdict } from './StageAnalysis'
+import { DeepReportContent } from './DeepReportPanel'
+import { downloadDeepReportDoc, printDeepReport } from './reportExport'
 
 /** 파이프라인 4단계 — 결과를 StageAnalysis 공용 렌더러로 표시(표·플래그·매트릭스 포함). */
 const PIPELINE_TOOLS = new Set(['SCREENING', 'MARKET_STUDY', 'UNDERWRITING', 'IC_MEMO'])
@@ -37,17 +39,26 @@ export function ResultModal({ run, result, request, subtitle, onClose }: {
   const disclaimer: string | undefined = a?.disclaimer ?? result?.disclaimer
   // 파이프라인 단계는 공용 StageAnalysis 로 렌더(인라인 화면과 동일한 표·플래그). 그 외는 기존 제네릭 렌더러.
   const isPipeline = PIPELINE_TOOLS.has(run.tool)
+  // AI 심층 시장 리포트는 시장 탭과 동일한 리치 패널(공용 DeepReportContent)로 렌더 — 결과 JSON 이 곧 MarketDeepReport.
+  const isDeepReport = run.tool === 'MARKET_DEEP_REPORT'
+  const deepReport = isDeepReport ? (result as MarketDeepReport) : null
 
   return (
     <div className="analyze-overlay" role="dialog" aria-modal="true" aria-label="분석 결과" onClick={onClose}>
-      <div className="result-modal" onClick={(e) => e.stopPropagation()}>
+      <div className={`result-modal${isDeepReport ? ' wide' : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="rm-head">
           <div>
             <span className="rm-tool">{toolLabel(run.tool)}{subtitle ? ` · ${subtitle}` : ''}</span>
             <strong className="rm-title">{run.dealName ?? '(이름 없음)'}</strong>
             <span className="rm-date">{run.createdAt ? new Date(run.createdAt).toLocaleString('ko-KR') : ''}</span>
           </div>
-          <button className="deep-close" onClick={onClose} aria-label="닫기">×</button>
+          <div className="deep-head-actions">
+            {deepReport && (<>
+              <button className="btn-ghost btn-xs" onClick={() => downloadDeepReportDoc(deepReport)} title="Word(.doc)로 저장">Word</button>
+              <button className="btn-ghost btn-xs" onClick={() => printDeepReport(deepReport)} title="PDF로 저장(인쇄)">PDF</button>
+            </>)}
+            <button className="deep-close" onClick={onClose} aria-label="닫기">×</button>
+          </div>
         </div>
 
         <div className="rm-body">
@@ -67,9 +78,14 @@ export function ResultModal({ run, result, request, subtitle, onClose }: {
             </div>
           )}
 
-          {isPipeline && <StageAnalysis type={run.tool} analysis={a as Analysis} />}
+          {isPipeline && (<>
+            <Verdict analysis={a as Analysis} />
+            <StageAnalysis type={run.tool} analysis={a as Analysis} />
+          </>)}
 
-          {!isPipeline && (<>
+          {deepReport && <DeepReportContent report={deepReport} />}
+
+          {!isPipeline && !isDeepReport && (<>
           {str(a.headline) && <h3 className="rm-h3">{a.headline}</h3>}
           {(str(a.verdict) || str(a.priceVerdict) || str(a.recommendation)) && (
             <div className={`rm-verdict ${tone(a.verdict ?? a.priceVerdict ?? a.recommendation)}`}>
@@ -158,13 +174,13 @@ export function ResultModal({ run, result, request, subtitle, onClose }: {
           )}
           </>)}
 
-          {facts.length > 0 && (
+          {!isDeepReport && facts.length > 0 && (
             <Block title="실측·확정 데이터">
               <ul className="rm-ul">{facts.map((f, i) => <li key={i}><b>{f.source}</b> — {f.detail}</li>)}</ul>
             </Block>
           )}
 
-          {disclaimer && <p className="rm-disc">{disclaimer}</p>}
+          {!isDeepReport && disclaimer && <p className="rm-disc">{disclaimer}</p>}
         </div>
       </div>
     </div>
