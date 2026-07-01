@@ -100,6 +100,10 @@ class UnderwritingController(
     @GetMapping("/runs")
     fun runs(): ApiResponse<List<RunSummary>> = ApiResponse.ok(service.listRuns())
 
+    /** 내 딜 대시보드 — 딜명으로 집계한 요약(최근 활동순). 리텐션 허브. */
+    @GetMapping("/deals")
+    fun deals(): ApiResponse<List<DealSummary>> = ApiResponse.ok(service.myDeals())
+
     /** 분석 이력 상세 — 저장된 입력/결과. 다른 테넌트의 id 면 404. */
     @GetMapping("/runs/{id}")
     fun run(@PathVariable id: Long): ApiResponse<RunDetail> = ApiResponse.ok(service.getRun(id))

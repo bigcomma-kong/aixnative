@@ -5,6 +5,7 @@ import {
   type AdminCreditEntry,
   type AdminRun,
   type AdminRunDetail,
+  type AdminStats,
   type AdminUser,
   type CreditReason,
   type NewsletterSendLogEntry,
@@ -28,7 +29,7 @@ const CREDIT_REASON_LABEL: Record<CreditReason, string> = {
 }
 
 export function AdminView({ currentEmail }: AdminViewProps) {
-  const [section, setSection] = useState<'users' | 'credits' | 'runs' | 'newsletter'>('users')
+  const [section, setSection] = useState<'dashboard' | 'users' | 'credits' | 'runs' | 'newsletter'>('dashboard')
 
   return (
     <>
@@ -38,6 +39,7 @@ export function AdminView({ currentEmail }: AdminViewProps) {
           <h1>운영 콘솔</h1>
         </div>
         <div className="seg admin-seg" role="group" aria-label="관리자 섹션">
+          <button type="button" aria-pressed={section === 'dashboard'} onClick={() => setSection('dashboard')}>대시보드</button>
           <button type="button" aria-pressed={section === 'users'} onClick={() => setSection('users')}>사용자·크레딧</button>
           <button type="button" aria-pressed={section === 'credits'} onClick={() => setSection('credits')}>크레딧 내역</button>
           <button type="button" aria-pressed={section === 'runs'} onClick={() => setSection('runs')}>분석 데이터</button>
@@ -45,11 +47,84 @@ export function AdminView({ currentEmail }: AdminViewProps) {
         </div>
       </div>
 
+      {section === 'dashboard' && <DashboardPanel />}
       {section === 'users' && <UsersPanel currentEmail={currentEmail} />}
       {section === 'credits' && <CreditsPanel />}
       {section === 'runs' && <RunsPanel />}
       {section === 'newsletter' && <NewsletterPanel />}
     </>
+  )
+}
+
+const KRW = (n: number): string => n.toLocaleString('ko-KR')
+
+/** 운영 대시보드 — 사용자·분석·크레딧·결제 핵심 지표 카드. */
+function DashboardPanel() {
+  const [stats, setStats] = useState<AdminStats | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.adminStats()
+      .then(setStats)
+      .catch((e: unknown) => setError(e instanceof ApiError ? e.message : '조회 실패'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="card"><p className="hint">불러오는 중…</p></div>
+  if (error) return <div className="card"><p className="error">{error}</p></div>
+  if (!stats) return null
+
+  const runToolLabel = (t: string): string => toolLabel(t)
+
+  return (
+    <>
+      <div className="stat-cards">
+        <StatCard k="총 사용자" v={String(stats.users.total)} sub={`오늘 +${stats.users.newToday} · 7일 +${stats.users.new7d}`} />
+        <StatCard k="이메일 인증" v={String(stats.users.verified)} sub={`유료 전환 ${stats.users.paid}명`} />
+        <StatCard k="총 분석 실행" v={String(stats.runs.total)} sub={`오늘 ${stats.runs.today} · 7일 ${stats.runs.last7d} · 성공 ${stats.runs.success}`} accent />
+        <StatCard k="결제 매출" v={`${KRW(stats.payments.totalKrw)}원`} sub={`승인 ${stats.payments.confirmedCount}건`} accent />
+      </div>
+
+      <div className="dash-grid">
+        <div className="card">
+          <div className="section-title">크레딧 흐름</div>
+          <table className="admin-table">
+            <tbody>
+              <tr><td>가입 무료 지급</td><td className="num pos">+{stats.credits.granted}</td></tr>
+              <tr><td>결제 충전</td><td className="num pos">+{stats.credits.purchased}</td></tr>
+              <tr><td>관리자 조정</td><td className={`num ${stats.credits.adminAdjust >= 0 ? 'pos' : 'neg'}`}>{stats.credits.adminAdjust >= 0 ? '+' : ''}{stats.credits.adminAdjust}</td></tr>
+              <tr><td>AI 분석 사용</td><td className="num neg">−{stats.credits.spent}</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div className="card">
+          <div className="section-title">분석 유형별 실행</div>
+          {Object.keys(stats.runs.byTool).length === 0 ? (
+            <p className="hint">아직 분석 실행이 없습니다.</p>
+          ) : (
+            <table className="admin-table">
+              <tbody>
+                {Object.entries(stats.runs.byTool).map(([tool, n]) => (
+                  <tr key={tool}><td>{runToolLabel(tool)}</td><td className="num"><b>{n}</b></td></tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+function StatCard({ k, v, sub, accent }: { k: string; v: string; sub?: string; accent?: boolean }) {
+  return (
+    <div className={`stat-card${accent ? ' accent' : ''}`}>
+      <span className="sc-k">{k}</span>
+      <span className="sc-v num">{v}</span>
+      {sub && <span className="sc-sub">{sub}</span>}
+    </div>
   )
 }
 

@@ -389,6 +389,36 @@ class UnderwritingService(
     }
 
     /**
+     * 내 딜 대시보드 — 내 런을 딜명으로 집계(최근 활동순). 리텐션 허브(저장·상태·재방문).
+     * 딜명 없는 런은 제외. 완료 단계·심화 종수·최근 활동을 요약해 "내가 분석한 딜들"을 한눈에.
+     */
+    fun myDeals(): List<DealSummary> {
+        val byDeal = LinkedHashMap<String, MutableList<com.aixnative.ai.AiToolRun>>()
+        for (r in aiToolRunService.listMine()) { // 최신순
+            val name = r.dealName?.takeIf { it.isNotBlank() } ?: continue
+            byDeal.getOrPut(name) { mutableListOf() }.add(r)
+        }
+        return byDeal.map { (name, group) ->
+            val latest = group.first() // listMine 최신순 → 그룹 첫 원소가 최신
+            val req = latest.requestJson?.let { runCatching { objectMapper.readTree(it) }.getOrNull() }
+            val successTools = group.filter { it.status == RunStatus.SUCCESS }.map { it.tool }.toSet()
+            val pipeline = AnalysisType.PIPELINE.filter { it.tool in successTools }.map { it.label }
+            val advanced = successTools.count { DocAnalysisType.fromTool(it) != null }
+            DealSummary(
+                dealName = name,
+                assetType = req?.get("assetType")?.asText(null)?.takeIf { it.isNotBlank() },
+                location = req?.get("location")?.asText(null)?.takeIf { it.isNotBlank() },
+                runCount = group.size,
+                completedStages = pipeline,
+                advancedCount = advanced,
+                lastActivityAt = latest.createdAt,
+                anchorRunId = requireNotNull(latest.id),
+                hasReport = pipeline.isNotEmpty(),
+            )
+        }.sortedByDescending { it.lastActivityAt }
+    }
+
+    /**
      * 한 딜의 완료된 파이프라인 단계 모음(합본 탭 화면용). 단계별 최신 성공 결과를 한 번에 반환.
      * 무과금·테넌트 스코프. 같은 딜명으로 스크리닝·시장조사 등을 따로 실행했어도 한 화면에서 모아 볼 수 있게 한다.
      */

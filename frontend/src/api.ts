@@ -59,6 +59,14 @@ export interface AdminRunDetail extends AdminRun {
   resultJson: string | null
 }
 
+/** 운영 대시보드 집계 지표. */
+export interface AdminStats {
+  users: { total: number; verified: number; admin: number; paid: number; newToday: number; new7d: number }
+  runs: { total: number; success: number; today: number; last7d: number; byTool: Record<string, number> }
+  credits: { granted: number; purchased: number; adminAdjust: number; spent: number }
+  payments: { confirmedCount: number; totalKrw: number }
+}
+
 /** 관리자 크레딧 내역 1행 — 전 사용자 원장. */
 export interface AdminCreditEntry {
   id: number
@@ -933,6 +941,9 @@ export const api = {
   /** 관리자 — 계정 영구 삭제(연관 데이터 정리). */
   adminDeleteUser: (id: number): Promise<{ deleted: boolean }> =>
     request(`/api/admin/users/${id}`, { method: 'DELETE' }),
+
+  /** 관리자 — 운영 대시보드 집계 지표. */
+  adminStats: (): Promise<AdminStats> => request('/api/admin/stats'),
 
   /** 관리자 — 전 사용자 크레딧 원장(최신순). 충전 경로·사유 포함. */
   adminCredits: (): Promise<AdminCreditEntry[]> => request('/api/admin/credits'),

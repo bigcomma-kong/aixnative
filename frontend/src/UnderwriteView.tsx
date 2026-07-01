@@ -119,6 +119,23 @@ const INPUT_FIELDS: { key: keyof UnderwriteInput; label: string; suffix?: string
   { key: 'rentGrowthPct', label: '임대성장', suffix: '%' },
 ]
 
+/** FormState → 계산 입력. buildInput/loadSample 공용(폼 상태 비동기 문제 회피). */
+function inputOf(f: FormState): UnderwriteInput {
+  return {
+    dealName: f.dealName || undefined,
+    assetType: f.assetType || undefined,
+    location: f.location || undefined,
+    notes: f.notes || undefined,
+    askingPriceEok: Number(f.askingPriceEok),
+    noiEok: Number(f.noiEok),
+    ltvPct: Number(f.ltvPct),
+    loanRatePct: Number(f.loanRatePct),
+    exitCapPct: Number(f.exitCapPct),
+    holdYears: Number(f.holdYears || '5'),
+    rentGrowthPct: Number(f.rentGrowthPct || '3'),
+  }
+}
+
 /** 저장된 단계(DealStage) → 결과 패널 표시용 Results. 탭 전환 시 사용. */
 function resultsFromStage(s: DealStage): Results {
   const r = s.result
@@ -193,20 +210,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
   }
 
   function buildInput(): UnderwriteInput {
-    return {
-      dealName: form.dealName || undefined,
-      assetType: form.assetType || undefined,
-      location: form.location || undefined,
-      notes: form.notes || undefined,
-      askingPriceEok: Number(form.askingPriceEok),
-      noiEok: Number(form.noiEok),
-      ltvPct: Number(form.ltvPct),
-      loanRatePct: Number(form.loanRatePct),
-      exitCapPct: Number(form.exitCapPct),
-      // 선택값 — 비어 있으면 표준 가정 적용.
-      holdYears: Number(form.holdYears || '5'),
-      rentGrowthPct: Number(form.rentGrowthPct || '3'),
-    }
+    return inputOf(form)
   }
 
   /**

@@ -109,6 +109,23 @@ data class RunSummary(
     val createdAt: Instant?,
 )
 
+/** 내 딜 대시보드 항목 — 내 런을 딜명으로 집계한 요약(리텐션 허브). */
+data class DealSummary(
+    val dealName: String,
+    val assetType: String?,
+    val location: String?,
+    val runCount: Int,
+    /** 완료한 파이프라인 단계 라벨(스크리닝·시장조사·언더라이팅·투심, 순서대로). */
+    val completedStages: List<String>,
+    /** 완료한 심화분석 종 수(BOV·개발·세무 등). */
+    val advancedCount: Int,
+    val lastActivityAt: Instant?,
+    /** 최신 런 id — 합본 보고서·이어보기 진입점. */
+    val anchorRunId: Long,
+    /** 파이프라인 단계가 하나라도 있으면 합본 보고서 가능. */
+    val hasReport: Boolean,
+)
+
 /** 한 딜의 단계별 최신 성공 결과 1건 — 합본 화면(탭)용. result 는 저장된 결과 JSON(= RunResult). */
 data class DealStage(
     val analysisType: String,

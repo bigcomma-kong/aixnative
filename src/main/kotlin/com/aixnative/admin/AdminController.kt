@@ -4,9 +4,17 @@ import com.aixnative.account.UserRepository
 import com.aixnative.account.UserRole
 import com.aixnative.account.UserStatus
 import com.aixnative.ai.AiToolRunService
+import com.aixnative.ai.RunStatus
+import com.aixnative.billing.CreditLedgerRepository
+import com.aixnative.billing.CreditReason
 import com.aixnative.billing.CreditService
 import com.aixnative.billing.Plan
 import com.aixnative.common.tenant.TenantContext
+import com.aixnative.payment.PaymentRepository
+import com.aixnative.payment.PaymentStatus
+import java.time.Duration
+import java.time.LocalDate
+import java.time.ZoneId
 import com.aixnative.common.web.ApiResponse
 import com.aixnative.common.web.BadRequestException
 import com.aixnative.common.web.NotFoundException
@@ -31,6 +39,18 @@ data class AdminUser(
     val creditBalance: Int,
     val createdAt: Instant?,
 )
+
+/** 운영 대시보드 집계 지표. */
+data class AdminStats(
+    val users: UserStat,
+    val runs: RunStat,
+    val credits: CreditStat,
+    val payments: PaymentStat,
+)
+data class UserStat(val total: Int, val verified: Int, val admin: Int, val paid: Int, val newToday: Int, val new7d: Int)
+data class RunStat(val total: Int, val success: Int, val today: Int, val last7d: Int, val byTool: Map<String, Int>)
+data class CreditStat(val granted: Int, val purchased: Int, val adminAdjust: Int, val spent: Int)
+data class PaymentStat(val confirmedCount: Long, val totalKrw: Long)
 
 data class RoleChangeRequest(val role: UserRole)
 data class CreditAdjustRequest(val delta: Int)
@@ -82,7 +102,51 @@ class AdminController(
     private val creditService: CreditService,
     private val runs: AiToolRunService,
     private val adminUserService: AdminUserService,
+    private val ledger: CreditLedgerRepository,
+    private val payments: PaymentRepository,
 ) {
+
+    /** 운영 대시보드 지표 — 사용자·분석·크레딧·결제 집계(전 테넌트). */
+    @GetMapping("/stats")
+    @Transactional(readOnly = true)
+    fun stats(): ApiResponse<AdminStats> {
+        val zone = ZoneId.of("Asia/Seoul")
+        val startToday = LocalDate.now(zone).atStartOfDay(zone).toInstant()
+        val since7d = Instant.now().minus(Duration.ofDays(7))
+
+        val allUsers = users.findAll()
+        val userStat = UserStat(
+            total = allUsers.size,
+            verified = allUsers.count { it.emailVerified },
+            admin = allUsers.count { it.role == UserRole.ADMIN },
+            paid = allUsers.count { it.plan == Plan.PAID },
+            newToday = allUsers.count { it.createdAt?.isAfter(startToday) == true },
+            new7d = allUsers.count { it.createdAt?.isAfter(since7d) == true },
+        )
+
+        val allRuns = runs.listAllAdmin()
+        val runStat = RunStat(
+            total = allRuns.size,
+            success = allRuns.count { it.status == RunStatus.SUCCESS },
+            today = allRuns.count { it.createdAt?.isAfter(startToday) == true },
+            last7d = allRuns.count { it.createdAt?.isAfter(since7d) == true },
+            byTool = allRuns.groupingBy { it.tool }.eachCount().toList().sortedByDescending { it.second }.toMap(),
+        )
+
+        val creditStat = CreditStat(
+            granted = ledger.sumDeltaByReason(CreditReason.SIGNUP_GRANT),
+            purchased = ledger.sumDeltaByReason(CreditReason.PURCHASE),
+            adminAdjust = ledger.sumDeltaByReason(CreditReason.ADMIN_ADJUST),
+            spent = -ledger.sumDeltaByReason(CreditReason.AI_ANALYSIS),
+        )
+
+        val paymentStat = PaymentStat(
+            confirmedCount = payments.countByStatus(PaymentStatus.CONFIRMED),
+            totalKrw = payments.sumAmountByStatus(PaymentStatus.CONFIRMED),
+        )
+
+        return ApiResponse.ok(AdminStats(userStat, runStat, creditStat, paymentStat))
+    }
 
     @GetMapping("/users")
     @Transactional(readOnly = true)
