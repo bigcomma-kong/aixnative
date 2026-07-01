@@ -5,6 +5,7 @@ import { UnderwriteView } from './UnderwriteView'
 import { DocAnalysisView } from './DocAnalysisView'
 import { MarketFeedView } from './MarketFeedView'
 import { CreditHistoryView } from './CreditHistoryView'
+import { MyDealsView } from './MyDealsView'
 import { AdminView } from './AdminView'
 import { ResetPasswordView } from './ResetPasswordView'
 import { Paywall } from './Paywall'
@@ -35,7 +36,7 @@ function consumeOAuthHash(): { token?: string; error?: string } {
 }
 
 type Plan = 'FREE' | 'PAID'
-type Tab = 'feed' | 'underwrite' | 'advanced' | 'credits' | 'admin'
+type Tab = 'feed' | 'mydeals' | 'underwrite' | 'advanced' | 'credits' | 'admin'
 
 interface Session {
   email: string
@@ -179,6 +180,7 @@ function App() {
         <div className="brand">Aix<span>Native</span></div>
         <nav className="topnav" aria-label="주요 메뉴">
           <button aria-current={tab === 'feed'} onClick={() => setTab('feed')}>시장</button>
+          <button aria-current={tab === 'mydeals'} onClick={() => setTab('mydeals')}>내 딜</button>
           <button aria-current={tab === 'underwrite'} onClick={() => setTab('underwrite')}>언더라이팅</button>
           <button aria-current={tab === 'advanced'} onClick={() => setTab('advanced')}>심화 분석</button>
           <button aria-current={tab === 'credits'} onClick={() => setTab('credits')}>사용 내역</button>
@@ -229,6 +231,7 @@ function App() {
             toolCosts={toolCosts}
           />
         )}
+        {tab === 'mydeals' && <MyDealsView />}
         {tab === 'underwrite' && (
           <UnderwriteView
             onCreditBalance={(balance) => patchSession({ creditBalance: balance })}

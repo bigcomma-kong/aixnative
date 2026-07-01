@@ -969,6 +969,35 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 }
 .sample-banner b { color: var(--accent); }
 
+/* 내 딜 대시보드 (B-2) */
+.deals-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: var(--gap); }
+.deal-card {
+  display: flex; flex-direction: column; gap: 0.55rem;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 1.15rem 1.25rem; box-shadow: var(--shadow-sm);
+  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.deal-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: var(--line-strong); }
+.deal-top { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.deal-type {
+  font-size: 0.72rem; font-weight: 700; color: var(--accent);
+  background: var(--accent-tint); border: 1px solid var(--accent-ring);
+  border-radius: var(--r-pill); padding: 0.15rem 0.55rem;
+}
+.deal-date { font-size: 0.74rem; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.deal-name { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); margin: 0; line-height: 1.35; }
+.deal-loc { font-size: 0.78rem; color: var(--ink-soft); }
+.deal-stages { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.15rem; }
+.deal-stage-chip {
+  font-size: 0.72rem; font-weight: 600; color: var(--go);
+  background: var(--go-tint); border: 1px solid oklch(88% 0.07 155);
+  border-radius: var(--r-pill); padding: 0.15rem 0.5rem;
+}
+.deal-stage-chip.adv { color: var(--accent); background: var(--accent-tint); border-color: var(--accent-ring); }
+.deal-stage-none { font-size: 0.74rem; color: var(--ink-faint); }
+.deal-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: auto; padding-top: 0.5rem; }
+.deal-runs { font-size: 0.78rem; color: var(--ink-soft); font-weight: 600; }
+
 .stage-caption { margin: 0.7rem 0 0.5rem; font-size: 0.74rem; color: var(--ink-faint); line-height: 1.4; }
 .stage-grid { display: flex; flex-direction: column; gap: 0.3rem; }
 .stage-arrow { align-self: center; color: var(--ink-faint); font-size: 0.85rem; line-height: 1; }

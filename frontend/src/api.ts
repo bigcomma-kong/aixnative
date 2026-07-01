@@ -336,6 +336,19 @@ export interface RunSummary {
   createdAt: string | null
 }
 
+/** 내 딜 대시보드 항목 — 딜명으로 집계한 요약. */
+export interface DealSummary {
+  dealName: string
+  assetType: string | null
+  location: string | null
+  runCount: number
+  completedStages: string[]
+  advancedCount: number
+  lastActivityAt: string | null
+  anchorRunId: number
+  hasReport: boolean
+}
+
 /** 저장된 분석 결과 페이로드(= AnalyzeResponse 와 동일 구조). */
 export interface RunResult {
   proForma: ProForma
@@ -850,6 +863,9 @@ export const api = {
   },
 
   runs: (): Promise<RunSummary[]> => request('/api/underwriting/runs'),
+
+  /** 내 딜 대시보드 — 딜명으로 집계(최근 활동순). */
+  myDeals: (): Promise<DealSummary[]> => request('/api/underwriting/deals'),
 
   run: (id: number): Promise<RunDetail> => request(`/api/underwriting/runs/${id}`),
 
