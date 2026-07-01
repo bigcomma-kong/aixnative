@@ -22,7 +22,7 @@ class EmailService(
     private val log = LoggerFactory.getLogger(javaClass)
 
     fun sendVerification(toEmail: String, verifyUrl: String) {
-        val subject = "[aixnative] 이메일 인증을 완료해 주세요"
+        val subject = "[AixNative] 이메일 인증을 완료해 주세요"
         val body = buildString {
             appendLine("aixnative 가입을 완료하려면 아래 링크를 클릭해 이메일을 인증해 주세요.")
             appendLine()
@@ -36,7 +36,7 @@ class EmailService(
     }
 
     fun sendPasswordReset(toEmail: String, resetUrl: String) {
-        val subject = "[aixnative] 비밀번호 재설정 안내"
+        val subject = "[AixNative] 비밀번호 재설정 안내"
         val body = buildString {
             appendLine("비밀번호 재설정을 요청하셨습니다. 아래 링크를 클릭해 새 비밀번호를 설정해 주세요.")
             appendLine()
@@ -65,7 +65,7 @@ class EmailService(
         runCatching {
             val msg = sender.createMimeMessage()
             val helper = MimeMessageHelper(msg, true, "UTF-8")
-            helper.setFrom(from, "aixnative")
+            helper.setFrom(from, "AixNative")
             helper.setTo(toEmail)
             helper.setSubject(subject)
             helper.setText(html, true) // HTML 본문

@@ -1,4 +1,5 @@
 import { AuthView } from './AuthView'
+import { SiteFooter } from './SiteFooter'
 import type { AuthResult } from './api'
 
 interface LandingViewProps {
@@ -156,7 +157,7 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
       <div className="landing-bg" aria-hidden="true" />
 
       <header className="landing-nav">
-        <div className="brand">aix<span>native</span></div>
+        <div className="brand">Aix<span>Native</span></div>
         <div className="landing-nav-actions">
           <button className="btn-link" onClick={focusAuth}>로그인</button>
           <button className="btn-primary nav-cta" onClick={focusAuth}>무료로 시작</button>
@@ -267,14 +268,14 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
       <section className="vcompare reveal" aria-labelledby="vc-h">
         <div className="feat-head">
           <span className="eyebrow">비용 비교</span>
-          <h2 id="vc-h" className="feat-h">전문가 vs aixnative</h2>
+          <h2 id="vc-h" className="feat-h">전문가 vs AixNative</h2>
           <span className="vc-badge">수일 → 1분 · 비용 한 자릿수 천 원대</span>
         </div>
-        <div className="vc-table" role="table" aria-label="전문가 의뢰와 aixnative 비교">
+        <div className="vc-table" role="table" aria-label="전문가 의뢰와 AixNative 비교">
           <div className="vc-row vc-row-head" role="row">
             <span className="vc-cell vc-item" role="columnheader">산출물</span>
             <span className="vc-cell vc-them" role="columnheader">전문가 / 컨설팅</span>
-            <span className="vc-cell vc-us" role="columnheader">aixnative</span>
+            <span className="vc-cell vc-us" role="columnheader">AixNative</span>
           </div>
           {COMPARE.map((r) => (
             <div className="vc-row" role="row" key={r.item}>
@@ -307,16 +308,7 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
         </div>
       </section>
 
-      <footer className="landing-footer">
-        <div className="brand">aix<span>native</span></div>
-        <p className="landing-disc" >
-          * 본 서비스는 정보 제공 목적이며 투자자문이 아닙니다. 투자 판단의 책임은 이용자에게 있습니다.
-        </p>
-        <p className="landing-contact">
-          문의 : <a href="mailto:admin@aixnative.com">admin@aixnative.com</a>
-        </p>
-        <p className="landing-copy">© aixnative</p>
-      </footer>
+      <SiteFooter />
     </div>
   )
 }

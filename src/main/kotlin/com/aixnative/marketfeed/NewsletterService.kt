@@ -134,10 +134,10 @@ class NewsletterService(
     }
 
     private fun subjectFor(briefing: MarketBriefing): String =
-        "[aixnative] 오늘의 시장 브리핑" + (briefing.headline?.let { " — $it" } ?: "")
+        "[AixNative] 오늘의 시장 브리핑" + (briefing.headline?.let { " — $it" } ?: "")
 
-    /** 인사말 이름 — 이메일 @앞부분(표시명 컬럼 없음). */
-    private fun greetingOf(email: String): String = email.substringBefore('@').ifBlank { "구독자" }
+    /** 인사말 — 이름 컬럼이 없으므로 전체 이메일 주소를 그대로 사용(앞부분만 X). */
+    private fun greetingOf(email: String): String = email.trim().ifBlank { "구독자" }
 
     /** 브리핑 엔티티 + 딜카드 → 인라인 CSS HTML. sections/watchlist/risks JSON 을 파싱해 모두 렌더. */
     private fun buildHtml(

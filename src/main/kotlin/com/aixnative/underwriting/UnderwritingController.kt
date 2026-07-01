@@ -83,6 +83,11 @@ class UnderwritingController(
     fun report(@PathVariable runId: Long): ResponseEntity<String> =
         ResponseEntity.ok().contentType(MediaType.TEXT_HTML).body(reportService.buildHtml(runId))
 
+    /** 읽기전용 공유 링크 발급(멱등). 토큰 반환 → 프런트가 {origin}/api/public/report/{token} 링크 구성. */
+    @PostMapping("/report/{runId}/share")
+    fun shareReport(@PathVariable runId: Long): ApiResponse<ShareResponse> =
+        ApiResponse.ok(ShareResponse(service.enableReportShare(runId)))
+
     /**
      * 무료 — 한 딜의 완료된 단계(스크리닝·시장조사·언더라이팅·투심) 모음. 합본 탭 화면용.
      * 저장된 결과 조립일 뿐 AI 미호출. 테넌트 스코프(다른 사용자 딜은 보이지 않음).

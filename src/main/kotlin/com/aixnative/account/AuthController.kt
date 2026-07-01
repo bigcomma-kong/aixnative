@@ -109,7 +109,7 @@ open class AuthController(
         return """
             <!doctype html><html lang="ko"><head><meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>$title - aixnative</title>
+            <title>$title - AixNative</title>
             <style>
               body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f8fb;
                 font-family:-apple-system,'Segoe UI','Malgun Gothic',sans-serif;color:#1d2240}

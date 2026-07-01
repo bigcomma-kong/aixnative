@@ -80,6 +80,8 @@ data class UnderwriteResponse(
     val analysis: JsonNode? = null,
     val analysisRaw: String? = null,
     val provider: String,
+    /** 분석에 주입된 실측 시장데이터(출처·기준일). 스크리닝·시장조사에서 채워진다. */
+    val marketFacts: List<MarketFact>? = null,
     val creditBalance: Int,
     val disclaimer: String,
 )
@@ -94,6 +96,9 @@ data class DuplicateCheckResponse(
     val lastRunAt: Instant? = null,
     val withinMinutes: Long,
 )
+
+/** 읽기전용 공유 링크 발급 결과 — 토큰(프런트가 origin 붙여 링크 구성). */
+data class ShareResponse(val token: String)
 
 /** 분석 이력 목록 항목. */
 data class RunSummary(

@@ -43,4 +43,8 @@ class AiToolRun(
 
     @Column(name = "deleted_at")
     var deletedAt: Instant? = null,
+
+    /** 읽기전용 공유 링크 토큰(발급 시 채워짐). 무인증 공개 보고서 조회에 사용. */
+    @Column(name = "share_token", length = 64)
+    var shareToken: String? = null,
 ) : BaseTenantEntity()

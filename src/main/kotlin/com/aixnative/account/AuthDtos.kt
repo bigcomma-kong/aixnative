@@ -1,6 +1,7 @@
 package com.aixnative.account
 
 import com.aixnative.billing.Plan
+import jakarta.validation.constraints.AssertTrue
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
@@ -13,6 +14,13 @@ data class SignupRequest(
     @field:NotBlank(message = "비밀번호는 필수입니다.")
     @field:Size(min = 8, max = 72, message = "비밀번호는 8자 이상이어야 합니다.")
     val password: String,
+
+    /** 약관·개인정보 처리방침 필수 동의(미동의 시 가입 차단). */
+    @field:AssertTrue(message = "약관 및 개인정보 처리방침에 동의해야 가입할 수 있습니다.")
+    val agreedTerms: Boolean = false,
+
+    /** 마케팅·이메일 수신 동의(선택). */
+    val marketingOptIn: Boolean = false,
 )
 
 data class LoginRequest(

@@ -70,23 +70,29 @@ class UnderwritingService(
         val facts = FactsFormatter.toFacts(inputs, result, scenarios)
         val assetFacts = FactsFormatter.toAssetFacts(req, result)
 
+        // 실측 시장데이터(출처·기준일) — 스크리닝·시장조사에 주입. 결과에도 surface 해 신뢰 근거로 노출.
+        var mfStr = ""
         val prompt = when (type) {
             AnalysisType.UNDERWRITING ->
                 UnderwritingPrompts.underwritingNarrative(facts, req.dealName, CreGuidelines.underwritingGuidelineText(req.assetType))
-            AnalysisType.SCREENING ->
+            AnalysisType.SCREENING -> {
+                mfStr = marketDataService.marketFacts(req.location, req.assetType)
                 UnderwritingPrompts.dealScreening(
-                    assetFacts + marketDataService.marketFacts(req.location, req.assetType),
+                    assetFacts + mfStr,
                     req.dealName, CreGuidelines.screeningGuidelineText(req.assetType),
                 )
-            AnalysisType.MARKET_STUDY ->
+            }
+            AnalysisType.MARKET_STUDY -> {
+                mfStr = marketDataService.marketFacts(req.location, req.assetType)
                 UnderwritingPrompts.marketStudy(
-                    assetFacts + marketDataService.marketFacts(req.location, req.assetType) +
-                        "\n\n[자산유형 벤치마크·고유지표]\n" + CreGuidelines.benchmarkText(req.assetType),
+                    assetFacts + mfStr + "\n\n[자산유형 벤치마크·고유지표]\n" + CreGuidelines.benchmarkText(req.assetType),
                     req.dealName,
                 )
+            }
             AnalysisType.IC_MEMO ->
                 UnderwritingPrompts.icMemo(buildIcMemoFacts(facts, assetFacts, req.dealName), req.dealName)
         }
+        val marketFacts = parseMarketFacts(mfStr).takeIf { it.isNotEmpty() }
 
         // 크레딧 게이트: 잔액 확인 → AI 호출 → 성공 시에만 1 크레딧 차감.
         // AI 호출 실패(키/모델/rate limit/타임아웃)는 generic 500 대신 503 + 사유로 변환(크레딧 미차감).
@@ -110,6 +116,7 @@ class UnderwritingService(
             "analysis" to parsed,
             "analysisRaw" to if (parsed == null) ai.text else null,
             "provider" to ai.provider,
+            "marketFacts" to marketFacts,
             "disclaimer" to Disclaimer.TEXT,
         )
         val run = aiToolRunService.record(
@@ -132,6 +139,7 @@ class UnderwritingService(
             analysis = parsed,
             analysisRaw = if (parsed == null) ai.text else null,
             provider = ai.provider,
+            marketFacts = marketFacts,
             creditBalance = balance,
             disclaimer = Disclaimer.TEXT,
         )
@@ -397,6 +405,9 @@ class UnderwritingService(
         }
         return DealStagesResponse(dealName, stages)
     }
+
+    /** 읽기전용 공유 링크 발급(멱등) — 해당 run 에 공유 토큰을 부여하고 반환. 테넌트 스코프. */
+    fun enableReportShare(runId: Long): String = aiToolRunService.enableShare(runId)
 
     /** 분석 이력 상세 — 저장된 입력/결과 JSON 을 그대로 반환. 테넌트 스코프(IDOR 차단). */
     fun getRun(id: Long): RunDetail {

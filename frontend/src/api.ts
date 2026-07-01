@@ -290,6 +290,7 @@ export interface AnalyzeResponse {
   analysis?: Analysis | null
   analysisRaw?: string | null
   provider: string
+  marketFacts?: MarketFact[] | null
   creditBalance: number
   disclaimer: string
 }
@@ -335,6 +336,7 @@ export interface RunResult {
   analysis?: Analysis | null
   analysisRaw?: string | null
   provider?: string
+  marketFacts?: MarketFact[] | null
   disclaimer: string
 }
 
@@ -789,8 +791,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  signup: (email: string, password: string): Promise<AuthResult> =>
-    request('/api/auth/signup', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  signup: (email: string, password: string, agreedTerms: boolean, marketingOptIn = false): Promise<AuthResult> =>
+    request('/api/auth/signup', { method: 'POST', body: JSON.stringify({ email, password, agreedTerms, marketingOptIn }) }),
 
   login: (email: string, password: string): Promise<AuthResult> =>
     request('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
@@ -846,6 +848,10 @@ export const api = {
   /** 한 딜의 완료된 단계 모음(합본 탭). 무과금. */
   dealStages: (dealName: string): Promise<DealStagesResponse> =>
     request(`/api/underwriting/deal-stages?dealName=${encodeURIComponent(dealName)}`),
+
+  /** 읽기전용 공유 링크 발급(멱등). 토큰 반환 → 프런트가 origin 붙여 링크 구성. */
+  shareReport: (runId: number): Promise<{ token: string }> =>
+    request(`/api/underwriting/report/${runId}/share`, { method: 'POST' }),
 
   history: (): Promise<BillingHistory> => request('/api/billing/history'),
 

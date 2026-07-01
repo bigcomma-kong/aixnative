@@ -21,13 +21,22 @@ class ReportService(
 ) {
 
     /** 주어진 run 이 속한 딜의 단계들을 모아 보고서 HTML 을 만든다. 테넌트 스코프(get 이 검증). */
-    fun buildHtml(runId: Long): String {
-        val anchor = aiToolRunService.get(runId) // 다른 테넌트면 여기서 NotFound
+    fun buildHtml(runId: Long): String =
+        buildFrom(aiToolRunService.get(runId), aiToolRunService.listMine())
+
+    /** 공유 토큰으로 공개(무인증) 보고서 HTML. 토큰의 소유자 범위로 딜 단계를 모은다. */
+    fun buildHtmlByToken(token: String): String {
+        val anchor = aiToolRunService.getByShareToken(token)
+            ?: throw NotFoundException("공유된 보고서를 찾을 수 없습니다.")
+        return buildFrom(anchor, aiToolRunService.listForOwner(anchor.tenantId, anchor.ownerUserId))
+    }
+
+    private fun buildFrom(anchor: com.aixnative.ai.AiToolRun, ownerRuns: List<com.aixnative.ai.AiToolRun>): String {
         val dealName = anchor.dealName
 
-        // 같은 딜의 단계별 최신 결과 (listMine 은 최신순). dealName 이 같으면(둘 다 null 포함) 합본.
+        // 같은 딜의 단계별 최신 결과 (ownerRuns 는 최신순). dealName 이 같으면(둘 다 null 포함) 합본.
         val byTool = LinkedHashMap<AnalysisType, JsonNode>()
-        for (run in aiToolRunService.listMine()) {
+        for (run in ownerRuns) {
             if (run.dealName != dealName) continue
             val type = AnalysisType.fromTool(run.tool) ?: continue
             if (byTool.containsKey(type)) continue // 최신만
@@ -41,10 +50,16 @@ class ReportService(
         val proFormaNode = anchorResult?.get("proForma") ?: byTool.values.firstNotNullOfOrNull { it.get("proForma") }
         val requestNode = anchor.requestJson?.let { runCatching { objectMapper.readTree(it) }.getOrNull() }
 
+        val generatedAt = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Seoul"))
+            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+
         val sb = StringBuilder()
         sb.appendHtmlHead(dealName ?: "(이름없음)")
         sb.append("<main class='report'>")
-        sb.appendCover(dealName, requestNode)
+        // 인쇄(PDF 저장) 툴바 — 화면 전용(인쇄 시 숨김).
+        sb.append("<div class='toolbar no-print'><button onclick='window.print()'>PDF로 저장 · 인쇄</button>")
+        sb.append("<span class='gen'>생성 $generatedAt KST</span></div>")
+        sb.appendCover(dealName, requestNode, generatedAt)
         if (proFormaNode != null) sb.appendMetrics(proFormaNode)
 
         // 단계 순서대로 섹션 렌더 (있는 것만).
@@ -68,18 +83,23 @@ class ReportService(
         }
 
         if (proFormaNode != null) sb.appendProFormaTable(proFormaNode)
-        sb.append("<footer class='disclaimer'>${esc(Disclaimer.TEXT)}</footer>")
+        sb.append("<footer class='disclaimer'>")
+        sb.append("<p class='src'><b>데이터 출처</b> — 한국은행 ECOS(매크로) · 국토교통부 RTMS(실거래) · 한국부동산원 R-ONE(공실·임대·수익률) · V-World(공시지가). ")
+        sb.append("수치(IRR·EM·DSCR·민감도)는 결정론적 코드 계산이며, AI는 확정 수치를 근거로 서술·심사만 합니다.</p>")
+        sb.append("<p>${esc(Disclaimer.TEXT)}</p>")
+        sb.append("</footer>")
         sb.append("</main></body></html>")
         return sb.toString()
     }
 
     // ── 섹션 렌더러 ──
 
-    private fun StringBuilder.appendCover(dealName: String?, req: JsonNode?) {
+    private fun StringBuilder.appendCover(dealName: String?, req: JsonNode?, generatedAt: String) {
         append("<header class='cover'>")
-        append("<div class='brand'>aixnative</div>")
+        append("<div class='brand'>AixNative</div>")
         append("<div class='doc-type'>투자 분석 보고서 · Investment Memorandum</div>")
         append("<h1>${esc(dealName ?: "(이름없음)")}</h1>")
+        append("<div class='gen-line'>생성일시 ${esc(generatedAt)} (KST) · aixnative AI 딜 언더라이팅</div>")
         if (req != null) {
             append("<table class='kv'>")
             row("자산유형", req.txt("assetType"))
@@ -369,7 +389,12 @@ class ReportService(
             table.grid thead th { background:#f7f6f3; color:var(--soft); }
             .raw { white-space:pre-wrap; font-size:13px; color:var(--soft); }
             .disclaimer { margin-top:36px; padding-top:16px; border-top:1px solid var(--line); font-size:12px; color:var(--soft); }
-            @media print { body { background:#fff; } .report { padding:0; max-width:none; } }
+            .disclaimer .src { margin:0 0 8px; line-height:1.6; }
+            .gen-line { font-size:12px; color:var(--soft); margin-top:6px; }
+            .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
+            .toolbar button { font-size:13px; font-weight:600; color:#fff; background:var(--accent); border:none; border-radius:8px; padding:8px 16px; cursor:pointer; }
+            .toolbar .gen { font-size:12px; color:var(--soft); }
+            @media print { body { background:#fff; } .report { padding:0; max-width:none; } .no-print { display:none !important; } }
         """.trimIndent()
     }
 }

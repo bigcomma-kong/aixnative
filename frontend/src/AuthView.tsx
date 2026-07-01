@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { api, ApiError, tokenStore, type AuthResult } from './api'
 import { SocialLogin } from './SocialLogin'
+import { InfoModal, type InfoPage } from './SiteFooter'
 
 interface AuthViewProps {
   onAuthed: (result: AuthResult) => void
@@ -17,6 +18,10 @@ export function AuthView({ onAuthed, initialError }: AuthViewProps) {
   const [error, setError] = useState<string | null>(initialError ?? null)
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
+  // 가입 동의 캡처(PIPA): 약관·개인정보 필수, 마케팅 선택.
+  const [agreed, setAgreed] = useState(false)
+  const [marketing, setMarketing] = useState(false)
+  const [infoPage, setInfoPage] = useState<InfoPage | null>(null)
 
   function switchMode(next: Mode) {
     setMode(next)
@@ -34,7 +39,13 @@ export function AuthView({ onAuthed, initialError }: AuthViewProps) {
         setSent(true)
         return
       }
-      const result = mode === 'login' ? await api.login(email, password) : await api.signup(email, password)
+      if (mode === 'signup' && !agreed) {
+        setError('약관 및 개인정보 처리방침에 동의해야 가입할 수 있습니다.')
+        return
+      }
+      const result = mode === 'login'
+        ? await api.login(email, password)
+        : await api.signup(email, password, agreed, marketing)
       tokenStore.set(result.token)
       onAuthed(result)
     } catch (err: unknown) {
@@ -111,13 +122,40 @@ export function AuthView({ onAuthed, initialError }: AuthViewProps) {
           <input id="password" type="password" required minLength={8} value={password}
             onChange={(e) => setPassword(e.target.value)} placeholder="8자 이상" />
         </div>
-        <button className="btn-primary" type="submit" disabled={busy} style={{ width: '100%' }}>
+
+        {mode === 'signup' && (
+          <div className="consent">
+            <label className="consent-row">
+              <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+              <span>
+                <b>(필수)</b>{' '}
+                <button type="button" className="btn-link" onClick={() => setInfoPage('terms')}>이용약관</button> 및{' '}
+                <button type="button" className="btn-link" onClick={() => setInfoPage('privacy')}>개인정보 처리방침</button>에 동의합니다.
+              </span>
+            </label>
+            <label className="consent-row">
+              <input type="checkbox" checked={marketing} onChange={(e) => setMarketing(e.target.checked)} />
+              <span>(선택) 마케팅·서비스 소식 이메일 수신에 동의합니다.</span>
+            </label>
+          </div>
+        )}
+
+        <button className="btn-primary" type="submit" disabled={busy || (mode === 'signup' && !agreed)} style={{ width: '100%' }}>
           {busy ? '처리 중…' : mode === 'login' ? '로그인' : '회원가입 (무료 크레딧 지급)'}
         </button>
         {error && <p className="error">{error}</p>}
       </form>
 
       <SocialLogin />
+
+      {mode === 'signup' && (
+        <p className="consent-social">
+          간편 가입 시{' '}
+          <button type="button" className="btn-link" onClick={() => setInfoPage('terms')}>이용약관</button>·
+          <button type="button" className="btn-link" onClick={() => setInfoPage('privacy')}>개인정보 처리방침</button>에 동의하게 됩니다.
+          소셜 로그인 시 제공자(구글·카카오·네이버)로부터 이메일·식별자를 받습니다.
+        </p>
+      )}
 
       {mode === 'login' && (
         <p className="muted auth-switch">
@@ -126,6 +164,8 @@ export function AuthView({ onAuthed, initialError }: AuthViewProps) {
           처음이신가요? <button className="btn-link" onClick={() => switchMode('signup')}>회원가입</button>
         </p>
       )}
+
+      {infoPage && <InfoModal page={infoPage} onClose={() => setInfoPage(null)} />}
     </div>
   )
 }

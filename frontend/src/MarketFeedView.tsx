@@ -302,6 +302,19 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeed
         />
       )}
 
+      {deepBusy && (
+        <div className="analyze-overlay" role="alertdialog" aria-busy="true" aria-live="assertive" aria-label="심층 리포트 생성 중">
+          <div className="analyze-modal">
+            <div className="analyze-spinner" aria-hidden="true" />
+            <strong className="analyze-modal-title">AI가 시장을 심층 분석 중…</strong>
+            <p className="analyze-modal-sub">
+              보통 30~60초 걸립니다. 이 창을 닫거나 이동하지 마세요.<br />
+              (완료된 리포트는 ‘지난 리포트’에도 저장되니 나중에 다시 볼 수 있습니다.)
+            </p>
+          </div>
+        </div>
+      )}
+
       {isAdmin && <AdminFeedForm onCreated={(it) => setItems((list) => [it, ...list])} onError={setError} />}
 
       <div className="mi-deals-head">

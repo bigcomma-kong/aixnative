@@ -1,12 +1,13 @@
 import { Fragment, useEffect, useState } from 'react'
 import {
   api, ApiError,
-  type AnalysisType, type AnalyzeResponse, type Analysis, type DealStage, type DuplicateCheck, type GuidelineSummary, type ProForma, type ProFormaResponse,
+  type AnalysisType, type AnalyzeResponse, type Analysis, type DealStage, type DuplicateCheck, type GuidelineSummary, type MarketFact, type ProForma, type ProFormaResponse,
   type RunResult, type RunSummary, type Scenario, type UnderwriteInput,
 } from './api'
 import { CashflowChart } from './Chart'
 import { DealCompare } from './DealCompare'
 import { StageAnalysis, Verdict } from './StageAnalysis'
+import { downloadUnderwritingXls } from './reportExport'
 
 interface UnderwriteViewProps {
   onCreditBalance: (balance: number) => void
@@ -75,6 +76,20 @@ const INITIAL: FormState = {
   rentGrowthPct: '3.0',
 }
 
+/** 신규 사용자 활성화용 예시 딜 — 누르면 폼을 채우고 무료 ProForma 를 즉시 실행(크레딧·AI 비용 0). */
+interface Sample { key: string; label: string; emoji: string; form: Partial<FormState> }
+const SAMPLES: Sample[] = [
+  { key: 'office', label: '강남 오피스', emoji: '🏢', form: {
+    dealName: '예시 · 강남 GBD 오피스', assetType: '오피스', location: '서울 강남구 GBD',
+    askingPriceEok: '1800', noiEok: '81', ltvPct: '55', loanRatePct: '4.3', exitCapPct: '4.75', holdYears: '5', rentGrowthPct: '3' } },
+  { key: 'logistics', label: '수도권 물류센터', emoji: '🚚', form: {
+    dealName: '예시 · 이천 물류센터', assetType: '물류', location: '경기 이천',
+    askingPriceEok: '900', noiEok: '50', ltvPct: '60', loanRatePct: '4.6', exitCapPct: '5.75', holdYears: '5', rentGrowthPct: '2.5' } },
+  { key: 'hotel', label: '서울 호텔', emoji: '🏨', form: {
+    dealName: '예시 · 명동 비즈니스 호텔', assetType: '호텔', location: '서울 중구 명동',
+    askingPriceEok: '1200', noiEok: '78', ltvPct: '60', loanRatePct: '4.8', exitCapPct: '6.75', holdYears: '5', rentGrowthPct: '3' } },
+]
+
 interface Results {
   runId?: number
   analysisType?: string
@@ -85,6 +100,8 @@ interface Results {
   analysis?: Analysis | null
   analysisRaw?: string | null
   provider?: string
+  /** 분석에 주입된 실측 시장데이터(출처·기준일) — 스크리닝·시장조사. */
+  marketFacts?: MarketFact[] | null
   /** 이 결과를 만든 입력값(폼 또는 저장된 이력) — 결과와 함께 표시해 "무엇을 입력했는지" 보이게. */
   inputs?: UnderwriteInput | null
 }
@@ -115,6 +132,7 @@ function resultsFromStage(s: DealStage): Results {
     analysis: r?.analysis ?? null,
     analysisRaw: r?.analysisRaw ?? null,
     provider: r?.provider,
+    marketFacts: r?.marketFacts ?? null,
     inputs: s.request,
   }
 }
@@ -130,6 +148,33 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
   const [busy, setBusy] = useState<'none' | 'proforma' | AnalysisType>('none')
   const [reportBusy, setReportBusy] = useState(false)
   const [historyVersion, setHistoryVersion] = useState(0)
+  // 예시 딜로 결과를 본 상태인지(배너 표시용). 초기화·실제 입력 시 해제.
+  const [isSample, setIsSample] = useState(false)
+
+  /** 예시 딜 불러오기 — 폼 채우고 무료 ProForma 즉시 실행(크레딧 0). 신규 활성화용. */
+  async function loadSample(s: Sample) {
+    const f: FormState = { ...INITIAL, ...s.form }
+    setForm(f)
+    setIsSample(true)
+    setError(null)
+    setStageMap({})
+    setActiveTab('FINANCE')
+    const input: UnderwriteInput = {
+      dealName: f.dealName, assetType: f.assetType, location: f.location || undefined,
+      askingPriceEok: Number(f.askingPriceEok), noiEok: Number(f.noiEok),
+      ltvPct: Number(f.ltvPct), loanRatePct: Number(f.loanRatePct), exitCapPct: Number(f.exitCapPct),
+      holdYears: Number(f.holdYears || '5'), rentGrowthPct: Number(f.rentGrowthPct || '3'),
+    }
+    setBusy('proforma')
+    try {
+      const res = await api.proforma(input)
+      setResults({ proForma: res.proForma, scenarios: res.scenarios, guidelineChecks: res.guidelineChecks, disclaimer: res.disclaimer, inputs: input })
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.message : '계산 중 오류가 발생했습니다.')
+    } finally {
+      setBusy('none')
+    }
+  }
 
   /** 딜명으로 완료된 단계들을 모아 탭에 채운다(무과금). 실패해도 단일 결과 표시엔 지장 없음. */
   async function loadDealStages(dealName?: string | null) {
@@ -144,6 +189,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
 
   function set<K extends keyof FormState>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }))
+    if (isSample) setIsSample(false) // 사용자가 직접 수정하면 더 이상 '예시'가 아님
   }
 
   function buildInput(): UnderwriteInput {
@@ -212,7 +258,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
       setResults({
         runId: res.runId, analysisType: res.analysisType,
         proForma: res.proForma, scenarios: res.scenarios, guidelineChecks: res.guidelineChecks, disclaimer: res.disclaimer,
-        analysis: res.analysis, analysisRaw: res.analysisRaw, provider: res.provider, inputs: input,
+        analysis: res.analysis, analysisRaw: res.analysisRaw, provider: res.provider, marketFacts: res.marketFacts, inputs: input,
       })
       setActiveTab(type)
       onCreditBalance(res.creditBalance)
@@ -261,10 +307,23 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
         <form className="card input-panel" onSubmit={(e) => { e.preventDefault(); runProforma() }}>
           <div className="form-head">
             <span className="section-title" style={{ margin: 0 }}>딜 입력 <span className="req-legend"><span className="req">*</span> 필수</span></span>
-            <button type="button" className="btn-link" onClick={() => { setForm(INITIAL); setResults(null); setError(null); setStageMap({}); setActiveTab('FINANCE') }}>
+            <button type="button" className="btn-link" onClick={() => { setForm(INITIAL); setResults(null); setError(null); setStageMap({}); setActiveTab('FINANCE'); setIsSample(false) }}>
               초기화
             </button>
           </div>
+
+          {!results && (
+            <div className="sample-row">
+              <span className="sample-label">처음이세요? <b>예시 딜로 1분 체험</b> — 무료</span>
+              <div className="sample-chips">
+                {SAMPLES.map((s) => (
+                  <button type="button" key={s.key} className="sample-chip" onClick={() => void loadSample(s)} disabled={busy !== 'none'}>
+                    <span aria-hidden="true">{s.emoji}</span> {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="form-grid">
             <div className="full">
@@ -331,18 +390,28 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts }: Un
 
         <div className="card">
           {results ? (
-            <ResultPanel
-              results={results}
-              stageMap={stageMap}
-              activeTab={activeTab}
-              onSelectTab={(tab) => {
-                if (tab === 'FINANCE') { setActiveTab('FINANCE'); return }
-                const s = stageMap[tab]
-                if (s) { setResults(resultsFromStage(s)); setActiveTab(tab) }
-              }}
-              onReport={openReport}
-              reportBusy={reportBusy}
-            />
+            <>
+              {isSample && (
+                <div className="sample-banner">
+                  <span>📋 <b>예시 딜</b> · 무료 ProForma 결과입니다. AI 심층 심사는 좌측 버튼으로(가입 무료 크레딧 사용).</span>
+                  <button type="button" className="btn-link" onClick={() => { setForm(INITIAL); setResults(null); setIsSample(false); setStageMap({}); setActiveTab('FINANCE') }}>
+                    내 딜 입력하기 →
+                  </button>
+                </div>
+              )}
+              <ResultPanel
+                results={results}
+                stageMap={stageMap}
+                activeTab={activeTab}
+                onSelectTab={(tab) => {
+                  if (tab === 'FINANCE') { setActiveTab('FINANCE'); return }
+                  const s = stageMap[tab]
+                  if (s) { setResults(resultsFromStage(s)); setActiveTab(tab) }
+                }}
+                onReport={openReport}
+                reportBusy={reportBusy}
+              />
+            </>
           ) : (
             <div className="result-empty">
               <div className="empty-state">
@@ -488,13 +557,17 @@ function ResultPanel({ results, stageMap, activeTab, onSelectTab, onReport, repo
   const md = minDscr(p)
   return (
     <div className="ai-block">
-      {results.runId && (
-        <div className="result-head">
+      <div className="result-head">
+        <button type="button" className="btn-ghost btn-report"
+          onClick={() => downloadUnderwritingXls(p, results.scenarios, results.inputs, results.inputs?.dealName)}
+          title="ProForma 모델을 Excel(.xls)로 저장">Excel 모델</button>
+        {results.runId && (
           <button type="button" className="btn-ghost btn-report" onClick={onReport} disabled={reportBusy}>
             {reportBusy ? '보고서 여는 중…' : '투자 보고서 보기'}
           </button>
-        </div>
-      )}
+        )}
+        {results.runId && <ShareButton runId={results.runId} />}
+      </div>
       <StageTabs stageMap={stageMap} active={activeTab} onSelect={onSelectTab} />
       {results.inputs && <InputSummary inputs={results.inputs} />}
 
@@ -566,6 +639,7 @@ function ResultPanel({ results, stageMap, activeTab, onSelectTab, onReport, repo
         <>
           <Verdict analysis={results.analysis} />
           <StageAnalysis type={results.analysisType} analysis={results.analysis} provider={results.provider} />
+          {results.marketFacts && results.marketFacts.length > 0 && <MarketFactsCard facts={results.marketFacts} />}
         </>
       ) : results.analysisRaw ? (
         <section>
@@ -615,6 +689,48 @@ function StageTabs({ stageMap, active, onSelect }: {
         )
       })}
     </div>
+  )
+}
+
+/** 읽기전용 공유 링크 — 토큰 발급 후 링크를 클립보드에 복사(로그인 없이 열람 가능). */
+function ShareButton({ runId }: { runId: number }) {
+  const [state, setState] = useState<'idle' | 'busy' | 'copied' | 'error'>('idle')
+  async function share() {
+    setState('busy')
+    try {
+      const { token } = await api.shareReport(runId)
+      const url = `${window.location.origin}/api/public/report/${token}`
+      try { await navigator.clipboard.writeText(url) } catch { window.prompt('공유 링크 (복사하세요)', url) }
+      setState('copied')
+      setTimeout(() => setState('idle'), 2500)
+    } catch {
+      setState('error')
+      setTimeout(() => setState('idle'), 2500)
+    }
+  }
+  return (
+    <button type="button" className="btn-ghost btn-report" onClick={() => void share()} disabled={state === 'busy'}
+      title="로그인 없이 열람 가능한 읽기전용 링크를 복사합니다">
+      {state === 'busy' ? '발급 중…' : state === 'copied' ? '링크 복사됨 ✓' : state === 'error' ? '실패' : '공유 링크'}
+    </button>
+  )
+}
+
+/** 실측 시장데이터 카드 — 분석에 주입된 공공데이터(출처·기준일)를 노출. "실측 앵커링"을 가시화. */
+function MarketFactsCard({ facts }: { facts: MarketFact[] }) {
+  return (
+    <section className="calc-card mkt-facts">
+      <div className="section-title">실측 시장데이터 <span className="calc-badge">확정 · 공공데이터</span></div>
+      <ul className="mkt-list">
+        {facts.map((f, i) => (
+          <li key={i} className="mkt-item">
+            <span className="mkt-src">{f.source}</span>
+            <span className="mkt-detail">{f.detail}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mkt-note">위 수치는 공공 API 실측값(출처·기준일 명시)으로, AI 추정이 아니라 분석의 근거로 직접 인용됩니다. 실측이 없는 항목은 본문에 "(추정)"·신뢰도로 표기됩니다.</p>
+    </section>
   )
 }
 

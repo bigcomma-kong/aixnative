@@ -9,6 +9,7 @@ import { AdminView } from './AdminView'
 import { ResetPasswordView } from './ResetPasswordView'
 import { Paywall } from './Paywall'
 import { Checkout } from './Checkout'
+import { SiteFooter } from './SiteFooter'
 import { PaymentResult, readPaymentCallback, type PaymentCallback } from './PaymentResult'
 
 /** 메일의 `/?reset=<token>` 링크로 진입했는지 — 부팅 시 한 번 읽는다. */
@@ -175,7 +176,7 @@ function App() {
   return (
     <>
       <header className="topbar">
-        <div className="brand">aix<span>native</span></div>
+        <div className="brand">Aix<span>Native</span></div>
         <nav className="topnav" aria-label="주요 메뉴">
           <button aria-current={tab === 'feed'} onClick={() => setTab('feed')}>시장</button>
           <button aria-current={tab === 'underwrite'} onClick={() => setTab('underwrite')}>언더라이팅</button>
@@ -250,6 +251,8 @@ function App() {
           <AdminView currentEmail={session.email} />
         )}
       </main>
+
+      <SiteFooter />
 
       {showPaywall && (
         <div

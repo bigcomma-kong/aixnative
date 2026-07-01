@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { TrustBadge } from './TrustBadge'
+import { printDocAnalysis, downloadDocAnalysisDoc } from './reportExport'
 import {
   api, ApiError, isBovCalc, isBizHealthCalc, isPriceForecastCalc,
   type AnalysisFlag, type BizHealthCalc, type BovInput, type DealExtract, type DevFeasibilityInput, type DocAnalysisType, type DocAnalyzeInput,
@@ -538,6 +539,10 @@ function DocResult({ res, label }: { res: DocAnalyzeResponse; label: string }) {
       <div className="result-head">
         <span className="stage-pill">{label}</span>
         {res.provider && <span className="muted">· {res.provider}</span>}
+        <span className="result-head-actions">
+          <button type="button" className="btn-ghost btn-xs" onClick={() => printDocAnalysis(res, label)} title="PDF로 저장(인쇄)">PDF</button>
+          <button type="button" className="btn-ghost btn-xs" onClick={() => downloadDocAnalysisDoc(res, label)} title="Word(.doc)로 저장">Word</button>
+        </span>
       </div>
 
       {res.calc && <CalcCard calc={res.calc} />}

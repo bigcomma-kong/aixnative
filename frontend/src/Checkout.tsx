@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { loadTossPayments } from '@tosspayments/tosspayments-sdk'
 import { api, ApiError, type CreditPack } from './api'
+import { InfoModal, type InfoPage } from './SiteFooter'
 
 interface CheckoutProps {
   /** 현재 잔여 크레딧(안내용). */
@@ -20,6 +21,7 @@ export function Checkout({ creditBalance, customerEmail, onClose }: CheckoutProp
   const [clientKey, setClientKey] = useState<string | null>(null)
   const [configured, setConfigured] = useState(true)
   const [selected, setSelected] = useState<string | null>(null)
+  const [infoPage, setInfoPage] = useState<InfoPage | null>(null)
   const [loading, setLoading] = useState(true)
   const [paying, setPaying] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -137,11 +139,16 @@ export function Checkout({ creditBalance, customerEmail, onClose }: CheckoutProp
                 <li><b>크레딧을 일부라도 사용하면 해당 결제 건은 환불되지 않습니다.</b> (부분 환불 없음)</li>
                 <li>환불 요청은 결제 계정 이메일로 문의해 주세요.</li>
               </ul>
-              <p className="checkout-fineprint">결제는 토스페이먼츠로 안전하게 처리됩니다.</p>
+              <p className="checkout-fineprint">
+                결제는 토스페이먼츠로 안전하게 처리됩니다. 결제 진행 시{' '}
+                <button type="button" className="btn-link" onClick={() => setInfoPage('terms')}>이용약관</button>·
+                <button type="button" className="btn-link" onClick={() => setInfoPage('privacy')}>개인정보 처리방침</button>에 동의하게 됩니다.
+              </p>
             </div>
           </>
         )}
       </div>
+      {infoPage && <InfoModal page={infoPage} onClose={() => setInfoPage(null)} />}
     </div>
   )
 }

@@ -33,7 +33,7 @@ object NewsletterEmail {
     ): String = buildString {
         append("<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">")
         append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
-        append("<meta name=\"color-scheme\" content=\"light only\"><title>aixnative 시장 브리핑</title>")
+        append("<meta name=\"color-scheme\" content=\"light only\"><title>AixNative 시장 브리핑</title>")
         append(
             "<style>@media only screen and (max-width:600px){" +
                 ".nl-wrap{margin:0!important;border-radius:0!important}" +
@@ -71,7 +71,7 @@ object NewsletterEmail {
         append("<div style=\"display:table;width:100%;\">")
         append(
             "<div style=\"display:table-cell;vertical-align:middle;color:#ffffff;font-size:13px;font-weight:800;" +
-                "letter-spacing:1px;\">aix<span style=\"color:#c7c9f5;\">native</span></div>",
+                "letter-spacing:1px;\">Aix<span style=\"color:#c7c9f5;\">Native</span></div>",
         )
         append(
             "<div style=\"display:table-cell;vertical-align:middle;text-align:right;\">" +
@@ -235,7 +235,7 @@ object NewsletterEmail {
         append("<div class=\"nl-pad\" style=\"background:$INK;color:#cdd2f3;padding:22px 32px;margin-top:20px;\">")
         append(
             "<div style=\"color:#ffffff;font-weight:800;font-size:13px;letter-spacing:1px;\">" +
-                "aix<span style=\"color:#c7c9f5;\">native</span></div>",
+                "Aix<span style=\"color:#c7c9f5;\">Native</span></div>",
         )
         append(
             "<div style=\"font-size:12px;color:#a6abd6;margin:6px 0;\">AI 부동산 딜 언더라이팅 &middot; 시장 인텔리전스</div>",
@@ -251,7 +251,7 @@ object NewsletterEmail {
         append(
             "<div style=\"font-size:11px;color:#7e84b5;margin-top:9px;\">" +
                 "본 메일은 투자자문이 아니며, 투자 판단과 책임은 수신자 본인에게 있습니다. " +
-                "&copy; aixnative</div>",
+                "&copy; AixNative</div>",
         )
         append("</div>")
     }

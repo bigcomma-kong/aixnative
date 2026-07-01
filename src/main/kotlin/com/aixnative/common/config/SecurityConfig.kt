@@ -38,6 +38,8 @@ class SecurityConfig(private val jwtAuthFilter: JwtAuthFilter) {
                     "/api/ingest/**",
                     // 뉴스레터 메일 푸터의 1클릭 해지 링크(토큰 기반).
                     "/api/newsletter/unsubscribe",
+                    // 읽기전용 공유 보고서(토큰 기반, 무인증 열람).
+                    "/api/public/**",
                     "/actuator/health",
                     "/actuator/health/**",
                     "/error",

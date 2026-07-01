@@ -54,6 +54,9 @@ class AuthService(
                 authProvider = AuthProvider.LOCAL,
                 role = role,
                 emailVerified = isAdmin, // 관리자는 자동 인증
+                termsAgreedAt = java.time.Instant.now(), // 동의 캡처(@AssertTrue 로 미동의 차단됨)
+                termsVersion = TERMS_VERSION,
+                marketingOptIn = req.marketingOptIn,
             ),
         )
         val userId = requireNotNull(user.id)
@@ -102,4 +105,9 @@ class AuthService(
     /** 설정된 관리자 이메일(app.admin-email)과 대소문자 무시 비교. 미설정이면 항상 false. */
     private fun isAdminEmail(email: String): Boolean =
         adminEmail.isNotBlank() && adminEmail.equals(email, ignoreCase = true)
+
+    companion object {
+        /** 현재 약관·개인정보 처리방침 버전(동의 추적). 정책 변경 시 갱신. */
+        const val TERMS_VERSION = "2026-07-01"
+    }
 }

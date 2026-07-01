@@ -39,6 +39,9 @@ interface AiToolRunRepository : JpaRepository<AiToolRun, Long> {
         createdAt: Instant,
     ): List<AiToolRun>
 
+    /** 공유 토큰으로 조회(무인증 공개 보고서) — 테넌트 무관. 삭제된 런은 제외. */
+    fun findByShareTokenAndDeletedAtIsNull(shareToken: String): AiToolRun?
+
     /** 계정 삭제 정리용 — 해당 사용자의 모든 분석 런 삭제. */
     fun deleteByOwnerUserId(ownerUserId: Long)
 }

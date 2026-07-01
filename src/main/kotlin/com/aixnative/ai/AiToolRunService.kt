@@ -124,6 +124,31 @@ class AiToolRunService(private val repository: AiToolRunRepository) {
             ?: throw NotFoundException("분석 이력을 찾을 수 없습니다.")
     }
 
+    /**
+     * 공유 토큰 발급(멱등) — 이미 있으면 그대로 반환. 테넌트 스코프(본인 런만).
+     * 읽기전용 공유 링크에 사용. 토큰은 추측 불가한 랜덤(UUID hex).
+     */
+    @Transactional
+    fun enableShare(id: Long): String {
+        val run = get(id) // 테넌트 스코프 강제
+        run.shareToken?.let { return it }
+        val token = java.util.UUID.randomUUID().toString().replace("-", "") +
+            java.util.UUID.randomUUID().toString().replace("-", "").take(8)
+        run.shareToken = token.take(64)
+        repository.save(run)
+        return run.shareToken!!
+    }
+
+    /** 공유 토큰으로 런 조회(무인증 공개). 테넌트 스코프 없음 — 호출부는 공개 보고서 렌더에만 사용. */
+    @Transactional(readOnly = true)
+    fun getByShareToken(token: String): AiToolRun? =
+        repository.findByShareTokenAndDeletedAtIsNull(token)
+
+    /** 특정 소유자의 활성 런(최신순) — 공개 보고서가 딜 단계를 모을 때 TenantContext 없이 사용. */
+    @Transactional(readOnly = true)
+    fun listForOwner(tenantId: Long, ownerUserId: Long): List<AiToolRun> =
+        repository.findByTenantIdAndOwnerUserIdAndDeletedAtIsNullOrderByIdDesc(tenantId, ownerUserId)
+
     @Transactional
     fun softDelete(id: Long) {
         val run = get(id) // enforces tenant scope

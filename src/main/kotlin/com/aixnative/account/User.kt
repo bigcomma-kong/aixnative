@@ -57,6 +57,18 @@ class User(
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     var role: UserRole = UserRole.USER,
+
+    /** 약관·개인정보 처리방침 동의 일시(PIPA 동의 캡처). 레거시 가입은 null. */
+    @Column(name = "terms_agreed_at")
+    var termsAgreedAt: Instant? = null,
+
+    /** 동의한 약관 버전(추적). */
+    @Column(name = "terms_version", length = 20)
+    var termsVersion: String? = null,
+
+    /** 마케팅·이메일 수신 동의(선택). */
+    @Column(name = "marketing_opt_in", nullable = false)
+    var marketingOptIn: Boolean = false,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
