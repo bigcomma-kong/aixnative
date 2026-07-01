@@ -615,8 +615,10 @@ td.warn { color: var(--no); font-weight: 600; }
 /* 가입 동의 캡처 */
 .consent { display: grid; gap: 0.45rem; margin: 0.2rem 0 0.9rem; }
 .consent-row { display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.82rem; color: var(--ink-soft); line-height: 1.45; cursor: pointer; }
-.consent-row input { margin-top: 0.15rem; flex: none; }
-.consent-row .btn-link { font-size: 0.82rem; }
+/* 전역 input(width:100%) 상속 방지 — 체크박스는 고정 크기, 텍스트가 남은 폭을 차지 */
+.consent-row input[type='checkbox'] { flex: none; width: 1rem; height: 1rem; min-width: 1rem; margin: 0.15rem 0 0; }
+.consent-row > span { flex: 1 1 auto; min-width: 0; }
+.consent-row .btn-link { font-size: 0.82rem; display: inline; }
 .consent-social { font-size: 0.76rem; color: var(--ink-faint); line-height: 1.5; margin: 0.7rem 0 0; }
 .consent-social .btn-link { font-size: 0.76rem; }
 
