@@ -1,6 +1,6 @@
 package com.aixnative.account
 
-import com.aixnative.billing.CreditService
+import com.aixnative.billing.service.CreditService
 import com.aixnative.common.web.BadRequestException
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -9,6 +9,12 @@ import org.springframework.test.context.ActiveProfiles
 import org.springframework.transaction.annotation.Transactional
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import com.aixnative.account.repository.EmailVerificationTokenRepository
+import com.aixnative.account.repository.UserRepository
+import com.aixnative.account.service.AuthService
+import com.aixnative.account.service.EmailVerificationService
+import com.aixnative.account.service.VerifyOutcome
+import com.aixnative.account.web.SignupRequest
 
 @SpringBootTest
 @ActiveProfiles("test")

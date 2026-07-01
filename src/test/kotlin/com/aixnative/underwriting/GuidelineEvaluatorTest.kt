@@ -3,6 +3,8 @@ package com.aixnative.underwriting
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import com.aixnative.underwriting.domain.GuidelineEvaluator
+import com.aixnative.underwriting.domain.ProFormaCalculator
 
 /** 가이드라인 적합성 코드 판정 검증 — 임계값 대조가 결정론적으로 동작하는지. */
 class GuidelineEvaluatorTest {

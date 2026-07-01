@@ -8,6 +8,7 @@ import org.springframework.test.context.ActiveProfiles
 import org.springframework.transaction.annotation.Transactional
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import com.aixnative.billing.service.CreditService
 
 @SpringBootTest
 @ActiveProfiles("test")

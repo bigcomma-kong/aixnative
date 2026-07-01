@@ -3,6 +3,7 @@ package com.aixnative.underwriting
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import com.aixnative.underwriting.domain.ProFormaCalculator
 
 /** 순수 계산 검증. */
 class ProFormaCalculatorTest {

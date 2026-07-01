@@ -10,6 +10,8 @@ import org.springframework.test.context.ActiveProfiles
 import org.springframework.transaction.annotation.Transactional
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import com.aixnative.ai.domain.RunStatus
+import com.aixnative.ai.service.AiToolRunService
 
 @SpringBootTest
 @ActiveProfiles("test")

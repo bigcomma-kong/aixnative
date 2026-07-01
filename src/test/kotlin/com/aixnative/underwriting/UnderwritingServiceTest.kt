@@ -1,7 +1,7 @@
 package com.aixnative.underwriting
 
-import com.aixnative.ai.AiProvider
-import com.aixnative.billing.CreditService
+import com.aixnative.ai.domain.AiProvider
+import com.aixnative.billing.service.CreditService
 import com.aixnative.common.tenant.TenantContext
 import com.aixnative.common.web.InsufficientCreditsException
 import com.aixnative.common.web.NotFoundException
@@ -18,6 +18,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import com.aixnative.underwriting.domain.AnalysisType
+import com.aixnative.underwriting.service.ReportService
+import com.aixnative.underwriting.service.UnderwritingService
+import com.aixnative.underwriting.web.UnderwriteRequest
 
 /** 가짜 AI provider — 네트워크 없이 언더라이팅 흐름(크레딧 차감·이력·파싱)을 검증. */
 class FakeAiProvider : AiProvider {

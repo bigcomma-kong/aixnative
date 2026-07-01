@@ -3,6 +3,7 @@ package com.aixnative.underwriting
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import com.aixnative.underwriting.domain.DevFeasibilityCalculator
 
 /** 개발 타당성 계산 + 마진 판정(GO/CONDITIONAL/NO_GO) 검증. */
 class DevFeasibilityCalculatorTest {

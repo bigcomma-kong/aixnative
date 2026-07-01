@@ -1,9 +1,9 @@
 package com.aixnative.billing
 
-import com.aixnative.account.Tenant
-import com.aixnative.account.TenantRepository
-import com.aixnative.account.User
-import com.aixnative.account.UserRepository
+import com.aixnative.account.domain.Tenant
+import com.aixnative.account.repository.TenantRepository
+import com.aixnative.account.domain.User
+import com.aixnative.account.repository.UserRepository
 import com.aixnative.common.web.NotFoundException
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -12,6 +12,10 @@ import org.springframework.test.context.ActiveProfiles
 import org.springframework.transaction.annotation.Transactional
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import com.aixnative.billing.domain.CreditReason
+import com.aixnative.billing.domain.Plan
+import com.aixnative.billing.service.BillingService
+import com.aixnative.billing.service.CreditService
 
 @SpringBootTest
 @ActiveProfiles("test")

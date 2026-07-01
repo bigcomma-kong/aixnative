@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import com.aixnative.underwriting.domain.PriceEstimator
 
 /** 가격 예측 — 소득환원·거래사례·밴드·신뢰도 검증. */
 class PriceEstimatorTest {

@@ -8,7 +8,7 @@ import java.time.Duration
 
 /**
  * Shared [RestClient] for outbound AI provider calls. Generous read timeout for
- * heavy LLM responses; the [com.aixnative.ai.AiServiceManager] enforces an
+ * heavy LLM responses; the [com.aixnative.ai.service.AiServiceManager] enforces an
  * additional per-call deadline on top of this.
  */
 @Configuration

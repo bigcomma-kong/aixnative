@@ -3,6 +3,9 @@ package com.aixnative.ai
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import com.aixnative.ai.domain.AiProvider
+import com.aixnative.ai.service.AiServiceManager
+import com.aixnative.ai.service.AiServiceProperties
 
 /** Pure unit tests — no Spring, no network. Fakes stand in for providers. */
 class AiServiceManagerTest {

@@ -2,6 +2,7 @@ package com.aixnative.billing
 
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import com.aixnative.billing.domain.ToolPricing
 
 class ToolPricingTest {
 

@@ -10,6 +10,10 @@ import org.springframework.transaction.annotation.Transactional
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import com.aixnative.account.domain.UserRole
+import com.aixnative.account.service.AuthService
+import com.aixnative.account.web.LoginRequest
+import com.aixnative.account.web.SignupRequest
 
 @SpringBootTest
 @ActiveProfiles("test")
