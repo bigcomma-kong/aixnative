@@ -4,6 +4,7 @@ plugins {
 	id("org.springframework.boot") version "3.5.15"
 	id("io.spring.dependency-management") version "1.1.7"
 	kotlin("plugin.jpa") version "1.9.25"
+	war  // jar(단독 java -jar) + war(외부 톰캣/WAS 배포) 둘 다 산출
 }
 
 group = "com.aixnative"
@@ -27,6 +28,9 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-security")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 	implementation("org.springframework.boot:spring-boot-starter-web")
+	// WAR 외부 톰캣 배포 대비: 내장 톰캣을 provided 로 → bootJar/java -jar 엔 포함(단독 실행 OK),
+	// 외부 톰캣에 올릴 땐 WEB-INF/lib-provided 로 빠져 컨테이너 톰캣과 충돌 안 함.
+	providedRuntime("org.springframework.boot:spring-boot-starter-tomcat")
 	implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
 	implementation("org.flywaydb:flyway-core")
 	implementation("org.flywaydb:flyway-database-postgresql")
@@ -65,6 +69,13 @@ tasks.withType<Test> {
 	useJUnitPlatform()
 	jvmArgs("-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8")
 }
+
+// 실행 불가한 plain war(-plain.war) 는 생략. bootWar 산출물(aixnative-*.war)이
+// java -jar 단독 실행과 외부 톰캣 배포를 모두 커버하므로 그거 하나면 충분.
+tasks.named("war") { enabled = false }
+
+// `./gradlew build` 한 번에 jar(단독 java -jar) 와 war(외부 톰캣/WAS) 를 모두 산출.
+tasks.named("assemble") { dependsOn("bootJar") }
 
 // 콘솔 한글 깨짐 방지: main() / bootRun 등 JVM 실행 출력을 UTF-8 로 고정.
 // (Windows 기본 콘솔 코드페이지 MS949 → UTF-8 로 통일)

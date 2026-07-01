@@ -3,6 +3,52 @@
 > `.gitignore` 가 `.env.*` 를 무시하므로 `.env.example` 대신 이 문서로 관리합니다.
 > 모든 시크릿은 **신규 발급** 후 환경변수로 주입합니다. (기존 MASTERN 값 복사 금지 — `docs/API-KEYS.md`)
 
+## 설정이 어디에 있나 (딱 두 곳) + 백업/복구  ⭐
+
+**헷갈리면 여기만 보세요.** 설정은 정확히 두 파일로 나뉩니다:
+
+| 무엇 | 파일 | git | 내용 |
+|---|---|:---:|---|
+| **비밀 아닌 모든 설정** | `src/main/resources/application.yml` | ✅ 커밋 | admin-email·URL·origins·모델명·TTL·toss client-key(공개)·oauth client-id·mail host/from·vworld-domain·플래그 등 **실값/기본값**. 커밋되니 운영 이미지에도 자동 반영 |
+| **진짜 크리덴셜만** | `src/main/resources/application-secret.yml` | ❌ gitignored | API키·비번·토큰·client-secret·JWT키 **값만**. `application.yml` 의 `🔑 값 → application-secret.yml` 표시된 항목들 |
+| (크리덴셜 템플릿) | `application-secret.yml.example` | ✅ | 복사해 채움: `cp application-secret.yml.example application-secret.yml` |
+
+동작:
+- **로컬**: 기본 프로필 `secret,h2` 부팅 시 `application-secret.yml` 자동 로드(없으면 무시). 테스트(`test`)에선 미로드.
+- **운영**: **Cloud Build 가 `application-secret.yml` 을 이미지에 구워넣고**(`.gcloudignore` 가 일부러 포함), 앱이 `postgres,secret` 프로필로 로드 → **이 파일만 고치고 재배포하면 로컬·운영 동시 반영.** 배포 시 키를 파라미터로 안 넘긴다(`deploy.sh` 는 자동생성 인프라 DB비번·JWT·수집토큰만 다룸).
+- 값 채우기: `python deploy/pull_secrets.py` (GCP Secret Manager 에서 내려받음) 또는 수동.
+- 커밋되는 건 값 없는 `.example` 뿐. **평문 크리덴셜은 절대 커밋 안 됨**(gitignored + 이미지에만 존재).
+
+### ⚠ 백업 (필수) — `application-secret.yml` 은 커밋 안 되니 백업이 없다
+이 파일을 잃으면 크리덴셜 재발급 위험. 반드시 백업:
+- **비밀번호 매니저**(1Password/Bitwarden) 에 파일 내용 저장 — 가장 간단, 노트북·GCP 와 독립.
+- (선택) **`sops` + `age`** 암호화본을 git 커밋 — 버전관리+이식성, 복호화 키 소유자만 열람.
+
+### 복구 절차 (노트북만 남았을 때)
+1. **백업본 있으면** → 비번매니저/sops 에서 `application-secret.yml` 복원 → 끝.
+2. **백업 없어도 GCP 살아있으면** → 값은 GCP 에 durable, 회수 가능:
+   ```bash
+   gcloud secrets list                                                 # 시크릿 목록
+   gcloud secrets versions access latest --secret=CLAUDE_OAUTH_TOKEN    # 시크릿 실제 값
+   gcloud run services describe aixnative --region=asia-northeast3 \
+     --format='yaml(spec.template.spec.containers[0].env)'             # 일반 env 값
+   ```
+   → 회수한 값을 `application-secret.yml` 에 채우면 복구 완료. **키 재발급 불필요.**
+3. GCP 프로젝트까지 잃은 경우에만 재발급 대상 — 그래서 1번(오프-GCP 백업)이 중요.
+
+## 빌드 산출물 (jar / war) — 둘 다 나옴 ⭐
+
+`./gradlew build` 한 번이면 `build/libs/` 에 **둘 다** 생성됩니다(프론트 static·`application-secret.yml` 포함):
+
+| 산출물 | 실행 | 용도 |
+|---|---|---|
+| `aixnative-*.jar` | `java -jar aixnative-*.jar` | 내장 톰캣. 서버 아무 데서나 단독 실행. **GCP Cloud Run 이 쓰는 방식**(Dockerfile `bootJar`) |
+| `aixnative-*.war` | `java -jar aixnative-*.war` **또는** 톰캣 `webapps/` 에 복사 | 외부 톰캣/WAS 에 배포. WAR 하나로 **단독 실행 + 컨테이너 배포 둘 다** 가능 |
+
+- 개별 태스크: `./gradlew bootJar`(jar만) · `./gradlew bootWar`(war만).
+- ⚠️ **프론트까지 담으려면** 먼저 `cd frontend && npm run build` → `frontend/dist` 를 `src/main/resources/static/` 로 복사한 뒤 빌드. (Dockerfile/Cloud Build 는 이 단계를 자동 수행. 로컬 `bootRun` 은 프론트 없이 백엔드만.)
+- WAR 를 외부 톰캣에 올릴 땐 내장 톰캣이 `WEB-INF/lib-provided` 로 빠져 컨테이너 톰캣과 충돌하지 않음(`providedRuntime` + `SpringBootServletInitializer`). 프로필/키 로딩은 jar 와 동일(`secret` 프로필로 `application-secret.yml` 로드).
+
 ## Phase 1 (핵심 골격) 필수
 | ENV | 기본값(dev fallback) | 용도 |
 |---|---|---|
