@@ -65,11 +65,8 @@ export function CashflowChart({ rows }: CashflowChartProps) {
         {/* 0 기준선 (CF) */}
         <line className="grid-line" x1={padL} y1={zeroY} x2={W - padR} y2={zeroY} strokeWidth={1.5} />
 
-        {/* DSCR 1.2 임계선 */}
+        {/* DSCR 1.2 임계선 (라벨은 막대·라인 위에 그려 가림 방지 → 하단에서 렌더) */}
         <line className="thresh" x1={padL} y1={dscrY(DSCR_THRESHOLD)} x2={W - padR} y2={dscrY(DSCR_THRESHOLD)} />
-        <text className="thresh-label" x={W - padR} y={dscrY(DSCR_THRESHOLD) - 4} textAnchor="end">
-          DSCR {DSCR_THRESHOLD.toFixed(1)}
-        </text>
 
         {/* CF 막대 (유한값만) */}
         {rows.map((r, i) => {
@@ -96,6 +93,17 @@ export function CashflowChart({ rows }: CashflowChartProps) {
         {dscrPoints.map((p) => (
           <circle key={rows[p.i].year} className="dscr-dot" cx={cx(p.i)} cy={dscrY(p.d)} r={3.5} />
         ))}
+
+        {/* DSCR 임계선 라벨 - 막대·라인 위(paint order 마지막)에 그리고 흰 헤일로로 가독성 확보 */}
+        <text
+          className="thresh-label"
+          x={W - padR}
+          y={dscrY(DSCR_THRESHOLD) - 5}
+          textAnchor="end"
+          style={{ paintOrder: 'stroke', stroke: 'var(--surface)', strokeWidth: 3.5, strokeLinejoin: 'round' }}
+        >
+          DSCR {DSCR_THRESHOLD.toFixed(1)}
+        </text>
 
         {/* x축 라벨 */}
         {rows.map((r, i) => (

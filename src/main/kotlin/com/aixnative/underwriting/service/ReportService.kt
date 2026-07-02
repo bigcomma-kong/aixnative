@@ -309,6 +309,8 @@ class ReportService(
         append("<!doctype html><html lang='ko'><head><meta charset='utf-8'>")
         append("<meta name='viewport' content='width=device-width, initial-scale=1'>")
         append("<title>${esc(title)} · 투자 분석 보고서</title>")
+        // 깔끔한 한글 웹폰트(Pretendard) - 로드 실패 시 시스템 폰트로 우아하게 폴백.
+        append("<link rel='stylesheet' href='https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.css'>")
         append("<style>$CSS</style></head><body>")
     }
 
@@ -370,9 +372,9 @@ class ReportService(
               --shadow:0 1px 2px oklch(0% 0 0 / 0.04), 0 12px 32px -18px oklch(0% 0 0 / 0.22);
             }
             * { box-sizing:border-box; }
-            body { margin:0; font-family:system-ui,-apple-system,'Segoe UI','Malgun Gothic',sans-serif;
-                   color:var(--ink); background:oklch(96% 0.006 262); line-height:1.62;
-                   -webkit-font-smoothing:antialiased; }
+            body { margin:0; font-family:'Pretendard Variable',Pretendard,-apple-system,'Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;
+                   color:var(--ink); background:oklch(96% 0.006 262); line-height:1.68; font-size:15px; letter-spacing:-0.003em;
+                   -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
             .report { max-width:920px; margin:24px auto; padding:0 0 44px; background:var(--paper);
                       border-radius:16px; box-shadow:var(--shadow); overflow:hidden; }
             .report > *:not(.cover):not(.metrics) { margin-left:44px; margin-right:44px; }

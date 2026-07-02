@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { AuthView } from './AuthView'
-import { PublicCalc } from './PublicCalc'
 import { SampleShowcase } from './SampleShowcase'
 import { SiteFooter } from './SiteFooter'
 import type { AuthResult } from './api'
@@ -219,15 +218,6 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
             <span className="stat-k">{s.k}</span>
           </div>
         ))}
-      </section>
-
-      <section className="pcalc-section reveal" id="calc" aria-labelledby="calc-h">
-        <div className="feat-head">
-          <span className="eyebrow">가입 없이 체험</span>
-          <h2 id="calc-h" className="feat-h">지금 바로, 무료로 계산</h2>
-          <p className="modes-sub">숫자 계산(ProForma)은 언제나 무료입니다. AI 심층 분석만 가입 후 크레딧으로.</p>
-        </div>
-        <PublicCalc onSignup={() => focusAuth('signup')} />
       </section>
 
       <section className="feat reveal" id="features" aria-labelledby="feat-h">

@@ -92,7 +92,11 @@ object GuidelineEvaluator {
             else -> Status.FAIL
         })
 
-    private fun fmt(v: Double): String = if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
+    // 소수 2자리 반올림 후 정수면 정수로 표기(부동소수 잔재 "8.918000000000001%" 방지).
+    private fun fmt(v: Double): String {
+        val r = Math.round(v * 100.0) / 100.0
+        return if (r == r.toLong().toDouble()) r.toLong().toString() else r.toString()
+    }
 
     // 판정 경계 보조 임계값(가이드라인 본문의 품질검증 밴드 기준)
     private const val MIN_DSCR_FLOOR = 1.10   // underwritingGuidelineText 품질검증 DSCR ≥ 1.10
