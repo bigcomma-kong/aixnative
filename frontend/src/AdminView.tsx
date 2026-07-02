@@ -58,7 +58,7 @@ export function AdminView({ currentEmail }: AdminViewProps) {
 
 const KRW = (n: number): string => n.toLocaleString('ko-KR')
 
-/** 운영 대시보드 — 사용자·분석·크레딧·결제 핵심 지표 카드. */
+/** 운영 대시보드 - 사용자·분석·크레딧·결제 핵심 지표 카드. */
 function DashboardPanel() {
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -128,7 +128,7 @@ function StatCard({ k, v, sub, accent }: { k: string; v: string; sub?: string; a
   )
 }
 
-/** 관리자 — 전 사용자 크레딧 원장(충전 경로·사유·증감). 누가 어떻게 충전/소비했는지 감독용. */
+/** 관리자 - 전 사용자 크레딧 원장(충전 경로·사유·증감). 누가 어떻게 충전/소비했는지 감독용. */
 function CreditsPanel() {
   const [entries, setEntries] = useState<AdminCreditEntry[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -146,7 +146,7 @@ function CreditsPanel() {
 
   return (
     <div className="card">
-      <div className="section-title">크레딧 내역 — 전체 ({entries.length})</div>
+      <div className="section-title">크레딧 내역 - 전체 ({entries.length})</div>
       {error && <p className="error">{error}</p>}
       {loading ? (
         <p className="hint">불러오는 중…</p>
@@ -314,7 +314,7 @@ function RunsPanel() {
     catch (e: unknown) { setError(e instanceof ApiError ? e.message : '상세 조회 실패') }
   }
 
-  // 도구별 그룹 — 건수 많은 순. 각 그룹 안은 최신순 유지(runs 가 이미 최신순).
+  // 도구별 그룹 - 건수 많은 순. 각 그룹 안은 최신순 유지(runs 가 이미 최신순).
   const groups = (() => {
     const map = new Map<string, AdminRun[]>()
     for (const r of runs) {
@@ -346,7 +346,7 @@ function RunsPanel() {
   return (
     <div className="card">
       <div className="section-title-row">
-        <div className="section-title">분석 데이터 — 전체 ({runs.length})</div>
+        <div className="section-title">분석 데이터 - 전체 ({runs.length})</div>
         <div className="seg" role="group" aria-label="보기 방식">
           <button type="button" aria-pressed={mode === 'list'} onClick={() => setMode('list')}>목록</button>
           <button type="button" aria-pressed={mode === 'group'} onClick={() => setMode('group')}>도구별 묶음</button>
@@ -368,9 +368,8 @@ function RunsPanel() {
             const fail = items.length - ok
             return (
               <details key={tool} className="run-group" open>
-                <summary>
+                <summary title={tool}>
                   <span className="rg-name">{toolLabel(tool)}</span>
-                  <code className="rg-code">{tool}</code>
                   <span className="rg-count">{items.length}건</span>
                   <span className="rg-stat st-ok">성공 {ok}</span>
                   {fail > 0 && <span className="rg-stat st-fail">실패 {fail}</span>}
@@ -458,7 +457,7 @@ function NewsletterPanel() {
       </div>
 
       <div className="card">
-        <div className="section-title">구독자 — 활성 {activeCount} / 전체 {subs.length}</div>
+        <div className="section-title">구독자 - 활성 {activeCount} / 전체 {subs.length}</div>
         {loading ? <p className="hint">불러오는 중…</p> : (
           <div className="table-scroll">
             <table className="admin-table">
@@ -484,7 +483,7 @@ function NewsletterPanel() {
       </div>
 
       <div className="card">
-        <div className="section-title">발송 로그 — 누구에게 언제 ({logs.length})</div>
+        <div className="section-title">발송 로그 - 누구에게 언제 ({logs.length})</div>
         {loading ? <p className="hint">불러오는 중…</p> : (
           <div className="table-scroll">
             <table className="admin-table">

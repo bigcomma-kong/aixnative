@@ -5,8 +5,18 @@ import { StageAnalysis, Verdict } from './StageAnalysis'
 import { DeepReportContent } from './DeepReportPanel'
 import { downloadDeepReportDoc, printDeepReport } from './reportExport'
 
-/** 파이프라인 4단계 — 결과를 StageAnalysis 공용 렌더러로 표시(표·플래그·매트릭스 포함). */
+/** 파이프라인 4단계 - 결과를 StageAnalysis 공용 렌더러로 표시(표·플래그·매트릭스 포함). */
 const PIPELINE_TOOLS = new Set(['SCREENING', 'MARKET_STUDY', 'UNDERWRITING', 'IC_MEMO'])
+
+/**
+ * DB에 저장되는 tool 코드가 파이프라인 enum 이름과 다른 경우 표준코드로 정규화.
+ * (ai_tool_run.tool = AnalysisType.tool: 스크리닝="DEAL_SCREENING", 언더라이팅="UNDERWRITING_NARRATIVE")
+ */
+const TOOL_ALIAS: Record<string, string> = {
+  DEAL_SCREENING: 'SCREENING',
+  UNDERWRITING_NARRATIVE: 'UNDERWRITING',
+}
+export const canonicalTool = (t: string): string => TOOL_ALIAS[t] ?? t
 
 /** 백엔드 tool 코드 → 한국어 라벨(사용 내역 표시용). */
 export const TOOL_LABEL: Record<string, string> = {
@@ -16,9 +26,9 @@ export const TOOL_LABEL: Record<string, string> = {
   HOLD_SELL_REFI: '보유·매각·리파이', DEV_FEASIBILITY: '개발 타당성', MARKET_RESEARCH_DEEP: '심화 시장리서치',
   COUNTERPARTY_DD: '거래상대방 실사', PRICE_FORECAST: '가격 예측', MARKET_DEEP_REPORT: 'AI 심층 시장 리포트',
 }
-export const toolLabel = (t: string): string => TOOL_LABEL[t] ?? t
+export const toolLabel = (t: string): string => TOOL_LABEL[canonicalTool(t)] ?? t
 
-/** 입력(request) 필드 한국어 라벨 — 모르는 키는 그대로 노출. */
+/** 입력(request) 필드 한국어 라벨 - 모르는 키는 그대로 노출. */
 const INPUT_LABEL: Record<string, string> = {
   dealName: '딜 이름', assetType: '자산유형', location: '위치', notes: '메모',
   askingPriceEok: '매입가(억)', noiEok: 'NOI(억)', ltvPct: 'LTV(%)', loanRatePct: '대출금리(%)',
@@ -38,9 +48,10 @@ export function ResultModal({ run, result, request, subtitle, onClose }: {
   const facts: { source: string; detail: string }[] = result?.marketFacts ?? []
   const disclaimer: string | undefined = a?.disclaimer ?? result?.disclaimer
   // 파이프라인 단계는 공용 StageAnalysis 로 렌더(인라인 화면과 동일한 표·플래그). 그 외는 기존 제네릭 렌더러.
-  const isPipeline = PIPELINE_TOOLS.has(run.tool)
-  // AI 심층 시장 리포트는 시장 탭과 동일한 리치 패널(공용 DeepReportContent)로 렌더 — 결과 JSON 이 곧 MarketDeepReport.
-  const isDeepReport = run.tool === 'MARKET_DEEP_REPORT'
+  const tool = canonicalTool(run.tool)
+  const isPipeline = PIPELINE_TOOLS.has(tool)
+  // AI 심층 시장 리포트는 시장 탭과 동일한 리치 패널(공용 DeepReportContent)로 렌더 - 결과 JSON 이 곧 MarketDeepReport.
+  const isDeepReport = tool === 'MARKET_DEEP_REPORT'
   const deepReport = isDeepReport ? (result as MarketDeepReport) : null
 
   return (
@@ -80,7 +91,7 @@ export function ResultModal({ run, result, request, subtitle, onClose }: {
 
           {isPipeline && (<>
             <Verdict analysis={a as Analysis} />
-            <StageAnalysis type={run.tool} analysis={a as Analysis} />
+            <StageAnalysis type={tool} analysis={a as Analysis} />
           </>)}
 
           {deepReport && <DeepReportContent report={deepReport} />}
@@ -176,7 +187,7 @@ export function ResultModal({ run, result, request, subtitle, onClose }: {
 
           {!isDeepReport && facts.length > 0 && (
             <Block title="실측·확정 데이터">
-              <ul className="rm-ul">{facts.map((f, i) => <li key={i}><b>{f.source}</b> — {f.detail}</li>)}</ul>
+              <ul className="rm-ul">{facts.map((f, i) => <li key={i}><b>{f.source}</b> - {f.detail}</li>)}</ul>
             </Block>
           )}
 

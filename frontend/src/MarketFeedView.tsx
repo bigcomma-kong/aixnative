@@ -9,7 +9,7 @@ import { ResultModal } from './ResultModal'
 
 interface MarketFeedViewProps {
   isAdmin: boolean
-  /** '이 딜 분석하기' — 카드 원문을 심화 분석(딜 진입)으로 넘긴다. */
+  /** '이 딜 분석하기' - 카드 원문을 심화 분석(딜 진입)으로 넘긴다. */
   onAnalyzeDeal: (sourceText: string) => void
   /** 심층 리포트(크레딧 소비) 후 잔액 갱신. */
   onCreditBalance: (balance: number) => void
@@ -24,9 +24,9 @@ const ASSET_FILTERS = ['전체', '관심', '오피스', '물류', '호텔', '리
 type AssetFilter = (typeof ASSET_FILTERS)[number]
 
 /**
- * 시장 인텔리전스 — 뉴스레터(마켓 브리핑) + 딜 모니터링(카드 피드)을 합친 surface.
+ * 시장 인텔리전스 - 뉴스레터(마켓 브리핑) + 딜 모니터링(카드 피드)을 합친 surface.
  * 브리핑으로 큰 그림을 보고, 자산유형으로 딜을 좁혀 그 자리에서 AI 분석으로 진입.
- * 데이터는 스케줄러가 매일 자동 수집(이력 누적) — 관리자는 즉시 수집/추가/삭제.
+ * 데이터는 스케줄러가 매일 자동 수집(이력 누적) - 관리자는 즉시 수집/추가/삭제.
  */
 export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeedCredits, toolCosts }: MarketFeedViewProps) {
   const deepCost = toolCosts?.['MARKET_DEEP_REPORT']
@@ -206,7 +206,7 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeed
         <div className="mi-head-text">
           <span className="mi-eyebrow">AI MARKET INTELLIGENCE</span>
           <h2 className="mi-title">시장 인텔리전스</h2>
-          <p className="mi-sub">매일 자동 수집되는 시장 브리핑과 딜 — 관심 딜은 그 자리에서 AI 언더라이팅으로.</p>
+          <p className="mi-sub">매일 자동 수집되는 시장 브리핑과 딜 - 관심 딜은 그 자리에서 AI 언더라이팅으로.</p>
         </div>
         <div className="mi-actions">
           {isAdmin && (
@@ -224,7 +224,7 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeed
 
       {report && (
         <p className="mi-report">
-          수집 완료 — 신규 <b>{report.inserted}</b> · 중복 {report.skippedDuplicate} · 분석 {report.fetched}건
+          수집 완료 - 신규 <b>{report.inserted}</b> · 중복 {report.skippedDuplicate} · 분석 {report.fetched}건
           {report.briefingGenerated ? ` · 브리핑 갱신(${report.briefingProvider})` : ' · 브리핑 생략'}
         </p>
       )}
@@ -259,7 +259,7 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeed
           <div className="deep-bar">
             <div className="deep-bar-text">
               <strong>AI 심층 시장 분석</strong>
-              <span>무료 브리핑보다 깊은 섹터·모멘텀·액션 리포트 — Claude 기반</span>
+              <span>무료 브리핑보다 깊은 섹터·모멘텀·액션 리포트 - Claude 기반</span>
             </div>
             <button className="btn-primary" onClick={() => void runDeepReport()} disabled={deepBusy || items.length === 0}>
               {deepBusy ? 'AI 분석 중…' : `AI 심층 분석 · ${deepCost != null ? `${deepCost}크레딧` : '크레딧'}`}
@@ -368,13 +368,13 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeed
         </div>
       )}
       {hasMore && filter !== '전체' && visible.length > 0 && (
-        <p className="feed-more-hint">‘{filter}’ 필터 중 — 과거 딜을 더 보려면 ‘전체’로 전환하세요.</p>
+        <p className="feed-more-hint">‘{filter}’ 필터 중 - 과거 딜을 더 보려면 ‘전체’로 전환하세요.</p>
       )}
     </section>
   )
 }
 
-/** 마켓 브리핑 — 프리미엄 다크 히어로(헤드라인·전망 + 동향/워치리스트/리스크). */
+/** 마켓 브리핑 - 프리미엄 다크 히어로(헤드라인·전망 + 동향/워치리스트/리스크). */
 function BriefingHero({ briefing, isPast = false, onLatest }: { briefing: MarketBriefing; isPast?: boolean; onLatest?: () => void }) {
   const date = briefing.generatedAt
     ? new Date(briefing.generatedAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })
@@ -445,7 +445,7 @@ function BriefingHero({ briefing, isPast = false, onLatest }: { briefing: Market
   )
 }
 
-/** 무료 메일 구독 바 — 매일 아침 브리핑을 메일로(재방문 유도). */
+/** 무료 메일 구독 바 - 매일 아침 브리핑을 메일로(재방문 유도). */
 function NewsletterBar({ onError }: { onError: (m: string | null) => void }) {
   const [subscribed, setSubscribed] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
@@ -482,12 +482,12 @@ function NewsletterBar({ onError }: { onError: (m: string | null) => void }) {
 }
 
 function fmtHistoryDate(s: string | null): string {
-  if (!s) return '—'
+  if (!s) return '-'
   return new Date(s).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
 }
 
 function fmtArchiveDate(s: string | null): string {
-  if (!s) return '—'
+  if (!s) return '-'
   return new Date(s).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' })
 }
 
@@ -504,6 +504,8 @@ function FeedCard({
   const seed = item.sourceText?.trim() || item.summary?.trim() || item.title
   const dateLabel = item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) : null
   const sourceLabel = originLabel(item.origin)
+  // 자산유형이 분류된 카드만 "딜"로 간주(뉴스·인사이트엔 분석 CTA 대신 원문 보기).
+  const isDeal = !!item.assetType
 
   return (
     <article className="feed-card" data-asset={item.assetType ?? ''}>
@@ -517,7 +519,9 @@ function FeedCard({
         {watched ? '★' : '☆'}
       </button>
       <div className="fc-top">
-        {item.assetType && <span className="fc-asset">{item.assetType}</span>}
+        {isDeal
+          ? <span className="fc-asset">{item.assetType}</span>
+          : <span className="fc-asset fc-news">뉴스·인사이트</span>}
         {item.location && <span className="fc-loc">{item.location}</span>}
       </div>
       <h3 className="fc-title">{item.title}</h3>
@@ -527,8 +531,14 @@ function FeedCard({
         {dateLabel && <span className="fc-date">{dateLabel}</span>}
       </div>
       <div className="fc-actions">
-        <button className="fc-analyze" onClick={() => onAnalyze(seed)}>이 딜 분석하기 →</button>
-        {item.sourceUrl && (
+        {isDeal ? (
+          <button className="fc-analyze" onClick={() => onAnalyze(seed)}>이 딜 분석하기 →</button>
+        ) : item.sourceUrl ? (
+          <a className="fc-readmore" href={item.sourceUrl} target="_blank" rel="noreferrer">원문 보기 →</a>
+        ) : (
+          <span className="fc-news-note">시장 참고 정보</span>
+        )}
+        {isDeal && item.sourceUrl && (
           <a className="fc-link" href={item.sourceUrl} target="_blank" rel="noreferrer" title="원문 보기">원문</a>
         )}
         {isAdmin && (
@@ -606,7 +616,7 @@ function AdminFeedForm({
         <input placeholder="위치(예: 서울 중구)" value={form.location ?? ''} onChange={(e) => set('location', e.target.value)} />
       </div>
       <textarea rows={2} placeholder="요약(카드에 표시)" value={form.summary ?? ''} onChange={(e) => set('summary', e.target.value)} />
-      <textarea rows={3} placeholder="딜 원문 — '이 딜 분석하기' 진입 시 AI 추출에 사용" value={form.sourceText ?? ''} onChange={(e) => set('sourceText', e.target.value)} />
+      <textarea rows={3} placeholder="딜 원문 - '이 딜 분석하기' 진입 시 AI 추출에 사용" value={form.sourceText ?? ''} onChange={(e) => set('sourceText', e.target.value)} />
       <input placeholder="원문 URL(선택)" value={form.sourceUrl ?? ''} onChange={(e) => set('sourceUrl', e.target.value)} />
       <div className="fa-actions">
         <button type="button" className="btn-link" onClick={() => setOpen(false)}>취소</button>

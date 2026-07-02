@@ -6,7 +6,7 @@ import { InfoModal, type InfoPage } from './SiteFooter'
 interface CheckoutProps {
   /** 현재 잔여 크레딧(안내용). */
   creditBalance: number
-  /** 구매자 식별 — 토스에 전달(취소·CS 매칭용). 로그인 이메일. */
+  /** 구매자 식별 - 토스에 전달(취소·CS 매칭용). 로그인 이메일. */
   customerEmail: string
   onClose: () => void
 }
@@ -61,7 +61,7 @@ export function Checkout({ creditBalance, customerEmail, onClose }: CheckoutProp
         orderName: order.orderName,
         successUrl: `${window.location.origin}/?pay=1`,
         failUrl: `${window.location.origin}/?pay=1`,
-        // 구매자 식별 — 토스 대시보드/취소 시 매칭(이메일). 이름은 미수집이라 이메일 앞부분으로.
+        // 구매자 식별 - 토스 대시보드/취소 시 매칭(이메일). 이름은 미수집이라 이메일 앞부분으로.
         customerEmail,
         customerName: customerEmail.split('@')[0],
         card: { useEscrow: false, flowMode: 'DEFAULT', useCardPoint: false, useAppCardOnly: false },
@@ -82,40 +82,62 @@ export function Checkout({ creditBalance, customerEmail, onClose }: CheckoutProp
     }
   }
 
+  const selectedPack = packs.find((p) => p.id === selected) ?? null
+  // 크레딧당 최고 단가(=가장 비싼 팩) 기준으로 절약률 표시 → "묶음 살수록 이득" 을 직관적으로.
+  const basePer = packs.length ? Math.max(...packs.map((p) => p.amountKrw / p.credits)) : 0
+
   return (
     <div className="analyze-overlay" role="dialog" aria-modal="true" aria-label="크레딧 충전" onClick={onClose}>
       <div className="checkout-modal" onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="checkout-x" aria-label="닫기" onClick={onClose} disabled={paying}>
+          ✕
+        </button>
+
         <div className="checkout-head">
-          <h3>크레딧 충전</h3>
-          <p className="muted">
-            현재 잔여 <b>{creditBalance}</b>크레딧 · AI 분석 1회 = 분석별 1~5크레딧
-          </p>
+          <span className="checkout-emblem" aria-hidden>₩</span>
+          <div className="checkout-head-text">
+            <h3>크레딧 충전</h3>
+          </div>
+          <span className="checkout-balance" title="현재 보유 크레딧">
+            <small>보유</small>
+            <b>{creditBalance.toLocaleString()}</b>
+            크레딧
+          </span>
         </div>
 
         {loading ? (
-          <div className="checkout-loading">불러오는 중…</div>
-        ) : !configured ? (
-          <div className="checkout-soon">
-            결제 준비 중입니다. 잠시 후 다시 시도해 주세요.
+          <div className="checkout-loading">
+            <span className="checkout-spinner" aria-hidden /> 가격 정보를 불러오는 중…
           </div>
+        ) : !configured ? (
+          <div className="checkout-soon">결제 준비 중입니다. 잠시 후 다시 시도해 주세요.</div>
         ) : (
           <>
             <div className="pack-grid">
               {packs.map((p) => {
                 const per = Math.round(p.amountKrw / p.credits)
                 const best = p.id === 'PRO'
+                const isSel = selected === p.id
+                const save = basePer > 0 ? Math.round((1 - p.amountKrw / p.credits / basePer) * 100) : 0
                 return (
                   <button
                     type="button"
                     key={p.id}
-                    className={`pack-card ${selected === p.id ? 'is-selected' : ''} ${best ? 'is-best' : ''}`}
+                    className={`pack-card ${isSel ? 'is-selected' : ''} ${best ? 'is-best' : ''}`}
                     onClick={() => setSelected(p.id)}
-                    aria-pressed={selected === p.id}
+                    aria-pressed={isSel}
                   >
                     {best && <span className="pack-badge">인기</span>}
-                    <span className="pack-credits">{p.credits}<small>크레딧</small></span>
+                    <span className="pack-check" aria-hidden>✓</span>
+                    <span className="pack-credits">
+                      {p.credits.toLocaleString()}
+                      <small>크레딧</small>
+                    </span>
                     <span className="pack-price">{p.amountKrw.toLocaleString()}원</span>
-                    <span className="pack-per">크레딧당 {per.toLocaleString()}원</span>
+                    <span className="pack-per">
+                      크레딧당 {per.toLocaleString()}원
+                      {save > 0 && <em className="pack-save">{save}%↓</em>}
+                    </span>
                   </button>
                 )
               })}
@@ -124,23 +146,35 @@ export function Checkout({ creditBalance, customerEmail, onClose }: CheckoutProp
             {error && <div className="checkout-error" role="alert">{error}</div>}
 
             <div className="checkout-actions">
-              <button type="button" className="btn-ghost" onClick={onClose} disabled={paying}>
-                닫기
+              <button
+                type="button"
+                className="btn-primary checkout-pay"
+                onClick={pay}
+                disabled={paying || !selectedPack}
+              >
+                {paying
+                  ? '결제창 여는 중…'
+                  : selectedPack
+                    ? `${selectedPack.amountKrw.toLocaleString()}원 결제하기`
+                    : '팩을 선택하세요'}
               </button>
-              <button type="button" className="btn-primary" onClick={pay} disabled={paying || !selected}>
-                {paying ? '결제창 여는 중…' : '결제하기'}
-              </button>
+              <p className="checkout-trust">
+                <span aria-hidden>🔒</span> 토스페이먼츠 안전결제 · 카드 · 간편결제
+              </p>
             </div>
+
             <div className="checkout-policy">
-              <p><b>환불 안내</b></p>
+              <p className="checkout-policy-head">
+                <span aria-hidden>🛡</span> 환불 안내
+              </p>
               <ul>
                 <li>일회성 충전이며 자동 결제·구독이 아닙니다.</li>
                 <li>환불은 <b>결제 후 7일 이내</b>, <b>구매한 크레딧을 전혀 사용하지 않은 경우에만</b> 가능합니다.</li>
-                <li><b>크레딧을 일부라도 사용하면 해당 결제 건은 환불되지 않습니다.</b> (부분 환불 없음)</li>
+                <li><b>크레딧을 일부라도 사용하면 해당 결제 건은 환불되지 않습니다.</b></li>
                 <li>환불 요청은 결제 계정 이메일로 문의해 주세요.</li>
               </ul>
               <p className="checkout-fineprint">
-                결제는 토스페이먼츠로 안전하게 처리됩니다. 결제 진행 시{' '}
+                결제 진행 시{' '}
                 <button type="button" className="btn-link" onClick={() => setInfoPage('terms')}>이용약관</button>·
                 <button type="button" className="btn-link" onClick={() => setInfoPage('privacy')}>개인정보 처리방침</button>에 동의하게 됩니다.
               </p>

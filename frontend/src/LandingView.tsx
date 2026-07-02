@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AuthView } from './AuthView'
+import { PublicCalc } from './PublicCalc'
 import { SampleShowcase } from './SampleShowcase'
 import { SiteFooter } from './SiteFooter'
 import type { AuthResult } from './api'
@@ -109,12 +110,12 @@ const STATS = [
   { v: '1분', k: '딜 한 건 심사' },
   { v: '4종', k: 'AI 분석 파이프라인' },
   { v: '9종', k: '심화 분석 도구' },
-  { v: '무료', k: '가입 즉시 크레딧' },
+  { v: '무료', k: '가입 시 크레딧' },
 ] as const
 
 const TRUST = ['자산운용', '디벨로퍼', 'REIT', 'PE / 펀드', '중개법인']
 
-/** 전문가 의뢰 vs aixnative — 가격 정당화(숫자는 예시 범위). */
+/** 전문가 의뢰 vs aixnative - 가격 정당화(숫자는 예시 범위). */
 const COMPARE = [
   { item: '언더라이팅', detail: 'IRR · DSCR · 민감도', them: '컨설팅 자문 수십만~수백만 원 · 수일', us: '1분 · 3크레딧 (약 3천 원)' },
   { item: '투심(IC) 메모', detail: 'IC 상정용 종합', them: '애널리스트 수 시간 작업', us: '1분 · 5크레딧' },
@@ -122,14 +123,14 @@ const COMPARE = [
   { item: '시장 리서치', detail: '권역 · 매크로 · 하우스뷰', them: '리서치하우스 리포트 · 구독', us: '무료 브리핑 + 심층 5크레딧' },
 ] as const
 
-/** 두 핵심 메뉴(언더라이팅 vs 심화 분석)가 무엇인지 — 메뉴 이름만으론 헷갈리므로 명시. */
+/** 두 핵심 메뉴(언더라이팅 vs 심화 분석)가 무엇인지 - 메뉴 이름만으론 헷갈리므로 명시. */
 const MODES = [
   {
     tag: '언더라이팅',
     title: '매입 한 건, 깊게 심사',
     desc: '매입가·NOI·LTV·금리·Exit Cap 숫자를 넣으면 ProForma 지표(무료)와 4단계 AI 심사를 한 흐름으로.',
     items: [
-      'ProForma — IRR·EM·DSCR·민감도 (코드 계산, 무료)',
+      'ProForma - IRR·EM·DSCR·민감도 (코드 계산, 무료)',
       '스크리닝 → 시장조사 → 언더라이팅 → 투심 메모',
       '같은 딜로 쌓으면 보고서 자동 합본',
     ],
@@ -183,8 +184,9 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
             매물 한 건,<br /><em>1분 심사.</em>
           </h1>
           <p className="hero-sub">
-            매입가와 자본구조만 넣으면 ProForma 지표 계산과 AI 투자 심사, 리스크 플래그를
-            한 번에. 스프레드시트 없이, 투자 의사결정을 더 빠르게.
+            매입가와 자본구조만 넣으면 ProForma 지표 계산과 AI 투자 심사, 리스크 플래그를 한 번에.
+            <br />
+            스프레드시트 없이, 투자 의사결정을 더 빠르게.
           </p>
           <div className="hero-cta">
             <button className="btn-primary hero-cta-main" onClick={() => focusAuth('signup')}>무료로 시작 →</button>
@@ -194,7 +196,7 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
             <div className="avatar-stack">
               <span className="av">K</span><span className="av">L</span><span className="av">P</span>
             </div>
-            <span className="hero-proof-text">카드 등록 없이 - 가입 즉시 무료 분석</span>
+            <span className="hero-proof-text">카드 등록 없이 - 무료 크레딧으로 시작</span>
           </div>
         </div>
 
@@ -217,6 +219,15 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
             <span className="stat-k">{s.k}</span>
           </div>
         ))}
+      </section>
+
+      <section className="pcalc-section reveal" id="calc" aria-labelledby="calc-h">
+        <div className="feat-head">
+          <span className="eyebrow">가입 없이 체험</span>
+          <h2 id="calc-h" className="feat-h">지금 바로, 무료로 계산</h2>
+          <p className="modes-sub">숫자 계산(ProForma)은 언제나 무료입니다. AI 심층 분석만 가입 후 크레딧으로.</p>
+        </div>
+        <PublicCalc onSignup={() => focusAuth('signup')} />
       </section>
 
       <section className="feat reveal" id="features" aria-labelledby="feat-h">
@@ -311,8 +322,10 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
           <h2 id="sample-h" className="feat-h">실제 분석 결과를 먼저 보세요</h2>
           <p className="modes-sub">
             아래는 실제 AI 분석을 같은 화면 그대로 렌더한 <strong>축약 미리보기</strong>입니다.
-            가입 후 딜을 넣으면 이보다 더 세분화된 전체 결과 — 4단계 분석(스크리닝·시장조사·언더라이팅·투심)에
-            심화 분석 10종까지 — 를 받습니다. 스프레드시트가 아니라 투자 판단이 나옵니다.
+          </p>
+          <p className="modes-sub">
+            가입 후엔 4단계 분석(스크리닝·시장조사·언더라이팅·투심)에 심화 9종까지 -
+            더 세분화된 전체 결과를 받습니다.
           </p>
         </div>
         <SampleShowcase onSignup={() => focusAuth('signup')} />
@@ -321,7 +334,7 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
       <section className="auth-section reveal" aria-labelledby="auth-h">
         <div className="auth-section-copy">
           <h2 id="auth-h" className="auth-section-h">지금 첫 딜을<br />심사해 보세요</h2>
-          <p className="auth-section-sub">가입 즉시 무료 크레딧. 카드 등록은 필요 없습니다.</p>
+          <p className="auth-section-sub">무료 크레딧으로 시작하세요. 소셜은 즉시, 이메일은 인증 후 지급 · 카드 등록 불필요.</p>
           <ul className="auth-bullets">
             <li><Check /> ProForma 지표는 언제나 무료</li>
             <li><Check /> AI 분석 = 버튼 한 번, 분석별 1~5크레딧</li>

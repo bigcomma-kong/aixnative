@@ -34,19 +34,52 @@ class NewsTextFilterTest {
     }
 
     @Test
-    fun `trusted source passes without anchor`() {
-        assertTrue(NewsTextFilter.isRelevant(item("아무 제목", loose = false)))
+    fun `real estate context alone is not a deal`() {
+        // 시황·정책·오피니언 — 부동산 컨텍스트는 있으나 거래 시그널이 없어 딜 아님(소스 무관).
+        assertFalse(NewsTextFilter.isRelevant(item("강남 오피스 공실률 상승, 임대료 약세", loose = false)))
+        assertFalse(NewsTextFilter.isRelevant(item("아무 제목", loose = false)))
     }
 
     @Test
-    fun `loose source requires real estate anchor`() {
-        assertFalse(NewsTextFilter.isRelevant(item("그냥 일반 기사", loose = true)))
+    fun `deal signal alone without context is rejected`() {
+        assertFalse(NewsTextFilter.isRelevant(item("스타트업 지분 인수 소식", loose = true)))
+    }
+
+    @Test
+    fun `context plus deal signal passes from any source`() {
         assertTrue(NewsTextFilter.isRelevant(item("오피스 빌딩 매각 우선협상", loose = true)))
+        assertTrue(NewsTextFilter.isRelevant(item("○○자산운용, 강남 프라임 오피스 6800억에 매각", loose = false)))
+        assertTrue(NewsTextFilter.isRelevant(item("물류센터 매각 우선협상대상자 선정", loose = true)))
     }
 
     @Test
-    fun `noise is filtered even from trusted source`() {
-        assertFalse(NewsTextFilter.isRelevant(item("프로야구 개막 빌딩 옆 경기장", loose = false)))
+    fun `macro opinion column is rejected`() {
+        // 사용자 지적 사례 — 축구 메타포 + 골목상권 부실대출 매크로 칼럼(딜 아님).
+        assertFalse(NewsTextFilter.isRelevant(item("‘홍명보라도 왔으면’…부실대출 눈덩이처럼 불어나는 ‘골목상권’", loose = true)))
+    }
+
+    @Test
+    fun `noise is filtered even with deal-like words`() {
+        assertFalse(NewsTextFilter.isRelevant(item("프로야구 개막, 구장 인수 우선협상 빌딩", loose = false)))
+    }
+
+    @Test
+    fun `celebrity lifestyle article is rejected`() {
+        // 사용자 지적 사례 — 연예/육아 휴먼 인터레스트(부동산·거래 시그널 없음).
+        assertFalse(
+            NewsTextFilter.isRelevant(
+                item(
+                    "남보라, 출산 후 젖몸살→기미 생겼는데..‘아기 낳길 잘해’ 꿀 뚝뚝 (인생극장)[순간포착]",
+                    "영상 시청 후 작성된 리뷰 기사입니다. 배우 남보라가 현실 육아를 토로하면서도 출산에 대해 후회하지 않은 선택이라고 밝혔다.",
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `celebrity gossip with real estate keywords is still rejected`() {
+        // 컨텍스트(빌딩)+거래 시그널(매입)을 우연히 갖춘 연예 가십도 투자 딜이 아니므로 차단.
+        assertFalse(NewsTextFilter.isRelevant(item("배우 남보라, 강남 프라임 빌딩 100억 매입 화제")))
     }
 
     @Test

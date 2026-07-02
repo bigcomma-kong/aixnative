@@ -25,11 +25,20 @@ function Mark({ provider }: { provider: string }) {
   return <span className="social-icon social-wordmark" aria-hidden="true">{provider === 'kakao' ? 'K' : 'N'}</span>
 }
 
+interface SocialLoginProps {
+  /**
+   * 'bottom'(기본): 이메일 폼 아래 보조 CTA — 상단 '또는' 구분선 + 버튼.
+   * 'top': 가입 화면의 1차 CTA — '즉시 무료 크레딧' 강조 후 버튼, 하단에 '또는 이메일로 가입' 구분선.
+   */
+  variant?: 'top' | 'bottom'
+}
+
 /**
  * 간편 소셜 로그인 버튼. 설정된 제공자가 없으면 아무것도 렌더하지 않는다(graceful).
  * 클릭 시 백엔드 authorize 로 전체 이동 → 제공자 인증 → 콜백에서 우리 JWT 발급.
+ * 소셜은 실계정 기반이라 어뷰징에 강하고 가입 즉시 크레딧이 지급돼, 가입 화면의 1차 경로로 노출한다.
  */
-export function SocialLogin() {
+export function SocialLogin({ variant = 'bottom' }: SocialLoginProps) {
   const [providers, setProviders] = useState<string[] | null>(null)
 
   useEffect(() => {
@@ -45,8 +54,10 @@ export function SocialLogin() {
   if (ordered.length === 0) return null
 
   return (
-    <div className="social-login">
-      <div className="social-divider"><span>또는</span></div>
+    <div className={`social-login${variant === 'top' ? ' social-login-top' : ''}`}>
+      {variant === 'top'
+        ? <p className="social-lead">간편 가입 · <b>즉시 무료 크레딧</b></p>
+        : <div className="social-divider"><span>또는</span></div>}
       <div className="social-btns">
         {ordered.map((p) => (
           <button
@@ -60,6 +71,7 @@ export function SocialLogin() {
           </button>
         ))}
       </div>
+      {variant === 'top' && <div className="social-divider"><span>또는 이메일로 가입</span></div>}
     </div>
   )
 }

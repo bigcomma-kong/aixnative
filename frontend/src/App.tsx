@@ -13,7 +13,7 @@ import { Checkout } from './Checkout'
 import { SiteFooter } from './SiteFooter'
 import { PaymentResult, readPaymentCallback, type PaymentCallback } from './PaymentResult'
 
-/** 메일의 `/?reset=<token>` 링크로 진입했는지 — 부팅 시 한 번 읽는다. */
+/** 메일의 `/?reset=<token>` 링크로 진입했는지 - 부팅 시 한 번 읽는다. */
 function readResetToken(): string | null {
   const t = new URLSearchParams(window.location.search).get('reset')
   return t && t.trim() ? t : null
@@ -71,7 +71,7 @@ function App() {
   const [showPaywall, setShowPaywall] = useState(false)
   // 크레딧 충전 결제 모달.
   const [showCheckout, setShowCheckout] = useState(false)
-  // 토스 결제 후 리다이렉트 콜백(?pay=1&...) — 부팅 시 한 번 읽는다.
+  // 토스 결제 후 리다이렉트 콜백(?pay=1&...) - 부팅 시 한 번 읽는다.
   const [paymentCb, setPaymentCb] = useState<PaymentCallback | null>(() => readPaymentCallback())
 
   function openCheckout() {
@@ -132,7 +132,7 @@ function App() {
     }
   }, [needsVerifyRefresh])
 
-  // 세션이 생기면 가격표를 1회 로드(정적 — 모든 유저 동일). 실패 시 라벨은 숫자 생략 폴백.
+  // 세션이 생기면 가격표를 1회 로드(정적 - 모든 유저 동일). 실패 시 라벨은 숫자 생략 폴백.
   useEffect(() => {
     if (!session || Object.keys(toolCosts).length > 0) return
     api.pricing().then((p) => setToolCosts(p.toolCosts)).catch(() => {})
@@ -290,7 +290,7 @@ function App() {
   )
 }
 
-/** 미인증 사용자 상단 배너 — 인증 메일 재전송 + 인증 완료 확인(새로고침). */
+/** 미인증 사용자 상단 배너 - 인증 메일 재전송 + 인증 완료 확인(새로고침). */
 function VerifyBanner({ onVerified }: { onVerified: (creditBalance: number) => void }) {
   const [status, setStatus] = useState<'idle' | 'sending' | 'checking'>('idle')
   const [msg, setMsg] = useState<string | null>(null)

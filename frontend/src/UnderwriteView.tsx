@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   api, ApiError,
   type AnalysisType, type AnalyzeResponse, type Analysis, type DealStage, type DuplicateCheck, type GuidelineSummary, type MarketFact, type ProForma, type ProFormaResponse,
@@ -7,6 +7,7 @@ import {
 import { CashflowChart } from './Chart'
 import { DealCompare } from './DealCompare'
 import { StageAnalysis, Verdict } from './StageAnalysis'
+import { canonicalTool } from './ResultModal'
 import { downloadUnderwritingXls } from './reportExport'
 
 interface UnderwriteViewProps {
@@ -15,18 +16,18 @@ interface UnderwriteViewProps {
   onNeedCredits: () => void
   /** 분석유형 id → 크레딧 단가(서버 단일 소스). 미로딩 시 숫자 생략. */
   toolCosts?: Record<string, number>
-  /** 내 딜 대시보드 '이어서 분석' — 이 딜명을 자동 로드(폼 프리필 + 무료 ProForma + 단계 탭). */
+  /** 내 딜 대시보드 '이어서 분석' - 이 딜명을 자동 로드(폼 프리필 + 무료 ProForma + 단계 탭). */
   openDealName?: string
   /** 로드 완료 후 부모가 신호를 비우도록. */
   onDealOpened?: () => void
 }
 
-/** "N크레딧" 라벨 — 단가 미로딩 시 숫자 생략("크레딧"). */
+/** "N크레딧" 라벨 - 단가 미로딩 시 숫자 생략("크레딧"). */
 function creditLabel(cost?: number): string {
   return cost != null ? `${cost}크레딧` : '크레딧'
 }
 
-/** 중복 분석 재실행 확인 — 동일 입력으로 최근 같은 단계를 했을 때 과금 전 사용자 확인. */
+/** 중복 분석 재실행 확인 - 동일 입력으로 최근 같은 단계를 했을 때 과금 전 사용자 확인. */
 function confirmRerun(type: AnalysisType, dup: DuplicateCheck): boolean {
   const when = dup.lastRunAt
     ? new Date(dup.lastRunAt).toLocaleString('ko-KR', { hour: '2-digit', minute: '2-digit' })
@@ -54,7 +55,7 @@ interface FormState {
 
 const ASSET_TYPES = ['오피스', '물류', '호텔', '리테일'] as const
 
-/** IM 분석 파이프라인 단계 (분석별 차등 크레딧 — 단가는 서버 ToolPricing). */
+/** IM 분석 파이프라인 단계 (분석별 차등 크레딧 - 단가는 서버 ToolPricing). */
 const STAGES: { type: AnalysisType; label: string; hint: string }[] = [
   { type: 'SCREENING', label: '스크리닝', hint: '지표·Flag·Go/No-Go' },
   { type: 'MARKET_STUDY', label: '시장조사', hint: '권역·가정 검증' },
@@ -80,7 +81,7 @@ const INITIAL: FormState = {
   rentGrowthPct: '3.0',
 }
 
-/** 신규 사용자 활성화용 예시 딜 — 누르면 폼을 채우고 무료 ProForma 를 즉시 실행(크레딧·AI 비용 0). */
+/** 신규 사용자 활성화용 예시 딜 - 누르면 폼을 채우고 무료 ProForma 를 즉시 실행(크레딧·AI 비용 0). */
 interface Sample { key: string; label: string; emoji: string; form: Partial<FormState> }
 const SAMPLES: Sample[] = [
   { key: 'office', label: '강남 오피스', emoji: '🏢', form: {
@@ -104,13 +105,13 @@ interface Results {
   analysis?: Analysis | null
   analysisRaw?: string | null
   provider?: string
-  /** 분석에 주입된 실측 시장데이터(출처·기준일) — 스크리닝·시장조사. */
+  /** 분석에 주입된 실측 시장데이터(출처·기준일) - 스크리닝·시장조사. */
   marketFacts?: MarketFact[] | null
-  /** 이 결과를 만든 입력값(폼 또는 저장된 이력) — 결과와 함께 표시해 "무엇을 입력했는지" 보이게. */
+  /** 이 결과를 만든 입력값(폼 또는 저장된 이력) - 결과와 함께 표시해 "무엇을 입력했는지" 보이게. */
   inputs?: UnderwriteInput | null
 }
 
-/** 입력 요약 카드용 — (키, 라벨, 접미사). 값이 빈 항목은 표시하지 않음. */
+/** 입력 요약 카드용 - (키, 라벨, 접미사). 값이 빈 항목은 표시하지 않음. */
 const INPUT_FIELDS: { key: keyof UnderwriteInput; label: string; suffix?: string }[] = [
   { key: 'assetType', label: '자산유형' },
   { key: 'location', label: '위치' },
@@ -161,9 +162,9 @@ function resultsFromStage(s: DealStage): Results {
 export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, openDealName, onDealOpened }: UnderwriteViewProps) {
   const [form, setForm] = useState<FormState>(INITIAL)
   const [results, setResults] = useState<Results | null>(null)
-  // 현재 딜의 완료된 단계 모음(합본 탭) — 같은 딜명으로 스크리닝·시장조사 등을 따로 했어도 한 화면에서 전환.
+  // 현재 딜의 완료된 단계 모음(합본 탭) - 같은 딜명으로 스크리닝·시장조사 등을 따로 했어도 한 화면에서 전환.
   const [stageMap, setStageMap] = useState<Partial<Record<AnalysisType, DealStage>>>({})
-  // 활성 탭 — 'FINANCE'(공통 재무 모델) 또는 분석 단계. 재무 데이터와 단계별 AI 분석을 분리해 한 번에 하나만 표시.
+  // 활성 탭 - 'FINANCE'(공통 재무 모델) 또는 분석 단계. 재무 데이터와 단계별 AI 분석을 분리해 한 번에 하나만 표시.
   const [activeTab, setActiveTab] = useState<'FINANCE' | AnalysisType>('FINANCE')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<'none' | 'proforma' | AnalysisType>('none')
@@ -172,7 +173,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
   // 예시 딜로 결과를 본 상태인지(배너 표시용). 초기화·실제 입력 시 해제.
   const [isSample, setIsSample] = useState(false)
 
-  /** 예시 딜 불러오기 — 폼 채우고 무료 ProForma 즉시 실행(크레딧 0). 신규 활성화용. */
+  /** 예시 딜 불러오기 - 폼 채우고 무료 ProForma 즉시 실행(크레딧 0). 신규 활성화용. */
   async function loadSample(s: Sample) {
     const f: FormState = { ...INITIAL, ...s.form }
     setForm(f)
@@ -197,7 +198,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
     }
   }
 
-  /** '이어서 분석' — 딜의 저장된 단계에서 입력을 복원해 폼 프리필 + 무료 ProForma + 단계 탭 로드(무과금). */
+  /** '이어서 분석' - 딜의 저장된 단계에서 입력을 복원해 폼 프리필 + 무료 ProForma + 단계 탭 로드(무과금). */
   async function loadDeal(dealName: string) {
     setError(null); setIsSample(false); setActiveTab('FINANCE')
     setBusy('proforma')
@@ -240,7 +241,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
     }
   }
 
-  // 내 딜 대시보드 '이어서 분석' 진입 — openDealName 신호가 오면 그 딜을 로드하고 신호를 비운다.
+  // 내 딜 대시보드 '이어서 분석' 진입 - openDealName 신호가 오면 그 딜을 로드하고 신호를 비운다.
   useEffect(() => {
     if (!openDealName) return
     void loadDeal(openDealName)
@@ -256,7 +257,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
       const map: Partial<Record<AnalysisType, DealStage>> = {}
       for (const s of ds.stages) map[s.analysisType] = s
       setStageMap(map)
-    } catch { /* 합본 탭은 보조 — 무시 */ }
+    } catch { /* 합본 탭은 보조 - 무시 */ }
   }
 
   function set<K extends keyof FormState>(key: K, value: string) {
@@ -306,11 +307,11 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
     if (invalid) { setError(invalid); return }
     setError(null)
     const input = buildInput()
-    // 중복 분석 가드 — 동일 입력으로 최근 같은 단계를 이미 했으면 과금 전 확인(가드 실패는 분석을 막지 않음).
+    // 중복 분석 가드 - 동일 입력으로 최근 같은 단계를 이미 했으면 과금 전 확인(가드 실패는 분석을 막지 않음).
     try {
       const dup = await api.checkDuplicate(type, input)
       if (dup.duplicate && !confirmRerun(type, dup)) return
-    } catch { /* 가드는 보조 안내일 뿐 — 실패해도 분석 진행 */ }
+    } catch { /* 가드는 보조 안내일 뿐 - 실패해도 분석 진행 */ }
     setBusy(type)
     try {
       const res: AnalyzeResponse = await api.analyzeStage(type, input)
@@ -373,7 +374,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
 
           {!results && (
             <div className="sample-row">
-              <span className="sample-label">처음이세요? <b>예시 딜로 1분 체험</b> — 무료</span>
+              <span className="sample-label">처음이세요? <b>예시 딜로 1분 체험</b> - 무료</span>
               <div className="sample-chips">
                 {SAMPLES.map((s) => (
                   <button type="button" key={s.key} className="sample-chip" onClick={() => void loadSample(s)} disabled={busy !== 'none'}>
@@ -416,7 +417,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
 
             <div className="full">
               <label htmlFor="notes">메모 (선택) · IM 요약·임대 현황·특이사항</label>
-              <textarea id="notes" rows={3} value={form.notes} onChange={(e) => set('notes', e.target.value)}
+              <textarea id="notes" rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)}
                 placeholder="예: 핵심 임차인 2026년 만기, 최근 리모델링 완료 등" />
             </div>
           </div>
@@ -424,22 +425,19 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
           <div className="actions">
             <button type="submit" className="btn-ghost free-calc" disabled={busy !== 'none'}>
               {busy === 'proforma' ? '계산 중…' : 'ProForma 계산 (무료)'}
-              <span className="free-calc-sub">IRR·DSCR 등 지표 — 크레딧 차감 없음</span>
+              <span className="free-calc-sub">IRR·DSCR 등 지표 - 크레딧 차감 없음</span>
             </button>
             <p className="stage-caption">무료 계산으로 지표를 먼저 본 뒤 <b>AI 분석</b>을 실행하세요 · <b>각 단계 독립 실행</b> 가능.</p>
-            <div className="stage-grid" role="list" aria-label="분석 파이프라인 — 권장 순서, 각 단계 독립 실행 가능">
+            <div className="stage-grid" role="list" aria-label="분석 파이프라인 - 권장 순서, 각 단계 독립 실행 가능">
               {STAGES.map((s, i) => (
-                <Fragment key={s.type}>
-                  {i > 0 && <span className="stage-arrow" aria-hidden="true">↓</span>}
-                  <button type="button" className="stage-btn" role="listitem"
-                    onClick={() => runStage(s.type)} disabled={busy !== 'none'}>
-                    <span className="stage-num" aria-hidden="true">{i + 1}</span>
-                    <span className="stage-text">
-                      <span className="stage-label">{busy === s.type ? '분석 중…' : s.label}</span>
-                      <span className="stage-hint">{s.hint} · {creditLabel(toolCosts?.[s.type])}</span>
-                    </span>
-                  </button>
-                </Fragment>
+                <button key={s.type} type="button" className="stage-btn" role="listitem"
+                  onClick={() => runStage(s.type)} disabled={busy !== 'none'}>
+                  <span className="stage-num" aria-hidden="true">{i + 1}</span>
+                  <span className="stage-text">
+                    <span className="stage-label">{busy === s.type ? '분석 중…' : s.label}</span>
+                    <span className="stage-hint">{s.hint} · {creditLabel(toolCosts?.[s.type])}</span>
+                  </span>
+                </button>
               ))}
             </div>
             <p className="hint">단계마다 AI 1회 호출 = 분석별 1~5크레딧. 같은 딜 이름으로 단계를 쌓으면 보고서에 합본됩니다.</p>
@@ -532,8 +530,8 @@ function HistoryPanel({ version, onOpen }: { version: number; onOpen: (r: RunRes
   useEffect(() => {
     let active = true
     api.runs()
-      // 언더라이팅 이력에는 파이프라인(스크리닝·시장조사·언더라이팅·투심)만 — 심화·시장 분석은 각 메뉴에서.
-      .then((list) => { if (active) setRuns(list.filter((r) => STAGE_LABEL[r.tool])) })
+      // 언더라이팅 이력에는 파이프라인(스크리닝·시장조사·언더라이팅·투심)만 - 심화·시장 분석은 각 메뉴에서.
+      .then((list) => { if (active) setRuns(list.filter((r) => STAGE_LABEL[canonicalTool(r.tool)])) })
       .catch((err: unknown) => { if (active) setError(err instanceof ApiError ? err.message : '이력 조회 실패') })
     return () => { active = false }
   }, [version])
@@ -566,7 +564,7 @@ function HistoryPanel({ version, onOpen }: { version: number; onOpen: (r: RunRes
             {runs.map((r) => (
               <tr key={r.id}>
                 <td>{r.dealName ?? '(이름없음)'}</td>
-                <td>{STAGE_LABEL[r.tool] ?? r.tool}</td>
+                <td>{STAGE_LABEL[canonicalTool(r.tool)] ?? r.tool}</td>
                 <td><span className={r.status === 'SUCCESS' ? 'st-ok' : 'st-fail'}>{r.status === 'SUCCESS' ? '성공' : r.status === 'FAILED' ? '실패' : r.status}</span></td>
                 <td className="num">{r.createdAt ? new Date(r.createdAt).toLocaleString('ko-KR') : '-'}</td>
                 <td><button className="btn-link" onClick={() => open(r.id)}>열기</button></td>
@@ -718,8 +716,8 @@ function ResultPanel({ results, stageMap, activeTab, onSelectTab, onReport, repo
 }
 
 /**
- * 결과 탭 — 공통 「재무 모델」(ProForma 지표·차트·시나리오) + 단계별 AI 분석(스크리닝·시장조사·언더라이팅·투심).
- * 재무 탭은 항상, 단계 탭은 완료 시 ✓ 클릭 가능, 미실행은 비활성('미실행' — 좌측 버튼으로 실행).
+ * 결과 탭 - 공통 「재무 모델」(ProForma 지표·차트·시나리오) + 단계별 AI 분석(스크리닝·시장조사·언더라이팅·투심).
+ * 재무 탭은 항상, 단계 탭은 완료 시 ✓ 클릭 가능, 미실행은 비활성('미실행' - 좌측 버튼으로 실행).
  */
 function StageTabs({ stageMap, active, onSelect }: {
   stageMap: Partial<Record<AnalysisType, DealStage>>
@@ -731,7 +729,7 @@ function StageTabs({ stageMap, active, onSelect }: {
       <button
         type="button" role="tab" aria-selected={active === 'FINANCE'}
         className={`stage-tab${active === 'FINANCE' ? ' active' : ''}`}
-        onClick={() => onSelect('FINANCE')} title="재무 모델 — ProForma 지표·차트·시나리오"
+        onClick={() => onSelect('FINANCE')} title="재무 모델 - ProForma 지표·차트·시나리오"
       >
         <span className="st-label">재무 모델</span>
       </button>
@@ -743,7 +741,7 @@ function StageTabs({ stageMap, active, onSelect }: {
             key={s.type} type="button" role="tab" aria-selected={isActive}
             className={`stage-tab${isActive ? ' active' : ''}${done ? '' : ' undone'}`}
             disabled={!done} onClick={() => done && onSelect(s.type)}
-            title={done ? s.label : `${s.label} — 미실행 (좌측에서 실행)`}
+            title={done ? s.label : `${s.label} - 미실행 (좌측에서 실행)`}
           >
             <span className="st-label">{s.label}</span>
             <span className="st-mark">{done ? '✓' : '미실행'}</span>
@@ -754,7 +752,7 @@ function StageTabs({ stageMap, active, onSelect }: {
   )
 }
 
-/** 읽기전용 공유 링크 — 토큰 발급 후 링크를 클립보드에 복사(로그인 없이 열람 가능). */
+/** 읽기전용 공유 링크 - 토큰 발급 후 링크를 클립보드에 복사(로그인 없이 열람 가능). */
 function ShareButton({ runId }: { runId: number }) {
   const [state, setState] = useState<'idle' | 'busy' | 'copied' | 'error'>('idle')
   async function share() {
@@ -778,7 +776,7 @@ function ShareButton({ runId }: { runId: number }) {
   )
 }
 
-/** 실측 시장데이터 카드 — 분석에 주입된 공공데이터(출처·기준일)를 노출. "실측 앵커링"을 가시화. */
+/** 실측 시장데이터 카드 - 분석에 주입된 공공데이터(출처·기준일)를 노출. "실측 앵커링"을 가시화. */
 function MarketFactsCard({ facts }: { facts: MarketFact[] }) {
   return (
     <section className="calc-card mkt-facts">
@@ -791,12 +789,12 @@ function MarketFactsCard({ facts }: { facts: MarketFact[] }) {
           </li>
         ))}
       </ul>
-      <p className="mkt-note">위 수치는 공공 API 실측값(출처·기준일 명시)으로, AI 추정이 아니라 분석의 근거로 직접 인용됩니다. 실측이 없는 항목은 본문에 "(추정)"·신뢰도로 표기됩니다.</p>
+      <p className="mkt-note">위 수치는 공공 API 실측값(출처·기준일 명시)으로, AI 추정이 아니라 분석의 근거로 직접 인용됩니다.<br />실측이 없는 항목은 본문에 "(추정)"·신뢰도로 표기됩니다.</p>
     </section>
   )
 }
 
-/** 입력 요약 — 이 결과를 만든 딜 입력값을 결과 상단에 표시(이력에서 다시 열 때 "무엇을 입력했는지" 확인). */
+/** 입력 요약 - 이 결과를 만든 딜 입력값을 결과 상단에 표시(이력에서 다시 열 때 "무엇을 입력했는지" 확인). */
 function InputSummary({ inputs }: { inputs: UnderwriteInput }) {
   const rows = INPUT_FIELDS
     .map((f) => ({ label: f.label, value: inputs[f.key], suffix: f.suffix }))
@@ -818,13 +816,13 @@ function InputSummary({ inputs }: { inputs: UnderwriteInput }) {
   )
 }
 
-/** 지표 양호도 — 색·배지 판정(보수적 CRE 임계값). */
+/** 지표 양호도 - 색·배지 판정(보수적 CRE 임계값). */
 type MStatus = 'good' | 'warn' | 'neutral'
 const irrStatus = (v: number): MStatus => (v >= 12 ? 'good' : v < 8 ? 'warn' : 'neutral')
 const emStatus = (v: number): MStatus => (v >= 1.8 ? 'good' : v < 1.3 ? 'warn' : 'neutral')
 const dscrStatus = (v: number): MStatus => (v >= 1.25 ? 'good' : v < 1.0 ? 'warn' : 'neutral')
 
-/** 핵심 지표 — 큰 숫자 + 양호/주의 색·배지. */
+/** 핵심 지표 - 큰 숫자 + 양호/주의 색·배지. */
 function HeroMetric({ label, value, status }: { label: string; value: string; status: MStatus }) {
   const badge = status === 'good' ? '양호' : status === 'warn' ? '주의' : null
   return (
@@ -838,7 +836,7 @@ function HeroMetric({ label, value, status }: { label: string; value: string; st
   )
 }
 
-/** 보조 지표 — 컴팩트 라벨 + 값(필요 시 색). */
+/** 보조 지표 - 컴팩트 라벨 + 값(필요 시 색). */
 function MiniMetric({ label, value, status }: { label: string; value: string; status?: MStatus }) {
   return (
     <div className="mini-metric">
@@ -848,7 +846,7 @@ function MiniMetric({ label, value, status }: { label: string; value: string; st
   )
 }
 
-/** 가이드라인 적합성 — 코드가 임계값과 대조한 결정론적 판정(PASS/WARN/FAIL). AI 판단 아님. */
+/** 가이드라인 적합성 - 코드가 임계값과 대조한 결정론적 판정(PASS/WARN/FAIL). AI 판단 아님. */
 function GuidelineFit({ summary }: { summary: GuidelineSummary }) {
   const tone: Record<string, string> = { PASS: 'go', WARN: 'cond', FAIL: 'no' }
   return (

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api, ApiError, type RunDetail, type RunSummary } from './api'
 import { toolLabel } from './ResultModal'
 
-/** 비교 가능한 메트릭 정의(전부 높을수록 양호 — 정규화 단순화). */
+/** 비교 가능한 메트릭 정의(전부 높을수록 양호 - 정규화 단순화). */
 const METRICS = [
   { key: 'irr', label: 'Levered IRR', unit: '%', get: (d: RunDetail) => d.result?.proForma.leveredIrrPct },
   { key: 'em', label: 'Equity Multiple', unit: '×', get: (d: RunDetail) => d.result?.proForma.equityMultiple },
@@ -97,7 +97,7 @@ export function DealCompare({ onClose }: { onClose: () => void }) {
               <p className="compare-empty">비교할 분석을 <b>2개 이상</b> 선택하세요.</p>
             ) : (
               <>
-                {/* 범례 — 어떤 색이 어떤 딜이고 어떤 자산유형인지 명확히 */}
+                {/* 범례 - 어떤 색이 어떤 딜이고 어떤 자산유형인지 명확히 */}
                 <div className="compare-legend">
                   {chosen.map((d, i) => (
                     <span key={d.id} className="cl-item">

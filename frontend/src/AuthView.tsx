@@ -122,7 +122,9 @@ export function AuthView({ onAuthed, initialError, requestMode, focusSignal }: A
           {mode === 'login' ? '다시 오신 걸 환영합니다' : '1분 만에 시작하세요'}
         </h2>
         <p className="auth-sub">
-          {mode === 'login' ? '이메일로 로그인합니다.' : '가입 즉시 무료 크레딧을 드립니다. 카드 등록 없이.'}
+          {mode === 'login'
+            ? '이메일로 로그인합니다.'
+            : '무료 크레딧으로 시작하세요. 카드 등록 없이 · 소셜은 즉시, 이메일은 인증 후 지급.'}
         </p>
       </div>
 
@@ -130,6 +132,9 @@ export function AuthView({ onAuthed, initialError, requestMode, focusSignal }: A
         <button role="tab" aria-selected={mode === 'login'} onClick={() => switchMode('login')}>로그인</button>
         <button role="tab" aria-selected={mode === 'signup'} onClick={() => switchMode('signup')}>회원가입</button>
       </div>
+
+      {/* 가입은 소셜을 1차 CTA로(즉시 크레딧·어뷰징 방어). 제공자 미설정 시 graceful null → 폼만 노출. */}
+      {mode === 'signup' && <SocialLogin variant="top" />}
 
       <form onSubmit={submit}>
         <div className="field">
@@ -161,18 +166,22 @@ export function AuthView({ onAuthed, initialError, requestMode, focusSignal }: A
         )}
 
         <button className="btn-primary" type="submit" disabled={busy || (mode === 'signup' && !agreed)} style={{ width: '100%' }}>
-          {busy ? '처리 중…' : mode === 'login' ? '로그인' : '회원가입 (무료 크레딧 지급)'}
+          {busy ? '처리 중…' : mode === 'login' ? '로그인' : '이메일로 회원가입'}
         </button>
+        {mode === 'signup' && (
+          <p className="auth-hint">이메일 가입은 인증 링크 확인 후 무료 크레딧이 지급됩니다.</p>
+        )}
         {error && <p className="error">{error}</p>}
       </form>
 
-      <SocialLogin />
+      {mode === 'login' && <SocialLogin />}
 
       {mode === 'signup' && (
         <p className="consent-social">
           간편 가입 시{' '}
           <button type="button" className="btn-link" onClick={() => setInfoPage('terms')}>이용약관</button>·
           <button type="button" className="btn-link" onClick={() => setInfoPage('privacy')}>개인정보 처리방침</button>에 동의하게 됩니다.
+          <br />
           소셜 로그인 시 제공자(구글·카카오·네이버)로부터 이메일·식별자를 받습니다.
         </p>
       )}

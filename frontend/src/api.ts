@@ -67,7 +67,7 @@ export interface AdminStats {
   payments: { confirmedCount: number; totalKrw: number }
 }
 
-/** 관리자 크레딧 내역 1행 — 전 사용자 원장. */
+/** 관리자 크레딧 내역 1행 - 전 사용자 원장. */
 export interface AdminCreditEntry {
   id: number
   tenantId: number
@@ -96,7 +96,7 @@ export interface CreditHistoryItem {
   id: number
   delta: number
   reason: CreditReason
-  /** 변동 출처/경로(선택) — 충전 수단·금액, 관리자 조정 식별 등. */
+  /** 변동 출처/경로(선택) - 충전 수단·금액, 관리자 조정 식별 등. */
   ref?: string | null
   createdAt: string
 }
@@ -159,7 +159,7 @@ export interface ProForma {
   exitCapSensitivity: Sensitivity[]
 }
 
-/** 가이드라인 적합성 — 코드가 임계값과 대조한 결정론적 판정. */
+/** 가이드라인 적합성 - 코드가 임계값과 대조한 결정론적 판정. */
 export type CheckStatus = 'PASS' | 'WARN' | 'FAIL'
 export interface GuidelineCheck {
   metric: string
@@ -199,7 +199,7 @@ export interface ScreeningMetrics {
   opex_ratio_pct?: number | null
 }
 
-/** 벤치마크 대조 1행 — 신호등(GREEN/YELLOW/RED). */
+/** 벤치마크 대조 1행 - 신호등(GREEN/YELLOW/RED). */
 export interface BenchmarkEval {
   metric: string
   value?: string | number | null
@@ -207,7 +207,7 @@ export interface BenchmarkEval {
   rating?: string
 }
 
-/** 스크리닝 Red Flag — 심각도 + 검증 필요사항. */
+/** 스크리닝 Red Flag - 심각도 + 검증 필요사항. */
 export interface RedFlag {
   code?: string
   flag: string
@@ -215,7 +215,7 @@ export interface RedFlag {
   verify?: string
 }
 
-/** 시장조사 가정 검증 1행 — verdict G/Y/R. */
+/** 시장조사 가정 검증 1행 - verdict G/Y/R. */
 export interface AssumptionCheck {
   assumption: string
   market?: string
@@ -309,7 +309,7 @@ export interface AnalyzeResponse {
 /** IM 분석 단계. 백엔드 AnalysisType enum 과 일치. */
 export type AnalysisType = 'SCREENING' | 'MARKET_STUDY' | 'UNDERWRITING' | 'IC_MEMO'
 
-/** 한 딜의 완료된 단계 1건 — 합본 탭 화면용. result 는 저장된 결과(= RunResult). */
+/** 한 딜의 완료된 단계 1건 - 합본 탭 화면용. result 는 저장된 결과(= RunResult). */
 export interface DealStage {
   analysisType: AnalysisType
   runId: number
@@ -323,7 +323,7 @@ export interface DealStagesResponse {
   stages: DealStage[]
 }
 
-/** 중복 분석 사전 확인 — 동일 입력으로 최근 같은 단계를 실행했는지. */
+/** 중복 분석 사전 확인 - 동일 입력으로 최근 같은 단계를 실행했는지. */
 export interface DuplicateCheck {
   duplicate: boolean
   lastRunId?: number | null
@@ -339,7 +339,7 @@ export interface RunSummary {
   createdAt: string | null
 }
 
-/** 내 딜 대시보드 항목 — 딜명으로 집계한 요약. */
+/** 내 딜 대시보드 항목 - 딜명으로 집계한 요약. */
 export interface DealSummary {
   dealName: string
   assetType: string | null
@@ -428,14 +428,14 @@ export interface DevFeasibilityInput {
   salesRevenueEok?: number
 }
 
-/** 가격 예측 입력 — NOI(소득환원) 또는 연면적(거래사례) 중 하나는 필요. 시장Cap 미입력 시 자산유형 기본값. */
+/** 가격 예측 입력 - NOI(소득환원) 또는 연면적(거래사례) 중 하나는 필요. 시장Cap 미입력 시 자산유형 기본값. */
 export interface PriceForecastInput {
   noiEok?: number
   marketCapPct?: number
   areaPyeong?: number
 }
 
-/** 딜 추출 결과 — 기사/딜 텍스트에서 뽑은 구조화 필드(분석 폼 프리필용). 모르는 값은 null. */
+/** 딜 추출 결과 - 기사/딜 텍스트에서 뽑은 구조화 필드(분석 폼 프리필용). 모르는 값은 null. */
 export interface DealExtract {
   dealName: string | null
   buildingName: string | null
@@ -474,14 +474,14 @@ export interface MarketFeedItem {
   origin: string | null
 }
 
-/** 피드 페이지 — 더보기(아카이브) 페이지네이션. */
+/** 피드 페이지 - 더보기(아카이브) 페이지네이션. */
 export interface MarketFeedPage {
   items: MarketFeedItem[]
   page: number
   hasMore: boolean
 }
 
-/** 관심 딜(찜) — 저장된 카드 스냅샷. */
+/** 관심 딜(찜) - 저장된 카드 스냅샷. */
 export interface DealWatch {
   id: number
   feedItemId: number
@@ -494,7 +494,7 @@ export interface DealWatch {
   createdAt: string | null
 }
 
-/** 마켓 브리핑(AI 다이제스트) — 뉴스레터 강점. */
+/** 마켓 브리핑(AI 다이제스트) - 뉴스레터 강점. */
 export interface BriefingSection { topic: string | null; summary: string | null; impact: string | null }
 export interface BriefingWatch { item: string | null; why: string | null }
 export interface BriefingRisk { signal: string | null; severity: string | null; mitigation: string | null }
@@ -687,13 +687,13 @@ export interface TaxGuide {
   basis?: string
 }
 
-/** 분석 공통 플래그 — 심각도 표시(HIGH/MEDIUM/LOW). sections 계약 트랙 공용. */
+/** 분석 공통 플래그 - 심각도 표시(HIGH/MEDIUM/LOW). sections 계약 트랙 공용. */
 export interface AnalysisFlag {
   label: string
   severity?: string
 }
 
-/** 단계별 출력 합집합 — 단계에 따라 일부 필드만 채워진다. */
+/** 단계별 출력 합집합 - 단계에 따라 일부 필드만 채워진다. */
 export interface DocAnalysis {
   headline?: string
   verdict?: string
@@ -740,19 +740,19 @@ export interface CreditPack {
   amountKrw: number
   label: string
 }
-/** 결제 SDK 초기화용 — clientKey + 결제 활성 여부(secretKey 미설정 시 false). */
+/** 결제 SDK 초기화용 - clientKey + 결제 활성 여부(secretKey 미설정 시 false). */
 export interface PaymentConfig {
   clientKey: string
   configured: boolean
 }
-/** 주문 생성 결과 — 결제창에 넘길 서버 권위 값. */
+/** 주문 생성 결과 - 결제창에 넘길 서버 권위 값. */
 export interface CreateOrderResponse {
   orderId: string
   orderName: string
   amountKrw: number
   customerKey: string
 }
-/** 승인 결과 — 충전 후 잔액. */
+/** 승인 결과 - 충전 후 잔액. */
 export interface ConfirmResponse {
   credits: number
   creditBalance: number
@@ -773,7 +773,7 @@ export interface PaymentHistoryItem {
 
 /**
  * API 오리진. 기본은 빈 문자열 = same-origin(상대경로 /api, dev 는 Vite 프록시).
- * API 가 별도 호스트면 VITE_API_BASE 로 지정(예: https://api.aixnative.com — 끝에 /api 붙이지 않음).
+ * API 가 별도 호스트면 VITE_API_BASE 로 지정(예: https://api.aixnative.com - 끝에 /api 붙이지 않음).
  */
 const API_BASE: string = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') ?? ''
 
@@ -831,16 +831,24 @@ export const api = {
   resendVerification: (): Promise<{ sent: boolean }> =>
     request('/api/auth/resend-verification', { method: 'POST' }),
 
-  /** 비밀번호 찾기 — 가입 이메일로 재설정 링크 발송. 계정 존재 여부와 무관하게 동일 응답. */
+  /** 비밀번호 찾기 - 가입 이메일로 재설정 링크 발송. 계정 존재 여부와 무관하게 동일 응답. */
   forgotPassword: (email: string): Promise<{ sent: boolean }> =>
     request('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
 
-  /** 비밀번호 재설정 — 메일 링크의 토큰 + 새 비밀번호. */
+  /** 비밀번호 재설정 - 메일 링크의 토큰 + 새 비밀번호. */
   resetPassword: (token: string, newPassword: string): Promise<{ reset: boolean }> =>
     request('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, newPassword }) }),
 
   proforma: (input: UnderwriteInput): Promise<ProFormaResponse> =>
     request('/api/underwriting/proforma', { method: 'POST', body: JSON.stringify(input) }),
+
+  /** 무인증 - 공개 ProForma 계산기(리드마그넷). 크레딧·저장·로그인 없음. */
+  publicProforma: (input: UnderwriteInput): Promise<ProFormaResponse> =>
+    request('/api/public/proforma', { method: 'POST', body: JSON.stringify(input) }),
+
+  /** 무인증 - 비회원 리드 캡처(이메일). source 로 유입 도구 구분. */
+  captureLead: (email: string, source = 'FREE_PROFORMA', marketingOptIn = false): Promise<{ captured: boolean }> =>
+    request('/api/public/lead', { method: 'POST', body: JSON.stringify({ email, source, marketingOptIn }) }),
 
   analyze: (input: UnderwriteInput): Promise<AnalyzeResponse> =>
     request('/api/underwriting/analyze', { method: 'POST', body: JSON.stringify(input) }),
@@ -855,7 +863,7 @@ export const api = {
   analyzeDoc: (type: DocAnalysisType, input: DocAnalyzeInput): Promise<DocAnalyzeResponse> =>
     request(`/api/underwriting/analyze-doc/${type}`, { method: 'POST', body: JSON.stringify(input) }),
 
-  /** 무료 — 기사/딜 텍스트 → 구조화 추출(분석 폼 프리필). 크레딧 미차감. */
+  /** 무료 - 기사/딜 텍스트 → 구조화 추출(분석 폼 프리필). 크레딧 미차감. */
   extractDeal: (text: string): Promise<DealExtractResponse> =>
     request('/api/underwriting/extract-deal', { method: 'POST', body: JSON.stringify({ text }) }),
 
@@ -871,7 +879,7 @@ export const api = {
 
   runs: (): Promise<RunSummary[]> => request('/api/underwriting/runs'),
 
-  /** 내 딜 대시보드 — 딜명으로 집계(최근 활동순). */
+  /** 내 딜 대시보드 - 딜명으로 집계(최근 활동순). */
   myDeals: (): Promise<DealSummary[]> => request('/api/underwriting/deals'),
 
   run: (id: number): Promise<RunDetail> => request(`/api/underwriting/runs/${id}`),
@@ -889,30 +897,30 @@ export const api = {
   /** 분석별 크레딧 단가 + 가입 무료 지급량(버튼 라벨/안내의 단일 소스). */
   pricing: (): Promise<Pricing> => request('/api/billing/pricing'),
 
-  /** 시장 인텔리전스 피드 — 카드 페이지(최신순). page 0-기반(과거 딜 더 보기). */
+  /** 시장 인텔리전스 피드 - 카드 페이지(최신순). page 0-기반(과거 딜 더 보기). */
   marketFeed: (limit = 30, page = 0): Promise<MarketFeedPage> =>
     request(`/api/market-feed?limit=${limit}&page=${page}`),
 
-  /** 관리자 — 피드 카드 추가. */
+  /** 관리자 - 피드 카드 추가. */
   marketFeedCreate: (input: MarketFeedInput): Promise<MarketFeedItem> =>
     request('/api/admin/market-feed', { method: 'POST', body: JSON.stringify(input) }),
 
-  /** 관리자 — 피드 카드 삭제. */
+  /** 관리자 - 피드 카드 삭제. */
   marketFeedDelete: (id: number): Promise<{ deleted: boolean }> =>
     request(`/api/admin/market-feed/${id}`, { method: 'DELETE' }),
 
   /** 최신 마켓 브리핑(AI 다이제스트). 아직 없으면 null. */
   marketBriefing: (): Promise<MarketBriefing | null> => request('/api/market-feed/briefing'),
 
-  /** 무료 — 지난 브리핑 아카이브 목록(최신순). */
+  /** 무료 - 지난 브리핑 아카이브 목록(최신순). */
   marketBriefingHistory: (): Promise<BriefingHistoryItem[]> =>
     request('/api/market-feed/briefing/history'),
 
-  /** 무료 — 저장된 브리핑 단건 다시 보기. */
+  /** 무료 - 저장된 브리핑 단건 다시 보기. */
   marketBriefingById: (id: number): Promise<MarketBriefing> =>
     request(`/api/market-feed/briefing/${id}`),
 
-  /** 관심 딜(찜) — 내 목록. */
+  /** 관심 딜(찜) - 내 목록. */
   watchList: (): Promise<DealWatch[]> => request('/api/market-feed/watch'),
   /** 관심 딜 카드 id 집합(⭐ 상태). */
   watchIds: (): Promise<number[]> => request('/api/market-feed/watch/ids'),
@@ -923,68 +931,68 @@ export const api = {
   watchRemove: (feedItemId: number): Promise<{ removed: boolean }> =>
     request(`/api/market-feed/watch/${feedItemId}`, { method: 'DELETE' }),
 
-  /** 관리자 — 즉시 수집(딜 카드 + 무료 브리핑). 스케줄러와 동일 경로. */
+  /** 관리자 - 즉시 수집(딜 카드 + 무료 브리핑). 스케줄러와 동일 경로. */
   marketFeedIngest: (): Promise<IngestReport> =>
     request('/api/admin/market-feed/ingest', { method: 'POST' }),
 
-  /** 과금 — AI 심층 시장 리포트(Claude, 1크레딧). */
+  /** 과금 - AI 심층 시장 리포트(Claude, 1크레딧). */
   marketDeepReport: (focus?: string): Promise<MarketDeepReport> =>
     request('/api/market-feed/deep-report', { method: 'POST', body: JSON.stringify({ focus: focus ?? null }) }),
 
-  /** 무료 — 내가 만든 지난 심층 리포트 목록. */
+  /** 무료 - 내가 만든 지난 심층 리포트 목록. */
   marketDeepReportHistory: (): Promise<DeepReportHistoryItem[]> =>
     request('/api/market-feed/deep-report/history'),
 
-  /** 무료 — 저장된 심층 리포트 단건 다시 보기. */
+  /** 무료 - 저장된 심층 리포트 단건 다시 보기. */
   marketDeepReportById: (id: number): Promise<MarketDeepReport> =>
     request(`/api/market-feed/deep-report/${id}`),
 
-  /** 무료 — 마켓 브리핑 메일 구독 상태/구독/해지. */
+  /** 무료 - 마켓 브리핑 메일 구독 상태/구독/해지. */
   newsletterStatus: (): Promise<{ subscribed: boolean }> => request('/api/newsletter/status'),
   newsletterSubscribe: (): Promise<{ subscribed: boolean }> =>
     request('/api/newsletter/subscribe', { method: 'POST' }),
   newsletterUnsubscribe: (): Promise<{ subscribed: boolean }> =>
     request('/api/newsletter/subscribe', { method: 'DELETE' }),
 
-  /** 관리자 — 전체 사용자 목록. */
+  /** 관리자 - 전체 사용자 목록. */
   adminUsers: (): Promise<AdminUser[]> => request('/api/admin/users'),
 
-  /** 관리자 — 사용자 권한 변경(USER/ADMIN). */
+  /** 관리자 - 사용자 권한 변경(USER/ADMIN). */
   adminSetRole: (id: number, role: UserRole): Promise<AdminUser> =>
     request(`/api/admin/users/${id}/role`, { method: 'POST', body: JSON.stringify({ role }) }),
 
-  /** 관리자 — 크레딧 가감(+/-). */
+  /** 관리자 - 크레딧 가감(+/-). */
   adminAdjustCredits: (id: number, delta: number): Promise<AdminUser> =>
     request(`/api/admin/users/${id}/credits`, { method: 'POST', body: JSON.stringify({ delta }) }),
 
-  /** 관리자 — 계정 차단/해제(ACTIVE|DISABLED). */
+  /** 관리자 - 계정 차단/해제(ACTIVE|DISABLED). */
   adminSetStatus: (id: number, status: UserStatus): Promise<AdminUser> =>
     request(`/api/admin/users/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
 
-  /** 관리자 — 계정 영구 삭제(연관 데이터 정리). */
+  /** 관리자 - 계정 영구 삭제(연관 데이터 정리). */
   adminDeleteUser: (id: number): Promise<{ deleted: boolean }> =>
     request(`/api/admin/users/${id}`, { method: 'DELETE' }),
 
-  /** 관리자 — 운영 대시보드 집계 지표. */
+  /** 관리자 - 운영 대시보드 집계 지표. */
   adminStats: (): Promise<AdminStats> => request('/api/admin/stats'),
 
-  /** 관리자 — 전 사용자 크레딧 원장(최신순). 충전 경로·사유 포함. */
+  /** 관리자 - 전 사용자 크레딧 원장(최신순). 충전 경로·사유 포함. */
   adminCredits: (): Promise<AdminCreditEntry[]> => request('/api/admin/credits'),
 
-  /** 관리자 — 전 테넌트 모든 분석 데이터. */
+  /** 관리자 - 전 테넌트 모든 분석 데이터. */
   adminRuns: (): Promise<AdminRun[]> => request('/api/admin/runs'),
 
-  /** 관리자 — 분석 데이터 단건 상세(입력/결과 JSON). */
+  /** 관리자 - 분석 데이터 단건 상세(입력/결과 JSON). */
   adminRunDetail: (id: number): Promise<AdminRunDetail> => request(`/api/admin/runs/${id}`),
 
-  /** 관리자 — 뉴스레터 구독자 목록(최신 가입순). */
+  /** 관리자 - 뉴스레터 구독자 목록(최신 가입순). */
   adminNewsletterSubscribers: (): Promise<NewsSubscriber[]> => request('/api/admin/newsletter/subscribers'),
 
-  /** 관리자 — 뉴스레터 발송 로그(누구에게/언제/성공여부). */
+  /** 관리자 - 뉴스레터 발송 로그(누구에게/언제/성공여부). */
   adminNewsletterSendLog: (limit = 100): Promise<NewsletterSendLogEntry[]> =>
     request(`/api/admin/newsletter/send-log?limit=${limit}`),
 
-  /** 관리자 — 최신 브리핑 뉴스레터 HTML 미리보기(발송 없음). 인증 헤더 필요 → fetch 로 받아 새 창에. */
+  /** 관리자 - 최신 브리핑 뉴스레터 HTML 미리보기(발송 없음). 인증 헤더 필요 → fetch 로 받아 새 창에. */
   adminNewsletterPreview: async (): Promise<string> => {
     const token = tokenStore.get()
     const res = await fetch(`${API_BASE}/api/admin/newsletter/preview`, {
@@ -994,22 +1002,22 @@ export const api = {
     return res.text()
   },
 
-  /** 관리자 — 지정 주소로 테스트 발송. */
+  /** 관리자 - 지정 주소로 테스트 발송. */
   adminNewsletterTestSend: (email: string): Promise<{ sent: boolean }> =>
     request('/api/admin/newsletter/test-send', { method: 'POST', body: JSON.stringify({ email }) }),
 
   // ── 결제(크레딧 충전) ──
-  /** 결제 SDK 초기화용 — clientKey + 활성 여부. */
+  /** 결제 SDK 초기화용 - clientKey + 활성 여부. */
   paymentConfig: (): Promise<PaymentConfig> => request('/api/payments/config'),
 
   /** 판매 팩(가격표). */
   creditPacks: (): Promise<CreditPack[]> => request('/api/payments/packs'),
 
-  /** 주문 생성 — 팩 선택 → 결제창에 넘길 orderId/금액. */
+  /** 주문 생성 - 팩 선택 → 결제창에 넘길 orderId/금액. */
   createOrder: (packId: string): Promise<CreateOrderResponse> =>
     request('/api/payments/order', { method: 'POST', body: JSON.stringify({ packId }) }),
 
-  /** 결제 승인 — 토스 콜백(paymentKey/orderId/amount) 서버 검증 후 충전. */
+  /** 결제 승인 - 토스 콜백(paymentKey/orderId/amount) 서버 검증 후 충전. */
   confirmPayment: (paymentKey: string, orderId: string, amount: number): Promise<ConfirmResponse> =>
     request('/api/payments/confirm', {
       method: 'POST',
@@ -1023,7 +1031,7 @@ export const api = {
   oauthProviders: (): Promise<string[]> => request('/api/auth/oauth/providers'),
 }
 
-/** 소셜 로그인 시작 URL(브라우저 전체 이동 — fetch 아님). 제공자 인증 페이지로 302. */
+/** 소셜 로그인 시작 URL(브라우저 전체 이동 - fetch 아님). 제공자 인증 페이지로 302. */
 export function oauthAuthorizeUrl(provider: string): string {
   return `${API_BASE}/api/auth/oauth/${provider}/authorize`
 }

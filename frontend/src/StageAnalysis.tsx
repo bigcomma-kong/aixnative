@@ -1,6 +1,6 @@
 import type { Analysis } from './api'
 
-/** 스크리닝 핵심지표 표 — 키 → (라벨, 단위). 존재하는 값만 렌더. */
+/** 스크리닝 핵심지표 표 - 키 → (라벨, 단위). 존재하는 값만 렌더. */
 const KPI_FIELDS: { key: string; label: string; unit: string }[] = [
   { key: 'asking_price_eok', label: '매입가', unit: '억' },
   { key: 'price_per_pyeong_manwon', label: '평당가', unit: '만원' },
@@ -21,7 +21,7 @@ function signalClass(v: string): string {
   return 'cond'
 }
 
-/** 신뢰도 배지 — HIGH=초록 / MEDIUM=주황 / LOW=빨강. 단계 제목 옆 노출. */
+/** 신뢰도 배지 - HIGH=초록 / MEDIUM=주황 / LOW=빨강. 단계 제목 옆 노출. */
 function ConfBadge({ c }: { c: string | null }) {
   if (!c) return null
   const sig = c.toUpperCase() === 'HIGH' ? 'G' : c.toUpperCase() === 'LOW' ? 'R' : 'Y'
@@ -36,7 +36,7 @@ function severityClass(v: string): string {
   return 'cond'
 }
 
-/** 심각도 뱃지 — HIGH/MEDIUM/LOW·높음/중간/낮음 을 색상 알약으로. */
+/** 심각도 뱃지 - HIGH/MEDIUM/LOW·높음/중간/낮음 을 색상 알약으로. */
 function ImpactBadge({ v }: { v?: string | null }) {
   if (!v || v === '-') return null
   return <span className={`sev-badge ${severityClass(v)}`}>{v}</span>
@@ -189,7 +189,7 @@ export function StageAnalysis({ type, analysis, provider }: { type?: string; ana
           </div>
         )}
 
-        {/* 추가 핵심 근거 — key_points 불릿 / 구버전 저장분: thesis 문단 폴백 */}
+        {/* 추가 핵심 근거 - key_points 불릿 / 구버전 저장분: thesis 문단 폴백 */}
         {points.length > 0 ? (
           <ul className="bullet-list">{points.map((p, i) => <li key={i}>{String(p)}</li>)}</ul>
         ) : !str('investment_thesis') && str('thesis') ? (

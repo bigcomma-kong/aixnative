@@ -18,7 +18,7 @@ interface DocAnalysisViewProps {
   toolCosts?: Record<string, number>
 }
 
-/** "N크레딧" 라벨 — 단가 미로딩 시 숫자 생략. */
+/** "N크레딧" 라벨 - 단가 미로딩 시 숫자 생략. */
 function creditLabel(cost?: number): string {
   return cost != null ? `${cost}크레딧` : '크레딧'
 }
@@ -36,7 +36,7 @@ interface DocTypeMeta {
 
 const ASSET_TYPES = ['오피스', '물류', '호텔', '리테일'] as const
 
-/** 신규/추가 분석 단계 — 자유 텍스트 입력 기반(각 1 크레딧). */
+/** 신규/추가 분석 단계 - 자유 텍스트 입력 기반(각 1 크레딧). */
 const DOC_TYPES: DocTypeMeta[] = [
   { type: 'UNDERWRITING_GUIDE', label: '언더라이팅 입력가이드', hint: '권장 가정 선제안',
     needs: '자산 개요 텍스트 (아는 값 있으면 함께)', gives: '권장 매입가·Cap·LTV 등 입력 가정',
@@ -70,6 +70,17 @@ const DOC_TYPES: DocTypeMeta[] = [
     placeholder: '정성 정보(선택): 입찰 맥락·매도 우선순위 등. 핵심 수치는 아래 입력 + 실거래/공시지가로 확정합니다.' },
 ]
 
+/** 타입 → 메타 빠른 조회. */
+const DOC_BY_TYPE: Record<string, DocTypeMeta> = Object.fromEntries(DOC_TYPES.map((d) => [d.type, d]))
+
+/** 딜 라이프사이클(목적)별 그룹 - 10종을 평면 나열 대신 4묶음으로 보여 선택 부담을 줄인다. */
+const DOC_GROUPS: { title: string; types: DocAnalysisType[] }[] = [
+  { title: '매입 검토', types: ['UNDERWRITING_GUIDE', 'BUILDING_RESEARCH', 'PRICE_FORECAST', 'TAX_PRICE_DIAGNOSIS'] },
+  { title: '매각·보유 결정', types: ['BOV', 'HOLD_SELL_REFI'] },
+  { title: '운용·개발', types: ['AM_QUARTERLY', 'DEV_FEASIBILITY'] },
+  { title: '리서치·실사', types: ['MARKET_RESEARCH_DEEP', 'COUNTERPARTY_DD'] },
+]
+
 const DOC_LABEL: Record<string, string> = Object.fromEntries(
   DOC_TYPES.map((d) => [d.type, d.label]).concat(
     // 백엔드 tool 식별자 ↔ 라벨 (이력 표시용)
@@ -95,7 +106,7 @@ const BOV_FIELDS: CalcField[] = [
   { k: 'exitCapPct', label: 'Exit Cap (%)', hint: '미입력 시 자산유형 기본값' },
   { k: 'holdYears', label: '보유기간 (년)', def: '5' },
   { k: 'rentGrowthPct', label: '임대성장률 (%)', def: '3' },
-  { k: 'salesCompValueEok', label: '비교거래 추정가 (억)', hint: '선택 — 입력 시 3법 가중' },
+  { k: 'salesCompValueEok', label: '비교거래 추정가 (억)', hint: '선택 - 입력 시 3법 가중' },
 ]
 
 const DEV_FIELDS: CalcField[] = [
@@ -110,8 +121,8 @@ const DEV_FIELDS: CalcField[] = [
 ]
 
 const FORECAST_FIELDS: CalcField[] = [
-  { k: 'noiEok', label: '안정화 NOI (억)', hint: '소득환원용 — 알면 입력' },
-  { k: 'areaPyeong', label: '연면적 (평)', hint: '거래사례용 — 알면 입력' },
+  { k: 'noiEok', label: '안정화 NOI (억)', hint: '소득환원용 - 알면 입력' },
+  { k: 'areaPyeong', label: '연면적 (평)', hint: '거래사례용 - 알면 입력' },
   { k: 'marketCapPct', label: '시장 Cap (%)', hint: '미입력 시 자산유형 기본값' },
 ]
 
@@ -152,7 +163,7 @@ function SevBadge({ v }: { v?: string }) {
   return <span className={`sev-badge ${sevTone(v)}`}>{v}</span>
 }
 
-/** 주요 플래그 — sections 계약 트랙의 리스크·결격·체크 사유를 심각도 뱃지와 함께. */
+/** 주요 플래그 - sections 계약 트랙의 리스크·결격·체크 사유를 심각도 뱃지와 함께. */
 function FlagList({ flags }: { flags: AnalysisFlag[] }) {
   return (
     <section className="scr-section">
@@ -181,11 +192,11 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<DocAnalyzeResponse | null>(null)
   const [historyVersion, setHistoryVersion] = useState(0)
-  // 딜 기반 진입 — 기사/딜 텍스트 추출
+  // 딜 기반 진입 - 기사/딜 텍스트 추출
   const [dealText, setDealText] = useState('')
   const [extracting, setExtracting] = useState(false)
   const [extracted, setExtracted] = useState<DealExtract | null>(null)
-  // 스크롤 타깃 — 딜 진입 시 딜 텍스트로, '채우기' 후 가격 예측 입력으로 이동.
+  // 스크롤 타깃 - 딜 진입 시 딜 텍스트로, '채우기' 후 가격 예측 입력으로 이동.
   const dealTextRef = useRef<HTMLTextAreaElement>(null)
   const forecastRef = useRef<HTMLDivElement>(null)
 
@@ -195,7 +206,7 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
     if (!seed) return
     setDealText(seed)
     void extractDeal(seed)
-    // 탭 전환 시 이전 스크롤 위치가 남아 폼 하단으로 떨어지는 문제 방지 — 딜 입력 영역을 보여준다.
+    // 탭 전환 시 이전 스크롤 위치가 남아 폼 하단으로 떨어지는 문제 방지 - 딜 입력 영역을 보여준다.
     requestAnimationFrame(() => {
       const el = dealTextRef.current
       if (!el) return
@@ -354,7 +365,7 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
       <ol className="use-steps" aria-label="사용 방법">
         <li><span className="us-n">1</span><span className="us-t"><b>분석 선택</b> 10종 중 목적에 맞는 분석을 고릅니다</span></li>
         <li><span className="us-n">2</span><span className="us-t"><b>입력</b> <span className="req">*</span> 표시는 필수, 나머지는 선택입니다</span></li>
-        <li><span className="us-n">3</span><span className="us-t"><b>실행</b> 분석별 1~5크레딧 — 결과는 우측·이력에 저장됩니다</span></li>
+        <li><span className="us-n">3</span><span className="us-t"><b>실행</b> 분석별 1~5크레딧 - 결과는 우측·이력에 저장됩니다</span></li>
       </ol>
       <p className="use-tip">처음이라면 위 <b>딜/기사 붙여넣기</b>로 시작하면 핵심 값이 자동으로 채워집니다 (무료).</p>
 
@@ -377,16 +388,27 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
             <span className="section-title" style={{ margin: 0 }}>분석 선택</span>
           </div>
 
-          <div className="doc-type-grid">
-            {DOC_TYPES.map((d) => (
-              <button key={d.type} type="button" className="doc-type-btn" aria-pressed={type === d.type}
-                onClick={() => selectType(d.type)}>
-                <span className="dt-top">
-                  <span className="dt-label">{d.label}</span>
-                  {toolCosts?.[d.type] != null && <span className="dt-cost">{toolCosts[d.type]}크레딧</span>}
-                </span>
-                <span className="dt-hint">{d.hint}</span>
-              </button>
+          <div className="doc-type-groups">
+            {DOC_GROUPS.map((g) => (
+              <div className="doc-type-group" key={g.title}>
+                <span className="dtg-title">{g.title}</span>
+                <div className="doc-type-grid">
+                  {g.types.map((t) => {
+                    const d = DOC_BY_TYPE[t]
+                    if (!d) return null
+                    return (
+                      <button key={d.type} type="button" className="doc-type-btn" aria-pressed={type === d.type}
+                        onClick={() => selectType(d.type)}>
+                        <span className="dt-top">
+                          <span className="dt-label">{d.label}</span>
+                          {toolCosts?.[d.type] != null && <span className="dt-cost">{toolCosts[d.type]}크레딧</span>}
+                        </span>
+                        <span className="dt-hint">{d.hint}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
             ))}
           </div>
 
@@ -481,9 +503,13 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
             <button type="submit" className="btn-primary" disabled={busy}>
               {busy ? '분석 중…' : `${meta.label} 분석 · ${creditLabel(toolCosts?.[type])}`}
             </button>
-            <p className="hint">{calcMode || ddMode || forecastMode
-              ? '정성 정보를 자유롭게 덧붙이면 서술 품질이 올라갑니다. 같은 딜 이름으로 쌓으면 이력에서 함께 보입니다.'
-              : '자유 텍스트로 자산·운영·토지 정보를 입력하면 단계별 전문 분석을 생성합니다. 같은 딜 이름으로 쌓으면 이력에서 함께 보입니다.'}</p>
+            <p className="hint">
+              {calcMode || ddMode || forecastMode
+                ? '정성 정보를 자유롭게 덧붙이면 서술 품질이 올라갑니다.'
+                : '자유 텍스트로 자산·운영·토지 정보를 입력하면 단계별 전문 분석을 생성합니다.'}
+              <br />
+              같은 딜 이름으로 쌓으면 이력에서 함께 보입니다.
+            </p>
           </div>
           {(calcMode || ddMode || forecastMode) && <TrustBadge />}
           {error && <p className="error">{error}</p>}
@@ -503,7 +529,7 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
   )
 }
 
-/** 결과 전 우측 패널 — 선택한 분석에 맞춘 '결과 미리보기'(고스트)로 허전함 제거 + 무엇이 나오는지 안내. */
+/** 결과 전 우측 패널 - 선택한 분석에 맞춘 '결과 미리보기'(고스트)로 허전함 제거 + 무엇이 나오는지 안내. */
 function ResultPreview({ meta }: { meta: DocTypeMeta }) {
   return (
     <div className="rp">
@@ -516,7 +542,7 @@ function ResultPreview({ meta }: { meta: DocTypeMeta }) {
         </div>
         <div>
           <h3>{meta.label} · 결과 미리보기</h3>
-          <p>{meta.gives} — 왼쪽에 입력하고 실행하면 이 자리에 채워집니다.</p>
+          <p>{meta.gives} - 왼쪽에 입력하고 실행하면 이 자리에 채워집니다.</p>
         </div>
       </div>
       <div className="rp-skeleton" aria-hidden="true">
@@ -577,7 +603,7 @@ function DocResult({ res, label }: { res: DocAnalyzeResponse; label: string }) {
   )
 }
 
-/** 실측 시장데이터 카드 — 분석에 주입된 공공데이터(실거래·공시지가·임대시장·매크로)를 출처와 함께 노출.
+/** 실측 시장데이터 카드 - 분석에 주입된 공공데이터(실거래·공시지가·임대시장·매크로)를 출처와 함께 노출.
  *  "이 분석은 실측에 앵커링됐다"를 가시화 = AI 환각과 구분되는 확정 사실. */
 function MarketFactsCard({ facts }: { facts: MarketFact[] }) {
   return (
@@ -598,8 +624,8 @@ function MarketFactsCard({ facts }: { facts: MarketFact[] }) {
   )
 }
 
-/** 코드 확정 수치 카드 — BOV·개발수익성·거래상대방 실사(결정론적 공공데이터). AI 서술 위에 표기. */
-/** 추출된 딜 미리보기 — 핵심 필드 칩 + '이 값으로 채우기'. */
+/** 코드 확정 수치 카드 - BOV·개발수익성·거래상대방 실사(결정론적 공공데이터). AI 서술 위에 표기. */
+/** 추출된 딜 미리보기 - 핵심 필드 칩 + '이 값으로 채우기'. */
 function ExtractedDeal({ extract: e, onApply }: { extract: DealExtract; onApply: () => void }) {
   const chips: [string, string][] = []
   if (e.buildingName) chips.push(['건물', e.buildingName])
@@ -613,6 +639,20 @@ function ExtractedDeal({ extract: e, onApply }: { extract: DealExtract; onApply:
   if (e.noiEok != null) chips.push(['NOI', `${e.noiEok}억`])
   if (e.areaPyeong != null) chips.push(['연면적', `${e.areaPyeong.toLocaleString('ko-KR')}평`])
   if (e.marketCapPct != null) chips.push(['Cap', `${e.marketCapPct}%`])
+  // 딜 신호가 하나도 없으면(=상업용 부동산 딜 아님) 빈 카드 대신 안내.
+  const hasSignal = chips.length > 0 || !!e.dealName || !!e.tenantSummary
+  if (!hasSignal) {
+    return (
+      <div className="extracted-deal ed-empty">
+        <div className="ed-head"><strong>딜 정보가 아니에요</strong></div>
+        {e.summary && <p className="muted" style={{ margin: '0 0 0.4rem' }}>{e.summary}</p>}
+        <p className="hint" style={{ margin: 0 }}>
+          이 텍스트는 상업용 부동산 딜로 보이지 않습니다. 매입가·NOI·위치 같은 딜 정보가 담긴
+          IM/기사를 붙여넣거나, 아래 폼에 직접 입력해 분석하세요.
+        </p>
+      </div>
+    )
+  }
   return (
     <div className="extracted-deal">
       <div className="ed-head">
@@ -689,7 +729,7 @@ function CalcCard({ calc }: { calc: DocCalc }) {
   )
 }
 
-/** 매입·매각 가격 예측 — 코드 확정 밸류에이션 밴드 카드. */
+/** 매입·매각 가격 예측 - 코드 확정 밸류에이션 밴드 카드. */
 function PriceForecastCard({ calc }: { calc: PriceForecastCalc }) {
   const confTone: Record<string, string> = { HIGH: 'go', MEDIUM: 'cond', LOW: 'no' }
   const fmt = (n: number) => n.toLocaleString('ko-KR')
@@ -713,7 +753,7 @@ function PriceForecastCard({ calc }: { calc: PriceForecastCalc }) {
   )
 }
 
-/** 거래상대방 실사 — 공공데이터 확정 사실 카드(상태·제재·기업정보·규모). */
+/** 거래상대방 실사 - 공공데이터 확정 사실 카드(상태·제재·기업정보·규모). */
 function BizHealthCard({ calc }: { calc: BizHealthCalc }) {
   const closed = calc.status.available && (calc.status.status?.includes('폐업') || calc.status.status?.includes('휴업'))
   const sanctioned = calc.sanctions.available && calc.sanctions.count > 0
@@ -812,7 +852,7 @@ function Sections({ sections }: { sections: DocSection[] }) {
   )
 }
 
-/** 최소 마크다운 렌더 — ## 제목 / - 불릿 / | 표 | / 문단. (외부 의존성 없이) */
+/** 최소 마크다운 렌더 - ## 제목 / - 불릿 / | 표 | / 문단. (외부 의존성 없이) */
 function Markdown({ md }: { md: string }) {
   const lines = md.split('\n')
   const nodes: React.ReactNode[] = []

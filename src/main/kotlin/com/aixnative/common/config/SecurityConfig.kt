@@ -49,7 +49,9 @@ class SecurityConfig(private val jwtAuthFilter: JwtAuthFilter) {
                 it.requestMatchers(
                     HttpMethod.GET,
                     "/", "/index.html", "/assets/**",
-                    "/*.svg", "/*.ico", "/*.png", "/*.json", "/*.txt", "/*.webmanifest",
+                    "/*.svg", "/*.ico", "/*.png", "/*.json", "/*.txt", "/*.xml", "/*.webmanifest",
+                    // SEO 유입 — 무인증 서버렌더 시장 인텔리전스(크롤 대상).
+                    "/insights", "/insights/**",
                 ).permitAll()
                 it.requestMatchers("/api/admin/**").hasRole("ADMIN")
                 it.anyRequest().authenticated()

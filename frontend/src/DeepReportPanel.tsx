@@ -4,13 +4,13 @@ import type { MarketDeepReport } from './api'
 const STANCE_CLASS: Record<string, string> = { '비중확대': 'up', '비중축소': 'down', '중립': 'neutral' }
 
 /**
- * AI 심층 시장 리포트 본문 — 온도 게이지·섹터 스코어보드·시나리오·섹션·실행 픽·컨트래리안.
+ * AI 심층 시장 리포트 본문 - 온도 게이지·섹터 스코어보드·시나리오·섹션·실행 픽·컨트래리안.
  * 시장 탭(지난 리포트)과 내 딜(데이터 보기 모달)이 **같은 렌더러**를 공유해 UI 일관성을 보장한다.
  */
 export function DeepReportContent({ report }: { report: MarketDeepReport }) {
   const temp = report.marketTempScore
   return (
-    <>
+    <div className="deep-report">
       {report.headline && <h3 className="deep-headline">{report.headline}</h3>}
 
       {(temp != null || report.marketTempLabel) && (
@@ -110,6 +110,6 @@ export function DeepReportContent({ report }: { report: MarketDeepReport }) {
       )}
 
       <p className="deep-disc">{report.disclaimer}</p>
-    </>
+    </div>
   )
 }

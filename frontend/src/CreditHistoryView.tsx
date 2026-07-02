@@ -90,7 +90,7 @@ export function CreditHistoryView({ onSync }: CreditHistoryViewProps) {
   )
 }
 
-/** 내가 크레딧을 쓴 분석들의 실제 결과 — 클릭하면 모달로 다시 본다(무료). */
+/** 내가 크레딧을 쓴 분석들의 실제 결과 - 클릭하면 모달로 다시 본다(무료). */
 function UsageResults() {
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [error, setError] = useState<string | null>(null)

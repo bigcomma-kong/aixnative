@@ -20,11 +20,11 @@ interface StageModalState {
 }
 
 /**
- * 내 딜 대시보드 — 내가 분석한 딜을 한 곳에 모아 상태·최근 활동을 보여주고, 단계 결과를 모달로
+ * 내 딜 대시보드 - 내가 분석한 딜을 한 곳에 모아 상태·최근 활동을 보여주고, 단계 결과를 모달로
  * 다시 보거나 보고서로 재진입(리텐션 허브). 서버가 딜명으로 집계한 요약(`/api/underwriting/deals`).
  */
 interface MyDealsViewProps {
-  /** 딜 카드의 '이어서 분석' — 언더라이팅 탭으로 이동해 그 딜을 자동 로드. */
+  /** 딜 카드의 '이어서 분석' - 언더라이팅 탭으로 이동해 그 딜을 자동 로드. */
   onContinue?: (dealName: string) => void
 }
 
@@ -36,6 +36,12 @@ export function MyDealsView({ onContinue }: MyDealsViewProps) {
   const [stagesCache, setStagesCache] = useState<Record<string, DealStage[]>>({})
   const [modal, setModal] = useState<StageModalState | null>(null)
   const [loadingChip, setLoadingChip] = useState<string | null>(null)
+  // 보고서(HTML)를 새 창 대신 모달 iframe 으로 - blob URL 을 그대로 써 렌더 동일성 유지(닫을 때 revoke).
+  const [reportUrl, setReportUrl] = useState<string | null>(null)
+
+  function closeReport() {
+    setReportUrl((cur) => { if (cur) URL.revokeObjectURL(cur); return null })
+  }
 
   useEffect(() => {
     api.myDeals()
@@ -48,8 +54,7 @@ export function MyDealsView({ onContinue }: MyDealsViewProps) {
     try {
       const html = await api.reportHtml(anchorRunId)
       const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
-      window.open(url, '_blank', 'noopener')
-      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      setReportUrl(url)
     } catch (e: unknown) {
       setError(e instanceof ApiError ? e.message : '보고서를 불러오지 못했습니다.')
     } finally {
@@ -57,7 +62,7 @@ export function MyDealsView({ onContinue }: MyDealsViewProps) {
     }
   }
 
-  /** 런 id 로 결과를 바로 모달에 — 시장 심층 분석·심화 등 파이프라인 아닌 결과 보기용. */
+  /** 런 id 로 결과를 바로 모달에 - 시장 심층 분석·심화 등 파이프라인 아닌 결과 보기용. */
   async function openRunResult(runId: number) {
     setError(null); setBusyId(runId)
     try {
@@ -203,6 +208,22 @@ export function MyDealsView({ onContinue }: MyDealsViewProps) {
           request={modal.request}
           onClose={() => setModal(null)}
         />
+      )}
+
+      {reportUrl && (
+        <div className="analyze-overlay" role="dialog" aria-modal="true" aria-label="투자 보고서" onClick={closeReport}>
+          <div className="result-modal wide report-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="rm-head">
+              <div><strong className="rm-title">투자 분석 보고서</strong></div>
+              <div className="deep-head-actions">
+                <button className="deep-close" onClick={closeReport} aria-label="닫기">×</button>
+              </div>
+            </div>
+            <div className="rm-body report-frame-wrap">
+              <iframe className="report-frame" title="투자 분석 보고서" src={reportUrl} />
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

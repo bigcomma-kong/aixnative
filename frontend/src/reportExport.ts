@@ -24,7 +24,7 @@ function downloadBlob(content: string, mime: string, filename: string): void {
 }
 
 /**
- * 언더라이팅 ProForma 모델을 Excel(.xls) 로 export — 실무 재가공용.
+ * 언더라이팅 ProForma 모델을 Excel(.xls) 로 export - 실무 재가공용.
  * HTML 테이블을 application/vnd.ms-excel 로 저장(Excel 이 HTML 표를 연다, 외부 의존성 없음).
  * 수치는 원시값으로 담아 셀에서 바로 재계산 가능.
  */
@@ -127,7 +127,7 @@ export function deepReportHtml(r: MarketDeepReport): string {
 </body></html>`
 }
 
-/* ── 심화분석(BOV·개발·세무 등) export — 단독 실행 HTML(PDF/Word 공통 소스) ── */
+/* ── 심화분석(BOV·개발·세무 등) export - 단독 실행 HTML(PDF/Word 공통 소스) ── */
 
 function humanizeKey(k: string): string {
   return k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ')
@@ -147,7 +147,7 @@ function calcTable(calc: Record<string, unknown> | null | undefined): string {
 /** 심화분석 결과를 단독 HTML 로. 화면 DocResult 와 동일 정보(표·불릿·플래그·출처). */
 export function docAnalysisHtml(res: DocAnalyzeResponse, label: string): string {
   const a = res.analysis
-  const facts = (res.marketFacts ?? []).map((f) => `<li><b>${esc(f.source)}</b> — ${esc(f.detail)}</li>`).join('')
+  const facts = (res.marketFacts ?? []).map((f) => `<li><b>${esc(f.source)}</b> - ${esc(f.detail)}</li>`).join('')
   const flags = (a?.flags ?? []).map((f) => `<li><b>${esc(f.label)}</b>${f.severity ? ` [${esc(f.severity)}]` : ''}</li>`).join('')
   const guides = (a?.guides ?? []).map((g) =>
     `<div class="blk"><b>${g.kind ? `[${esc(g.kind)}] ` : ''}${esc(g.title)}</b>${g.impact ? ` [${esc(g.impact)}]` : ''}` +
@@ -189,7 +189,7 @@ export function docAnalysisHtml(res: DocAnalyzeResponse, label: string): string 
   ${a?.im_markdown ? `<h2>보고</h2><pre style="white-space:pre-wrap;font-family:inherit">${esc(a.im_markdown)}</pre>` : ''}
   ${sections ? `<h2>분석</h2>${sections}` : ''}
   ${facts ? `<h2>실측·확정 데이터</h2><ul>${facts}</ul>` : ''}
-  <p class="disc">데이터 출처 — 한국은행 ECOS · 국토교통부 RTMS · 한국부동산원 R-ONE · V-World. ${esc(a?.disclaimer ?? res.disclaimer)}</p>
+  <p class="disc">데이터 출처 - 한국은행 ECOS · 국토교통부 RTMS · 한국부동산원 R-ONE · V-World. ${esc(a?.disclaimer ?? res.disclaimer)}</p>
 </body></html>`
 }
 
@@ -217,7 +217,7 @@ function safeName(headline: string | null): string {
   return base || 'market-deep-report'
 }
 
-/** Word(.doc) 다운로드 — HTML 을 application/msword 로 저장(Word 가 HTML 을 연다). */
+/** Word(.doc) 다운로드 - HTML 을 application/msword 로 저장(Word 가 HTML 을 연다). */
 export function downloadDeepReportDoc(r: MarketDeepReport): void {
   const blob = new Blob(['﻿', deepReportHtml(r)], { type: 'application/msword' })
   const url = URL.createObjectURL(blob)
@@ -230,7 +230,7 @@ export function downloadDeepReportDoc(r: MarketDeepReport): void {
   URL.revokeObjectURL(url)
 }
 
-/** PDF 저장 — 새 창에 리포트를 띄우고 인쇄 대화상자(사용자가 'PDF로 저장' 선택). */
+/** PDF 저장 - 새 창에 리포트를 띄우고 인쇄 대화상자(사용자가 'PDF로 저장' 선택). */
 export function printDeepReport(r: MarketDeepReport): void {
   const w = window.open('', '_blank', 'width=900,height=1000')
   if (!w) return
