@@ -104,6 +104,22 @@ class RssNewsCollector(
         return out
     }
 
+    /**
+     * CRE 전문 매체의 **자체 RSS를 직접** 수집(구글뉴스 미경유 — Cloud Run IP 가 구글뉴스 site: 쿼리를
+     * 빈값으로 막는 문제 회피). 딜 관련성 게이트 없이 '헤드라인 카드'(제목+원문링크)로 시장 피드에 실린다.
+     * 현재 공개 RSS가 있는 건 SPI(영문)뿐 — Dealsite=로그인 뒤, Corebeat=RSS 없음(SPA).
+     */
+    fun collectOutletFeeds(): List<NewsItem> {
+        val out = ArrayList<NewsItem>()
+        for ((name, url) in OUTLET_FEEDS) {
+            val got = runCatching { parseFeed(fetch(url), source = "RSS:$name", loose = false, sector = null) }
+                .getOrElse { log.warn("[outlet] '{}' 실패: {}", name, it.message); emptyList() }
+            out += got
+            log.debug("[outlet] '{}' {}건", name, got.size)
+        }
+        return out
+    }
+
     private fun fetch(url: String): String =
         marketDataRestClient.get().uri(url).retrieve().body(String::class.java)
             ?: throw RuntimeException("빈 응답")
@@ -163,7 +179,9 @@ class RssNewsCollector(
         // 빈응답은 빠르게 돌아오므로 재시도 비용이 작다(타임아웃 아님). 마지막에 몰리는 헤드라인 회복 위해 2회.
         const val GOOGLE_RETRIES = 2
         const val GOOGLE_RETRY_BACKOFF_MS = 700L
-        const val GOOGLE_QUERY_SPACING_MS = 200L
+        // 쿼리 간 간격 — 너무 촘촘하면(200ms) 22쿼리가 ~4초에 몰려 구글뉴스가 IP를 레이트리밋한다.
+        // 700ms 로 벌려 버스트를 눌러 스로틀 확률을 낮춘다(백그라운드/관리자 수동이라 지연 허용).
+        const val GOOGLE_QUERY_SPACING_MS = 700L
 
         // 공개 RSS(키 불필요). Triple(매체명, URL, loose). loose=true 면 부동산 앵커 필수.
         //  - 부동산 전용 피드: loose=false (앵커 불요)
@@ -201,13 +219,21 @@ class RssNewsCollector(
             "office" to "상업용 부동산 거래 site:dealsite.co.kr",
         )
 
-        // 업계 헤드라인 매체 → 구글뉴스 site: 검색어. Pair(매체 라벨, 쿼리).
-        //  - SPI·코어비트: CRE 전문 매체라 전체 제목 수집.
-        //  - 딜사이트: 종합 딜/M&A 매체라 CRE 키워드로 스코프(비부동산 M&A 제외).
+        // 업계 헤드라인 매체 → 구글뉴스 "키워드+site:" 검색어. Pair(매체 라벨, 쿼리).
+        // ⚠ 순수 site:(키워드 없음) 쿼리는 Cloud Run 송신 IP에서 구글뉴스가 빈값으로 막는다(딜 키워드 쿼리는 통과).
+        //   → CRE 전문 매체라 광범위 부동산 키워드 그룹을 붙여 사실상 전체 최신 기사를 끌어온다(작동하는 딜 쿼리와 동일 형식).
+        val HEADLINE_CRE_TERMS = "(부동산 OR 오피스 OR 물류 OR 리테일 OR 호텔 OR 리츠 OR 매각 OR 투자 OR 임대 OR 빌딩 OR 자산운용 OR 개발)"
         val HEADLINE_SOURCES = listOf(
-            "SPI" to "site:seoulpi.co.kr OR site:seoulpi.io",
-            "코어비트" to "site:corebeat.co.kr",
-            "딜사이트" to "site:dealsite.co.kr (부동산 OR 오피스 OR 물류 OR 리테일 OR 호텔 OR 매각 OR 리츠 OR 자산운용)",
+            "SPI" to "site:seoulpi.io $HEADLINE_CRE_TERMS",
+            "코어비트" to "site:corebeat.co.kr $HEADLINE_CRE_TERMS",
+            "딜사이트" to "site:dealsite.co.kr $HEADLINE_CRE_TERMS",
+        )
+
+        // CRE 전문 매체의 자체 RSS(직접 수집 — 구글뉴스 미경유). Pair(매체 라벨, 피드 URL).
+        // SPI 는 영문판(en.seoulpi.co.kr)만 공개 RSS 존재. 한글 seoulpi.io 는 SPA 로 피드 없음.
+        // Dealsite(로그인 뒤)·Corebeat(RSS 없음)는 공개 피드가 없어 현재 미포함 — 피드 생기면 여기 추가.
+        val OUTLET_FEEDS = listOf(
+            "SPI" to "https://en.seoulpi.co.kr/feed",
         )
     }
 }

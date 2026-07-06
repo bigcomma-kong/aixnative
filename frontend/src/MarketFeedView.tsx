@@ -3,7 +3,7 @@ import {
   api, ApiError,
   type BriefingHistoryItem,
   type DeepReportHistoryItem,
-  type IngestReport, type MarketBriefing, type MarketDeepReport, type MarketFeedItem, type MarketFeedInput,
+  type MarketBriefing, type MarketDeepReport, type MarketFeedItem, type MarketFeedInput,
 } from './api'
 import { ResultModal } from './ResultModal'
 
@@ -15,7 +15,7 @@ interface MarketFeedViewProps {
   onNeedCredits: () => void
   /** 분석유형 id → 크레딧 단가(서버 단일 소스). 미로딩 시 숫자 생략. */
   toolCosts?: Record<string, number>
-  /** 상위 시장 뷰에 임베드 시 자체 헤더 숨김(통합 헤더가 대신 렌더). 액션(수집/새로고침)만 남김. */
+  /** 상위 시장 뷰에 임베드 시 자체 헤더 숨김(통합 헤더가 대신 렌더). 수집은 운영 콘솔로 이관. */
   embedded?: boolean
 }
 
@@ -50,8 +50,6 @@ export function MarketFeedView({ isAdmin, onCreditBalance, onNeedCredits, toolCo
   const [watched, setWatched] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [ingesting, setIngesting] = useState(false)
-  const [report, setReport] = useState<IngestReport | null>(null)
   const [filter, setFilter] = useState<Filter>({ kind: 'all' })
   // 심층 리포트(크레딧)
   const [deep, setDeep] = useState<MarketDeepReport | null>(null)
@@ -163,10 +161,9 @@ export function MarketFeedView({ isAdmin, onCreditBalance, onNeedCredits, toolCo
       const b = await api.marketBriefingById(id)
       setBriefing(b)
       setBriefOpenId(id)
-      // 칩이 화면 아래에 있어 매번 top 으로 끌어올리면 "눌렀다 튕김"이 반복됨 →
-      // 갱신되는 브리핑(상단)만 필요 시 부드럽게 노출하고, 사용자 위치는 유지.
+      // 지난 브리핑을 열면 브리핑 헤더까지 스크롤 업(block:'start'). scroll-margin-top(88px)이 sticky 상단바를 피해 착지.
       requestAnimationFrame(() => {
-        document.getElementById('brief-hero')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        document.getElementById('brief-hero')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       })
     } catch (err: unknown) {
       setError(err instanceof ApiError ? err.message : '브리핑을 불러오지 못했습니다.')
@@ -186,7 +183,7 @@ export function MarketFeedView({ isAdmin, onCreditBalance, onNeedCredits, toolCo
       setBriefing(b)
       setBriefOpenId(idx === 0 ? null : target.id) // 0=최신 → 현재로 표시
       requestAnimationFrame(() => {
-        document.getElementById('brief-hero')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        document.getElementById('brief-hero')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       })
     } catch (err: unknown) {
       setError(err instanceof ApiError ? err.message : '브리핑을 불러오지 못했습니다.')
@@ -201,21 +198,6 @@ export function MarketFeedView({ isAdmin, onCreditBalance, onNeedCredits, toolCo
       setItems((list) => list.filter((it) => it.id !== id))
     } catch (err: unknown) {
       setError(err instanceof ApiError ? err.message : '삭제에 실패했습니다.')
-    }
-  }
-
-  async function ingestNow() {
-    setIngesting(true)
-    setError(null)
-    setReport(null)
-    try {
-      const r = await api.marketFeedIngest()
-      setReport(r)
-      await load()
-    } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : '수집에 실패했습니다.')
-    } finally {
-      setIngesting(false)
     }
   }
 
@@ -250,45 +232,18 @@ export function MarketFeedView({ isAdmin, onCreditBalance, onNeedCredits, toolCo
 
   return (
     <section className="mi">
-      {embedded ? (
-        <div className="mi-actions mi-actions-bar">
-          {isAdmin && (
-            <button className="btn-primary" onClick={() => void ingestNow()} disabled={ingesting}>
-              {ingesting ? '수집 중…' : '지금 수집'}
-            </button>
-          )}
-          <button className="btn-ghost" onClick={() => void load()} disabled={loading}>
-            {loading ? '불러오는 중…' : '새로고침'}
-          </button>
-        </div>
-      ) : (
+      {!embedded && (
         <header className="mi-head">
           <div className="mi-head-text">
             <span className="mi-eyebrow">AI MARKET INTELLIGENCE</span>
             <h2 className="mi-title">시장 인텔리전스</h2>
             <p className="mi-sub">매일 자동 수집한 시장 브리핑과 거래 신호.</p>
           </div>
-          <div className="mi-actions">
-            {isAdmin && (
-              <button className="btn-primary" onClick={() => void ingestNow()} disabled={ingesting}>
-                {ingesting ? '수집 중…' : '지금 수집'}
-              </button>
-            )}
-            <button className="btn-ghost" onClick={() => void load()} disabled={loading}>
-              {loading ? '불러오는 중…' : '새로고침'}
-            </button>
-          </div>
         </header>
       )}
 
       <NewsletterBar onError={setError} />
 
-      {report && (
-        <p className="mi-report">
-          수집 완료 - 신규 <b>{report.inserted}</b> · 중복 {report.skippedDuplicate} · 분석 {report.fetched}건
-          {report.briefingGenerated ? ` · 브리핑 갱신(${report.briefingProvider})` : ' · 브리핑 생략'}
-        </p>
-      )}
       {error && <p className="form-error">{error}</p>}
 
       {briefing && (
@@ -303,6 +258,20 @@ export function MarketFeedView({ isAdmin, onCreditBalance, onNeedCredits, toolCo
           onNewer={() => void showBriefingAt(briefIdx - 1)}
           onLatest={() => void load()}
         />
+      )}
+
+      {(items.length > 0 || history.length > 0) && (
+        <div className="deep-zone">
+          <div className="deep-bar">
+            <div className="deep-bar-text">
+              <strong>AI 심층 딜·브리핑 분석</strong>
+              <span>무료 브리핑보다 깊은 섹터·모멘텀·액션 리포트 · Claude·Mistral 등 멀티 AI 엔진</span>
+            </div>
+            <button className="btn-primary" onClick={() => void runDeepReport()} disabled={deepBusy || items.length === 0}>
+              {deepBusy ? 'AI 분석 중…' : `AI 심층 분석 · ${deepCost != null ? `${deepCost}크레딧` : '크레딧'}`}
+            </button>
+          </div>
+        </div>
       )}
 
       {(briefHistory.length > 1 || history.length > 0) && (
@@ -331,7 +300,7 @@ export function MarketFeedView({ isAdmin, onCreditBalance, onNeedCredits, toolCo
 
           {history.length > 0 && (
             <div className="deep-history">
-              <span className="deep-history-label">지난 리포트 <span className="arc-count">{history.length}</span></span>
+              <span className="deep-history-label">지난 딜 브리핑 분석 <span className="arc-count">{history.length}</span></span>
               <div className="deep-history-list">
                 {history.map((h) => (
                   <button
@@ -347,20 +316,6 @@ export function MarketFeedView({ isAdmin, onCreditBalance, onNeedCredits, toolCo
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {(items.length > 0 || history.length > 0) && (
-        <div className="deep-zone">
-          <div className="deep-bar">
-            <div className="deep-bar-text">
-              <strong>AI 심층 시장 분석</strong>
-              <span>무료 브리핑보다 깊은 섹터·모멘텀·액션 리포트 · Claude·Mistral 등 멀티 AI 엔진</span>
-            </div>
-            <button className="btn-primary" onClick={() => void runDeepReport()} disabled={deepBusy || items.length === 0}>
-              {deepBusy ? 'AI 분석 중…' : `AI 심층 분석 · ${deepCost != null ? `${deepCost}크레딧` : '크레딧'}`}
-            </button>
-          </div>
         </div>
       )}
 
@@ -386,7 +341,7 @@ export function MarketFeedView({ isAdmin, onCreditBalance, onNeedCredits, toolCo
             <strong className="analyze-modal-title">AI가 시장을 심층 분석 중…</strong>
             <p className="analyze-modal-sub">
               보통 30~60초 걸립니다. 이 창을 닫거나 이동하지 마세요.<br />
-              (완료된 리포트는 ‘지난 리포트’에도 저장되니 나중에 다시 볼 수 있습니다.)
+              (완료된 분석은 ‘지난 딜 브리핑 분석’에도 저장되니 나중에 다시 볼 수 있습니다.)
             </p>
           </div>
         </div>
@@ -396,8 +351,8 @@ export function MarketFeedView({ isAdmin, onCreditBalance, onNeedCredits, toolCo
 
       <div className="mi-deals-head">
         <div className="mi-deals-head-text">
-          <h3 className="mi-section-title">오늘의 딜 <span className="mi-count">{items.length}</span></h3>
-          <p className="mi-section-sub">시장에 나온 매각·우선협상 등 거래 신호</p>
+          <h3 className="mi-section-title">오늘의 뉴스·딜 <span className="mi-count">{items.length}</span></h3>
+          <p className="mi-section-sub">시장 뉴스와 매각·우선협상 등 거래 신호</p>
         </div>
         <div className="mi-filters" role="tablist" aria-label="자산유형 필터">
           {ASSET_FILTERS.map((f) => {
@@ -430,7 +385,7 @@ export function MarketFeedView({ isAdmin, onCreditBalance, onNeedCredits, toolCo
 
       {!loading && items.length === 0 && (
         <p className="feed-empty">
-          아직 수집된 딜이 없습니다.{isAdmin ? ' ‘지금 수집’을 눌러 시장 데이터를 채우세요.' : ' 곧 자동 수집됩니다.'}
+          아직 수집된 딜이 없습니다.{isAdmin ? ' 운영 콘솔 › 시장 › ‘지금 수집’으로 채우세요.' : ' 곧 자동 수집됩니다.'}
         </p>
       )}
       {!loading && items.length > 0 && visible.length === 0 && (

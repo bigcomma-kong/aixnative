@@ -3,11 +3,13 @@ import {
   api,
   ApiError,
   type AdminCreditEntry,
+  type AdminEvent,
   type AdminRun,
   type AdminRunDetail,
   type AdminStats,
   type AdminUser,
   type CreditReason,
+  type IngestReport,
   type NewsletterSendLogEntry,
   type NewsSubscriber,
   type UserRole,
@@ -29,7 +31,7 @@ const CREDIT_REASON_LABEL: Record<CreditReason, string> = {
 }
 
 export function AdminView({ currentEmail }: AdminViewProps) {
-  const [section, setSection] = useState<'dashboard' | 'users' | 'credits' | 'runs' | 'newsletter'>('dashboard')
+  const [section, setSection] = useState<'dashboard' | 'access' | 'users' | 'credits' | 'runs' | 'market'>('dashboard')
 
   return (
     <>
@@ -41,18 +43,20 @@ export function AdminView({ currentEmail }: AdminViewProps) {
         </div>
         <div className="seg admin-seg" role="group" aria-label="관리자 섹션">
           <button type="button" aria-pressed={section === 'dashboard'} onClick={() => setSection('dashboard')}>대시보드</button>
+          <button type="button" aria-pressed={section === 'access'} onClick={() => setSection('access')}>접속</button>
           <button type="button" aria-pressed={section === 'users'} onClick={() => setSection('users')}>사용자·크레딧</button>
           <button type="button" aria-pressed={section === 'credits'} onClick={() => setSection('credits')}>크레딧 내역</button>
           <button type="button" aria-pressed={section === 'runs'} onClick={() => setSection('runs')}>분석 데이터</button>
-          <button type="button" aria-pressed={section === 'newsletter'} onClick={() => setSection('newsletter')}>뉴스레터</button>
+          <button type="button" aria-pressed={section === 'market'} onClick={() => setSection('market')}>시장</button>
         </div>
       </div>
 
       {section === 'dashboard' && <DashboardPanel />}
+      {section === 'access' && <AccessPanel />}
       {section === 'users' && <UsersPanel currentEmail={currentEmail} />}
       {section === 'credits' && <CreditsPanel />}
       {section === 'runs' && <RunsPanel />}
-      {section === 'newsletter' && <NewsletterPanel />}
+      {section === 'market' && <MarketPanel />}
     </>
   )
 }
@@ -159,6 +163,113 @@ function StatCard({ k, v, sub, accent }: { k: string; v: string; sub?: string; a
       <span className="sc-v num">{v}</span>
       {sub && <span className="sc-sub">{sub}</span>}
     </div>
+  )
+}
+
+/** 이벤트 코드 → 짧은 한글 라벨(활동 로그 표시용). */
+const EVENT_LABEL: Record<string, string> = {
+  page_view: '화면 진입',
+  free_calc: '무료 계산',
+  analysis_start: '분석 시작',
+  analysis_done: '분석 완료',
+  checkout_view: '크레딧 화면',
+  credit_request: '크레딧 요청',
+  login: '로그인',
+}
+
+/** KST 기준 날짜 문자열(오늘 여부 비교용). */
+const kstDay = (s: string | null): string | null =>
+  s ? new Date(s).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : null
+
+/** 접속 현황 - 오늘 누가 언제 접속했는지 + 마지막 접속 최신순 + 최근 활동 로그. */
+function AccessPanel() {
+  const [users, setUsers] = useState<AdminUser[]>([])
+  const [events, setEvents] = useState<AdminEvent[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([api.adminUsers(), api.adminEvents()])
+      .then(([u, e]) => { setUsers(u); setEvents(e) })
+      .catch((err: unknown) => setError(err instanceof ApiError ? err.message : '조회 실패'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const todayKst = new Date().toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })
+  // 접속 이력 있는 사용자만, 마지막 접속(로그인) 최신순. ISO 문자열이라 사전식 비교 = 시간순.
+  const accessed = users
+    .filter((u) => u.lastLoginAt)
+    .slice()
+    .sort((a, b) => (b.lastLoginAt ?? '').localeCompare(a.lastLoginAt ?? ''))
+  const todayCount = accessed.filter((u) => kstDay(u.lastLoginAt) === todayKst).length
+  const neverCount = users.length - accessed.length
+
+  return (
+    <>
+      {error && <p className="error">{error}</p>}
+
+      <div className="stat-cards">
+        <StatCard k="오늘 접속" v={String(todayCount)} sub={`전체 ${users.length}명 중`} accent />
+        <StatCard k="접속 이력" v={String(accessed.length)} sub={`미접속 ${neverCount}명`} />
+        <StatCard k="최근 활동 이벤트" v={String(events.length)} sub="최근 200건 기준" />
+      </div>
+
+      <div className="card">
+        <div className="section-title">접속 현황 - 마지막 접속 최신순 ({accessed.length})</div>
+        {loading ? <p className="hint">불러오는 중…</p> : accessed.length === 0 ? (
+          <p className="hint">아직 접속 이력이 없습니다.</p>
+        ) : (
+          <div className="table-scroll">
+            <table className="admin-table">
+              <thead>
+                <tr><th>이메일</th><th>권한</th><th>마지막 접속</th><th className="num">누적 접속</th></tr>
+              </thead>
+              <tbody>
+                {accessed.map((u) => {
+                  const isToday = kstDay(u.lastLoginAt) === todayKst
+                  return (
+                    <tr key={u.id}>
+                      <td className="admin-email">{u.email}</td>
+                      <td><span className={`plan-pill ${u.role === 'ADMIN' ? 'admin' : 'free'}`}>{u.role}</span></td>
+                      <td className="num admin-date">{fmtDate(u.lastLoginAt)}{isToday && <span className="self-tag">오늘</span>}</td>
+                      <td className="num"><b>{u.loginCount}</b></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="hint">‘마지막 접속’ = 최근 로그인 시각, ‘누적 접속’ = 로그인 횟수. 시각은 KST 기준.</p>
+      </div>
+
+      <div className="card">
+        <div className="section-title">최근 활동 로그 - 무엇을 언제 ({events.length})</div>
+        {loading ? <p className="hint">불러오는 중…</p> : events.length === 0 ? (
+          <p className="hint">아직 활동 이벤트가 없습니다.</p>
+        ) : (
+          <div className="table-scroll">
+            <table className="admin-table">
+              <thead>
+                <tr><th>일시</th><th>사용자</th><th>행동</th><th>경로</th></tr>
+              </thead>
+              <tbody>
+                {events.map((e) => (
+                  <tr key={e.id}>
+                    <td className="num admin-date">{fmtDate(e.createdAt)}</td>
+                    <td className="admin-email">{e.ownerEmail ?? <span className="muted-x">익명</span>}</td>
+                    <td>{EVENT_LABEL[e.event] ?? e.event}</td>
+                    <td className="admin-date">{e.path ?? '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="hint">방문·계산·분석 등 얕은 행동 신호(익명 포함, PII 없음). 최근 200건 · KST.</p>
+      </div>
+    </>
   )
 }
 
@@ -438,7 +549,41 @@ function RunsPanel() {
   )
 }
 
-function NewsletterPanel() {
+/** 관리자 - 즉시 수집(딜/뉴스 카드 + 무료 브리핑, 스케줄러와 동일 경로). */
+function MarketIngestCard() {
+  const [busy, setBusy] = useState(false)
+  const [report, setReport] = useState<IngestReport | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function run() {
+    setBusy(true); setErr(null); setReport(null)
+    try { setReport(await api.marketFeedIngest()) }
+    catch (e: unknown) { setErr(e instanceof ApiError ? e.message : '수집에 실패했습니다.') }
+    finally { setBusy(false) }
+  }
+
+  return (
+    <div className="card">
+      <div className="section-title">시장 데이터 수집</div>
+      <div className="nl-tools">
+        <button type="button" className="btn-primary" onClick={() => void run()} disabled={busy}>
+          {busy ? '수집 중…' : '지금 수집'}
+        </button>
+      </div>
+      {report && (
+        <p className="hint">
+          수집 완료 - 신규 <b>{report.inserted}</b> · 중복 {report.skippedDuplicate} · 분석 {report.fetched}건
+          {report.briefingGenerated ? ` · 브리핑 갱신(${report.briefingProvider})` : ' · 브리핑 생략'}
+        </p>
+      )}
+      {err && <p className="error">{err}</p>}
+      <p className="hint">딜·뉴스 카드와 무료 브리핑을 한 번에 수집합니다(평일 06:30 자동 수집과 동일 경로). 발송은 새 브리핑 생성 시 활성 구독자에게 자동.</p>
+    </div>
+  )
+}
+
+/** 관리자 - 시장 운영: 즉시 수집 + 뉴스레터(브리핑 메일) 미리보기·테스트·구독자·발송 로그. */
+function MarketPanel() {
   const [subs, setSubs] = useState<NewsSubscriber[]>([])
   const [logs, setLogs] = useState<NewsletterSendLogEntry[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -480,6 +625,8 @@ function NewsletterPanel() {
   return (
     <>
       {error && <p className="error">{error}</p>}
+
+      <MarketIngestCard />
 
       <div className="card">
         <div className="section-title">메일 미리보기 · 테스트 발송</div>

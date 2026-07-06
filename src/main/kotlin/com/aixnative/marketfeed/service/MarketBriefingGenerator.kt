@@ -39,7 +39,7 @@ class MarketBriefingGenerator(
         }
         val node = objectMapper.readTree(json)
         val briefing = MarketBriefing(
-            briefingDate = LocalDate.now(),
+            briefingDate = LocalDate.now(java.time.ZoneId.of("Asia/Seoul")), // 서버 UTC가 아닌 KST 영업일 기준
             headline = node.path("headline").asText("").ifBlank { null }?.take(500),
             outlook = node.path("outlook").asText("").ifBlank { null },
             sectionsJson = node.path("sections").takeIf { it.isArray }?.toString() ?: "[]",

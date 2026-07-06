@@ -29,7 +29,21 @@ export function DealCompare({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     api.runs()
-      .then((list) => setRuns(list.filter((r) => r.status === 'SUCCESS')))
+      .then((list) => {
+        // 같은 딜끼리는 ProForma 가 동일해 비교가 무의미 → 딜(dealName)당 최신 1건만.
+        // api.runs 는 최신순이므로 첫 등장이 대표. 이름 없는 런은 개별 유지.
+        const seen = new Set<string>()
+        const deduped = list
+          .filter((r) => r.status === 'SUCCESS')
+          .filter((r) => {
+            const name = r.dealName?.trim()
+            if (!name) return true
+            if (seen.has(name)) return false
+            seen.add(name)
+            return true
+          })
+        setRuns(deduped)
+      })
       .catch((e: unknown) => setError(e instanceof ApiError ? e.message : '이력 조회 실패'))
       .finally(() => setLoading(false))
   }, [])
@@ -54,6 +68,28 @@ export function DealCompare({ onClose }: { onClose: () => void }) {
   }
 
   const chosen = useMemo(() => selected.map((id) => details[id]).filter(Boolean) as RunDetail[], [selected, details])
+
+  // 지표별 최고값(강조·미니바 정규화 분모) + 딜별 '우세'(단독 1등) 집계.
+  const rowMax = useMemo(
+    () => METRICS.map((m) => {
+      const finite = chosen.map((d) => m.get(d)).filter((v): v is number => v != null && Number.isFinite(v))
+      return finite.length ? Math.max(...finite) : undefined
+    }),
+    [chosen],
+  )
+  const wins = useMemo(() => {
+    const w = chosen.map(() => 0)
+    METRICS.forEach((m, mi) => {
+      const max = rowMax[mi]
+      if (max == null) return
+      const leaders = chosen
+        .map((d, i) => ({ v: m.get(d), i }))
+        .filter((x) => x.v != null && Number.isFinite(x.v) && x.v === max)
+      if (leaders.length === 1) w[leaders[0].i] += 1 // 동점은 우세로 치지 않음
+    })
+    return w
+  }, [chosen, rowMax])
+  const decimals = (key: string) => (key === 'em' || key === 'dscr' ? 2 : 1)
 
   return (
     <div className="analyze-overlay" role="dialog" aria-modal="true" aria-label="딜 비교" onClick={onClose}>
@@ -110,6 +146,7 @@ export function DealCompare({ onClose }: { onClose: () => void }) {
 
                 <RadarChart deals={chosen} />
 
+                <p className="compare-caption">↑ 값이 높을수록 유리 · 각 지표의 <b>최고값</b>을 강조합니다</p>
                 <div className="compare-table-wrap">
                   <table className="compare-table">
                     <thead>
@@ -119,22 +156,39 @@ export function DealCompare({ onClose }: { onClose: () => void }) {
                           <th key={d.id}>
                             <span className="ct-head">
                               <span className="ct-name"><span className="ct-dot" style={{ background: SERIES_COLORS[i] }} />{d.dealName ?? `#${d.id}`}</span>
-                              <span className="ct-type">{d.request?.assetType ?? toolLabel(d.tool)}</span>
+                              <span className="ct-sub">
+                                <span className="ct-type">{d.request?.assetType ?? toolLabel(d.tool)}</span>
+                                {wins[i] > 0 && <span className="ct-wins" title="단독 1등 지표 수">우세 {wins[i]}</span>}
+                              </span>
                             </span>
                           </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {METRICS.map((m) => (
-                        <tr key={m.key}>
-                          <td className="ct-metric">{m.label}</td>
-                          {chosen.map((d) => {
-                            const v = m.get(d)
-                            return <td key={d.id} className="num">{v != null && Number.isFinite(v) ? `${v.toFixed(m.key === 'em' || m.key === 'dscr' ? 2 : 1)}${m.unit}` : '–'}</td>
-                          })}
-                        </tr>
-                      ))}
+                      {METRICS.map((m, mi) => {
+                        const max = rowMax[mi]
+                        return (
+                          <tr key={m.key}>
+                            <td className="ct-metric">{m.label}{m.unit && <span className="ct-unit">{m.unit}</span>}</td>
+                            {chosen.map((d, ci) => {
+                              const v = m.get(d)
+                              const isNum = v != null && Number.isFinite(v)
+                              const best = isNum && max != null && v === max
+                              const ratio = isNum && max ? Math.max(0.04, Math.min(1, v / max)) : 0
+                              return (
+                                <td key={d.id} className={`num cc${best ? ' best' : ''}`}>
+                                  {isNum && <span className="cc-bar" style={{ width: `${ratio * 100}%`, background: SERIES_COLORS[ci] }} />}
+                                  <span className="cc-val">
+                                    {isNum ? `${v.toFixed(decimals(m.key))}${m.unit}` : '–'}
+                                    {best && <span className="cc-crown" aria-label="최고">▲</span>}
+                                  </span>
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>

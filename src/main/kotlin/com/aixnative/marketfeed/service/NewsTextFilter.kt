@@ -51,10 +51,13 @@ object NewsTextFilter {
         return ASSET_KEYWORDS.firstOrNull { (_, kws) -> kws.any { text.contains(it) } }?.first
     }
 
-    /** 위치 추정 — '서울 ○○구' / 광역시·도 첫 매칭. 없으면 null. */
+    /**
+     * 위치 추정 — '서울 ○○구' 같은 행정구역이면 구/동까지, 아니면 광역시·도/시 이름만.
+     * 뒤 토큰은 반드시 구/시/군/동으로 끝날 때만 붙인다(랜드마크·건물명이 잘려 붙는 것 방지).
+     */
     fun guessLocation(item: NewsItem): String? {
         val text = "${item.title} ${item.summary}"
-        Regex("(서울|부산|대구|인천|광주|대전|울산|세종|경기|성남|용인|고양|수원)\\s?[가-힣]{0,3}(구|시|동)?")
+        Regex("(서울|부산|대구|인천|광주|대전|울산|세종|경기|성남|용인|고양|수원)(\\s?[가-힣]{1,4}(구|시|군|동))?")
             .find(text)?.let { return it.value.trim() }
         return null
     }

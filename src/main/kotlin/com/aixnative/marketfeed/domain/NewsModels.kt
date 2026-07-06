@@ -22,8 +22,6 @@ data class IngestReport(
     val afterFilter: Int,
     val inserted: Int,
     val skippedDuplicate: Int,
-    /** 이번 실행에서 새로 적재된 업계 헤드라인 수(별도 저장소). */
-    val headlinesInserted: Int = 0,
     /** 브리핑 분석에 실제 투입된 누적 최근 풀 크기(단일 fetch가 아님). */
     val briefingPoolSize: Int = 0,
     /** 구글뉴스 딜 검색 총 쿼리 수. */

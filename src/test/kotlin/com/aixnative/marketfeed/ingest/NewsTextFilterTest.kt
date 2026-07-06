@@ -115,4 +115,15 @@ class NewsTextFilterTest {
     fun `guessLocation finds seoul district`() {
         assertTrue(NewsTextFilter.guessLocation(item("서울 강남구 역삼동 빌딩 매각"))!!.startsWith("서울"))
     }
+
+    @Test
+    fun `guessLocation does not clip landmark onto city name`() {
+        // '에버랜드'는 행정구역(구/시/동)이 아니므로 도시명만 남아야 한다('용인 에버랜' 잘림 방지).
+        assertEquals("용인", NewsTextFilter.guessLocation(item("용인 에버랜드 인근 물류센터 매각")))
+    }
+
+    @Test
+    fun `guessLocation keeps full administrative district`() {
+        assertEquals("성남 분당구", NewsTextFilter.guessLocation(item("성남 분당구 오피스 거래")))
+    }
 }

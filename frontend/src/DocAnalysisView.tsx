@@ -3,9 +3,9 @@ import { TrustBadge } from './TrustBadge'
 import { printDocAnalysis, downloadDocAnalysisDoc } from './reportExport'
 import {
   api, ApiError, track, isBovCalc, isBizHealthCalc, isPriceForecastCalc,
-  type AnalysisFlag, type BizHealthCalc, type BovInput, type DevFeasibilityInput, type DocAnalysisType, type DocAnalyzeInput,
+  type AnalysisFlag, type BizHealthCalc, type BovInput, type DealSummary, type DevFeasibilityInput, type DocAnalysisType, type DocAnalyzeInput,
   type DocAnalyzeResponse, type DocCalc, type DocSection, type MarketFact, type PriceForecastCalc, type PriceForecastInput,
-  type RunSummary, type TaxGuide,
+  type RunSummary, type TaxGuide, type UnderwriteInput,
 } from './api'
 
 interface DocAnalysisViewProps {
@@ -19,6 +19,23 @@ interface DocAnalysisViewProps {
 /** "N크레딧" 라벨 - 단가 미로딩 시 숫자 생략. */
 function creditLabel(cost?: number): string {
   return cost != null ? `${cost}크레딧` : '크레딧'
+}
+
+/**
+ * 언더라이팅 입력을 심화 분석 서술칸에 넣을 한 줄 요약으로 변환.
+ * 재무 수치는 심화에 대응 칸이 없어 documentText 로 흡수한다(정형→서술).
+ */
+function summarizeUnderwrite(u: UnderwriteInput): string {
+  const p: string[] = []
+  if (u.askingPriceEok != null) p.push(`매입가 ${u.askingPriceEok}억`)
+  if (u.noiEok != null) p.push(`NOI ${u.noiEok}억`)
+  if (u.exitCapPct != null) p.push(`Exit Cap ${u.exitCapPct}%`)
+  if (u.ltvPct != null) p.push(`LTV ${u.ltvPct}%`)
+  if (u.loanRatePct != null) p.push(`대출금리 ${u.loanRatePct}%`)
+  if (u.holdYears != null) p.push(`보유 ${u.holdYears}년`)
+  if (u.rentGrowthPct != null) p.push(`임대성장 ${u.rentGrowthPct}%/년`)
+  const line = `[언더라이팅 딜 요약] ${p.join(', ')}.`
+  return u.notes?.trim() ? `${line}\n비고: ${u.notes.trim()}` : line
 }
 
 interface DocTypeMeta {
@@ -190,8 +207,47 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts }: D
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<DocAnalyzeResponse | null>(null)
   const [historyVersion, setHistoryVersion] = useState(0)
+  // 언더라이팅 딜 가져오기 - 내 딜(파이프라인 입력 보유분)에서 딜명·자산·위치·재무요약을 프리필.
+  const [importDeals, setImportDeals] = useState<DealSummary[]>([])
+  const [importBusy, setImportBusy] = useState(false)
   // 스크롤 타깃 - 결과(가격 예측 등) 영역으로 이동.
   const forecastRef = useRef<HTMLDivElement>(null)
+
+  // 이어서 분석 가능한(언더라이팅 입력 보유) 내 딜만 가져오기 후보로.
+  useEffect(() => {
+    api.myDeals()
+      .then((ds) => setImportDeals(ds.filter((d) => d.canContinue && !d.isMarketReport)))
+      .catch(() => setImportDeals([]))
+  }, [])
+
+  /**
+   * 선택한 언더라이팅 딜의 입력을 심화 폼에 프리필.
+   * 딜명·자산유형·위치는 칸에 직접, 재무 수치는 서술칸(documentText) 앞에 요약으로 끼워넣어 기존 입력 보존.
+   */
+  async function importFromDeal(anchorRunId: number) {
+    const deal = importDeals.find((d) => d.anchorRunId === anchorRunId)
+    if (!deal) return
+    setImportBusy(true)
+    setError(null)
+    try {
+      const ds = await api.dealStages(deal.dealName)
+      // 파이프라인 단계 중 재무 입력(askingPriceEok)이 있는 request = UnderwriteInput.
+      const u = ds.stages.find((s) => s.request && s.request.askingPriceEok != null)?.request as UnderwriteInput | undefined
+      setDealName(deal.dealName)
+      const at = u?.assetType ?? deal.assetType ?? undefined
+      if (at && (ASSET_TYPES as readonly string[]).includes(at)) setAssetType(at)
+      const loc = u?.location ?? deal.location ?? ''
+      if (loc) setLocation(loc)
+      if (u) {
+        const summary = summarizeUnderwrite(u)
+        setDocumentText((prev) => (prev.trim() ? `${summary}\n\n${prev}` : summary))
+      }
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.message : '딜 정보를 불러오지 못했습니다.')
+    } finally {
+      setImportBusy(false)
+    }
+  }
 
   const meta = DOC_TYPES.find((d) => d.type === type) ?? DOC_TYPES[0]
   const calcMode = isCalcType(type)
@@ -362,6 +418,25 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts }: D
           </div>
 
           <div className="form-grid">
+            {importDeals.length > 0 && (
+              <div className="full">
+                <label htmlFor="importDeal">언더라이팅 딜에서 가져오기 <span className="opt">(딜명·자산·위치·재무요약 자동 채움)</span></label>
+                <select
+                  id="importDeal"
+                  className="import-deal-select"
+                  value=""
+                  disabled={importBusy}
+                  onChange={(e) => { if (e.target.value) void importFromDeal(Number(e.target.value)) }}
+                >
+                  <option value="">{importBusy ? '불러오는 중…' : '딜 선택…'}</option>
+                  {importDeals.map((d) => (
+                    <option key={d.anchorRunId} value={d.anchorRunId}>
+                      {d.dealName}{d.completedStages.length > 0 ? ` · ${d.completedStages.join('·')}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="full">
               <label htmlFor="docDeal">딜/자산 이름</label>
               <input id="docDeal" value={dealName} onChange={(e) => setDealName(e.target.value)} placeholder="예: 강남 오피스" />

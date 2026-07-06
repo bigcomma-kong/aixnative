@@ -581,7 +581,7 @@ function HistoryPanel({ version, onOpen }: { version: number; onOpen: (r: RunRes
                 <td>{STAGE_LABEL[canonicalTool(r.tool)] ?? r.tool}</td>
                 <td><span className={r.status === 'SUCCESS' ? 'st-ok' : 'st-fail'}>{r.status === 'SUCCESS' ? '성공' : r.status === 'FAILED' ? '실패' : r.status}</span></td>
                 <td className="num">{r.createdAt ? new Date(r.createdAt).toLocaleString('ko-KR') : '-'}</td>
-                <td><button className="btn-link" onClick={() => open(r.id)}>열기</button></td>
+                <td><button className="btn-link" onClick={() => open(r.id)}>불러오기</button></td>
               </tr>
             ))}
           </tbody>

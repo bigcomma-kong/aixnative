@@ -27,7 +27,6 @@ class MarketFeedIngestService(
     private val props: MarketFeedProperties,
     private val briefingGenerator: MarketBriefingGenerator,
     private val newsletterService: com.aixnative.marketfeed.service.NewsletterService,
-    private val headlineService: com.aixnative.headline.service.HeadlineService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -86,10 +85,8 @@ class MarketFeedIngestService(
         }
         log.info("[ingest] fetched={} filtered={} inserted={} skipped={}", raw.size, capped.size, inserted, skipped)
 
-        // 업계 헤드라인 수집(별도 저장소·화면). 딜 카드와 무관 — 실패해도 전체 인제스트는 계속.
-        val headlinesInserted = runCatching { headlineService.ingest(purge) }
-            .onFailure { errors += "헤드라인 수집 실패: ${it.message}"; log.warn("[ingest] 헤드라인 수집 실패", it) }
-            .getOrDefault(0)
+        // CRE 전문 매체(SPI 등) 자체 RSS → '헤드라인 카드'로 시장 피드에 적재(딜 관련성 게이트 없이 뉴스 카드).
+        ingestOutletHeadlines(errors)
 
         // 마켓 브리핑(무료 AI) — graceful. 입력 = 단일 fetch(filtered)가 아니라 **누적 DB 최근 풀**(cutoff 이내 저장 카드).
         // → 하루 수집이 스로틀나도 어제까지 쌓인 카드가 남아 분석 건수가 15건으로 무너지지 않는다.
@@ -120,7 +117,6 @@ class MarketFeedIngestService(
             afterFilter = capped.size,
             inserted = inserted,
             skippedDuplicate = skipped,
-            headlinesInserted = headlinesInserted,
             briefingPoolSize = briefingPool.size,
             googleQueriesTotal = collection.googleQueriesTotal,
             googleQueriesThin = collection.googleQueriesThin,
@@ -138,6 +134,53 @@ class MarketFeedIngestService(
             link = sourceUrl ?: "",
             publishedAt = publishedAt,
             source = origin ?: "DB",
+        )
+
+    /**
+     * CRE 전문 매체 자체 RSS(SPI 등)를 '헤드라인 카드'로 적재. 딜 관련성 필터([NewsTextFilter.isRelevant])를
+     * 거치지 않는다 — 사전 큐레이션된 CRE 매체라 제목만 뿌리고 원문으로 클릭아웃(assetType·summary 없음 → 뉴스 카드).
+     * 최근시간 컷오프는 딜 카드·다른 뉴스와 **동일한 [MarketFeedProperties.recentHours]**(기본 72h)를 쓴다(옛날 기사 차단).
+     */
+    private fun ingestOutletHeadlines(errors: MutableList<String>): Int {
+        val raw = runCatching { collector.collectOutletFeeds() }
+            .onFailure { errors += "매체 헤드라인 수집 실패: ${it.message}"; log.warn("[outlet] 수집 실패", it) }
+            .getOrDefault(emptyList())
+        if (raw.isEmpty()) return 0
+
+        val cutoff = Instant.now().minus(props.recentHours, ChronoUnit.HOURS)
+        val deduped = LinkedHashMap<String, NewsItem>()
+        for (item in raw) {
+            if (item.publishedAt != null && item.publishedAt.isBefore(cutoff)) continue
+            val key = NewsTextFilter.normalizeLink(item.link)
+            if (key.isNotBlank()) deduped.putIfAbsent(key, item)
+        }
+
+        val keys = deduped.keys.toList()
+        val existing = if (keys.isEmpty()) emptySet() else
+            repository.findByDedupKeyIn(keys).mapNotNull { it.dedupKey }.toHashSet()
+
+        var inserted = 0
+        for ((key, item) in deduped) {
+            if (key in existing) continue
+            repository.save(item.toHeadlineEntity(key))
+            inserted++
+        }
+        log.info("[outlet] fetched={} candidates={} inserted={}", raw.size, deduped.size, inserted)
+        return inserted
+    }
+
+    /** 매체 RSS 기사 → 헤드라인 카드 엔티티(제목+원문링크만, 요약·자산유형 없음 → 뉴스 카드로 렌더). */
+    private fun NewsItem.toHeadlineEntity(dedupKey: String): MarketFeedItem =
+        MarketFeedItem(
+            title = title.take(TITLE_MAX),
+            summary = null,
+            assetType = null,
+            location = null,
+            sourceText = title.take(SOURCE_TEXT_MAX),
+            sourceUrl = link,
+            publishedAt = publishedAt ?: Instant.now(),
+            origin = source,
+            dedupKey = dedupKey,
         )
 
     private fun NewsItem.toEntity(dedupKey: String): MarketFeedItem =
