@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { TrustBadge } from './TrustBadge'
 import { printDocAnalysis, downloadDocAnalysisDoc } from './reportExport'
 import {
-  api, ApiError, isBovCalc, isBizHealthCalc, isPriceForecastCalc,
-  type AnalysisFlag, type BizHealthCalc, type BovInput, type DealExtract, type DevFeasibilityInput, type DocAnalysisType, type DocAnalyzeInput,
+  api, ApiError, track, isBovCalc, isBizHealthCalc, isPriceForecastCalc,
+  type AnalysisFlag, type BizHealthCalc, type BovInput, type DevFeasibilityInput, type DocAnalysisType, type DocAnalyzeInput,
   type DocAnalyzeResponse, type DocCalc, type DocSection, type MarketFact, type PriceForecastCalc, type PriceForecastInput,
   type RunSummary, type TaxGuide,
 } from './api'
@@ -12,8 +12,6 @@ interface DocAnalysisViewProps {
   onCreditBalance: (balance: number) => void
   /** 크레딧 소진(402) 시 중앙 페이월 안내 노출. */
   onNeedCredits: () => void
-  /** 시장 피드 '이 딜 분석하기'로 들어올 때 딜/기사 원문. 들어오면 자동으로 추출 실행. */
-  initialDealText?: string
   /** 분석유형 id → 크레딧 단가(서버 단일 소스). 미로딩 시 숫자 생략. */
   toolCosts?: Record<string, number>
 }
@@ -178,7 +176,7 @@ function FlagList({ flags }: { flags: AnalysisFlag[] }) {
   )
 }
 
-export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealText, toolCosts }: DocAnalysisViewProps) {
+export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts }: DocAnalysisViewProps) {
   const [type, setType] = useState<DocAnalysisType>('DEV_FEASIBILITY')
   const [dealName, setDealName] = useState('')
   const [assetType, setAssetType] = useState<string>('오피스')
@@ -192,73 +190,8 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<DocAnalyzeResponse | null>(null)
   const [historyVersion, setHistoryVersion] = useState(0)
-  // 딜 기반 진입 - 기사/딜 텍스트 추출
-  const [dealText, setDealText] = useState('')
-  const [extracting, setExtracting] = useState(false)
-  const [extracted, setExtracted] = useState<DealExtract | null>(null)
-  // 스크롤 타깃 - 딜 진입 시 딜 텍스트로, '채우기' 후 가격 예측 입력으로 이동.
-  const dealTextRef = useRef<HTMLTextAreaElement>(null)
+  // 스크롤 타깃 - 결과(가격 예측 등) 영역으로 이동.
   const forecastRef = useRef<HTMLDivElement>(null)
-
-  // 시장 피드에서 딜 원문을 받고 들어오면 textarea 채우고 자동 추출 + 딜 텍스트로 스크롤·포커스.
-  useEffect(() => {
-    const seed = initialDealText?.trim()
-    if (!seed) return
-    setDealText(seed)
-    void extractDeal(seed)
-    // 탭 전환 시 이전 스크롤 위치가 남아 폼 하단으로 떨어지는 문제 방지 - 딜 입력 영역을 보여준다.
-    requestAnimationFrame(() => {
-      const el = dealTextRef.current
-      if (!el) return
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      el.focus({ preventScroll: true })
-    })
-    // initialDealText 변경 시에만 실행(채우기는 1회성 진입 신호)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialDealText])
-
-  /** 기사/딜 텍스트 → 구조화 추출(무료). 성공 시 추출 결과를 보여주고 '채우기'로 폼에 반영. */
-  async function extractDeal(textArg?: string) {
-    const text = (textArg ?? dealText).trim()
-    if (!text) { setError('기사/딜 텍스트를 붙여넣으세요.'); return }
-    setError(null)
-    setExtracting(true)
-    try {
-      const res = await api.extractDeal(text)
-      if (res.extract) setExtracted(res.extract)
-      else setError('구조화 추출에 실패했습니다. 텍스트를 더 구체적으로 넣어보세요.')
-    } catch (err: unknown) {
-      setError(err instanceof ApiError ? err.message : '딜 추출 중 오류가 발생했습니다.')
-    } finally {
-      setExtracting(false)
-    }
-  }
-
-  /** 추출된 딜을 분석 폼에 반영하고 가격 예측 단계로 전환. */
-  function applyExtract(e: DealExtract) {
-    if (e.dealName) setDealName(e.dealName)
-    if (e.location) setLocation(e.location)
-    if (e.parcelAddress) setParcelAddress(e.parcelAddress)
-    if (e.assetType && (ASSET_TYPES as readonly string[]).includes(e.assetType)) setAssetType(e.assetType)
-    const cv: Record<string, string> = {}
-    if (e.noiEok != null) cv.noiEok = String(e.noiEok)
-    if (e.areaPyeong != null) cv.areaPyeong = String(e.areaPyeong)
-    if (e.marketCapPct != null) cv.marketCapPct = String(e.marketCapPct)
-    setCalcValues(cv)
-    if (e.tenantSummary || e.summary) {
-      setDocumentText([e.summary, e.tenantSummary].filter(Boolean).join(' · '))
-    }
-    setType('PRICE_FORECAST')
-    setResult(null)
-    setError(null)
-    // 채워진 가격 예측 입력으로 스크롤(화면 아래라 '안 바뀐 것처럼' 보이던 문제 해결).
-    // setType 반영 후 forecast 영역이 렌더되므로 다음 프레임에 스크롤.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        forecastRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      })
-    })
-  }
 
   const meta = DOC_TYPES.find((d) => d.type === type) ?? DOC_TYPES[0]
   const calcMode = isCalcType(type)
@@ -299,6 +232,21 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
     return { dev }
   }
 
+  /** 미입력 필드로 스크롤 + 포커스 - 배너 대신 직접 안내. */
+  function focusField(id: string) {
+    const el = document.getElementById(id)
+    if (!el) return
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    el.focus({ preventScroll: true })
+  }
+
+  /** 계산 모드(BOV/DEV)에서 첫 미입력 필수 필드의 DOM id. */
+  function firstCalcMissingId(): string | null {
+    const has = (k: string) => toNum(calcValues[k]) != null
+    if (type === 'BOV') return !has('noiEok') ? 'calc-noiEok' : !has('marketCapPct') ? 'calc-marketCapPct' : null
+    return !has('landCostEok') ? 'calc-landCostEok' : !has('constructionCostEok') ? 'calc-constructionCostEok' : null
+  }
+
   async function run() {
     const input: DocAnalyzeInput = {
       dealName: dealName || undefined,
@@ -311,18 +259,25 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
       const digits = bizNo.replace(/[^0-9]/g, '')
       if (digits.length !== 10 && !counterpartyName.trim()) {
         setError('사업자등록번호(10자리) 또는 상호를 입력하세요.')
+        focusField('ddBizNo')
         return
       }
       if (digits.length === 10) input.bizNo = digits
       if (counterpartyName.trim()) input.counterpartyName = counterpartyName.trim()
     } else if (calcMode) {
       const built = buildCalcInput()
-      if (typeof built === 'string') { setError(built); return }
+      if (typeof built === 'string') {
+        setError(built)
+        const id = firstCalcMissingId()
+        if (id) focusField(id)
+        return
+      }
       Object.assign(input, built)
     } else if (forecastMode) {
       const v = (k: string) => toNum(calcValues[k])
       if (!v('noiEok') && !v('areaPyeong')) {
         setError('NOI(소득환원) 또는 연면적(거래사례) 중 하나는 입력하세요.')
+        focusField('fc-noiEok')
         return
       }
       const forecast: PriceForecastInput = {
@@ -331,13 +286,16 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
       input.forecast = forecast
     } else if (!documentText.trim()) {
       setError('분석 대상 정보를 입력하세요.')
+      focusField('docText')
       return
     }
+    track('analysis_start', { path: 'advanced', meta: type })
     setError(null)
     setBusy(true)
     try {
       const res = await api.analyzeDoc(type, input)
       setResult(res)
+      track('analysis_done', { path: 'advanced', meta: type })
       onCreditBalance(res.creditBalance)
       setHistoryVersion((v) => v + 1)
     } catch (err: unknown) {
@@ -357,8 +315,9 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
     <>
       <div className="page-head">
         <div>
-          <span className="eyebrow">심화 분석</span>
+          <span className="eyebrow">AI DEEP ANALYSIS</span>
           <h1>매입·매각·운용·개발, 한 곳에서.</h1>
+          <p className="page-sub">BOV·개발 타당성·포워드 시나리오까지, 딜의 전 단계를 하나의 흐름으로 분석합니다.</p>
         </div>
       </div>
 
@@ -367,25 +326,10 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
         <li><span className="us-n">2</span><span className="us-t"><b>입력</b> <span className="req">*</span> 표시는 필수, 나머지는 선택입니다</span></li>
         <li><span className="us-n">3</span><span className="us-t"><b>실행</b> 분석별 1~5크레딧 - 결과는 우측·이력에 저장됩니다</span></li>
       </ol>
-      <p className="use-tip">처음이라면 위 <b>딜/기사 붙여넣기</b>로 시작하면 핵심 값이 자동으로 채워집니다 (무료).</p>
-
       <div className="layout">
         <form className="card input-panel" onSubmit={(e) => { e.preventDefault(); run() }}>
-          <div className="deal-ingest">
-            <label htmlFor="dealText">딜/기사로 시작 (선택) · 붙여넣으면 AI가 자동 정리</label>
-            <textarea id="dealText" ref={dealTextRef} rows={3} value={dealText} onChange={(e) => setDealText(e.target.value)}
-              placeholder="예: 신한카드 을지로 본사 사옥(파인에비뉴 A동) 매각, 우선협상대상자 MDM자산운용 선정. 8곳 입찰, PI 참여, 임차구조 안정성…" />
-            <div className="deal-ingest-actions">
-              <button type="button" className="btn-ghost" onClick={() => extractDeal()} disabled={extracting || !dealText.trim()}>
-                {extracting ? 'AI 정리 중…' : '딜 자동 정리'}
-              </button>
-              <span className="hint" style={{ margin: 0 }}>무료 · 정리 후 아래 폼에 자동 반영됩니다</span>
-            </div>
-            {extracted && <ExtractedDeal extract={extracted} onApply={() => applyExtract(extracted)} />}
-          </div>
-
           <div className="form-head">
-            <span className="section-title" style={{ margin: 0 }}>분석 선택</span>
+            <span className="section-title" style={{ margin: 0 }}>분석 선택 <span className="req-legend"><span className="req">*</span> 필수</span></span>
           </div>
 
           <div className="doc-type-groups">
@@ -399,11 +343,11 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
                     return (
                       <button key={d.type} type="button" className="doc-type-btn" aria-pressed={type === d.type}
                         onClick={() => selectType(d.type)}>
-                        <span className="dt-top">
-                          <span className="dt-label">{d.label}</span>
-                          {toolCosts?.[d.type] != null && <span className="dt-cost">{toolCosts[d.type]}크레딧</span>}
-                        </span>
+                        <span className="dt-label">{d.label}</span>
                         <span className="dt-hint">{d.hint}</span>
+                        {toolCosts?.[d.type] != null && (
+                          <span className="dt-coin" title={`${toolCosts[d.type]} 크레딧`} aria-label={`${toolCosts[d.type]} 크레딧`}>{toolCosts[d.type]}</span>
+                        )}
                       </button>
                     )
                   })}
@@ -418,13 +362,13 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
           </div>
 
           <div className="form-grid">
-            <div>
-              <label htmlFor="docDeal">딜/자산 이름 <span className="opt">(선택)</span></label>
+            <div className="full">
+              <label htmlFor="docDeal">딜/자산 이름</label>
               <input id="docDeal" value={dealName} onChange={(e) => setDealName(e.target.value)} placeholder="예: 강남 오피스" />
             </div>
             {!ddMode && (
-              <div>
-                <label htmlFor="docLoc">위치 / 권역 <span className="opt">(선택 · 실측 검증)</span></label>
+              <div className="full">
+                <label htmlFor="docLoc">위치 / 권역 <span className="opt">(실측 검증)</span></label>
                 <input id="docLoc" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="예: 서울 강남구, 판교" />
               </div>
             )}
@@ -438,7 +382,7 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
             </div>
             {parcelMode && (
               <div className="full">
-                <label htmlFor="parcelAddr">필지 주소 <span className="opt">(선택 · 공시지가·용도지역 조회)</span></label>
+                <label htmlFor="parcelAddr">필지 주소 <span className="opt">(공시지가·용도지역 조회)</span></label>
                 <input id="parcelAddr" value={parcelAddress} onChange={(e) => setParcelAddress(e.target.value)}
                   placeholder="번지까지: 예 서울 강남구 역삼동 736-1" />
               </div>
@@ -451,7 +395,7 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
                     placeholder="10자리 (예: 124-81-00998)" inputMode="numeric" />
                 </div>
                 <div className="full">
-                  <label htmlFor="ddName">상호 <span className="opt">(선택 · 기업정보·규모 조회)</span></label>
+                  <label htmlFor="ddName">상호 <span className="opt">(기업정보·규모 조회)</span></label>
                   <input id="ddName" value={counterpartyName} onChange={(e) => setCounterpartyName(e.target.value)}
                     placeholder="예: 삼성전자주식회사" />
                 </div>
@@ -463,9 +407,9 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
                 <div className="calc-grid">
                   {(type === 'BOV' ? BOV_FIELDS : DEV_FIELDS).map((f) => (
                     <div key={f.k} className="calc-field">
-                      <label htmlFor={`calc-${f.k}`}>{f.label}{f.req ? <span className="req"> *</span> : <span className="opt"> (선택)</span>}</label>
+                      <label htmlFor={`calc-${f.k}`}>{f.label}{f.req && <span className="req"> *</span>}</label>
                       <input id={`calc-${f.k}`} type="number" inputMode="decimal" step="any"
-                        value={calcValues[f.k] ?? ''} placeholder={f.def ?? (f.hint ?? '')}
+                        value={calcValues[f.k] ?? ''} placeholder={f.def ?? ''}
                         onChange={(e) => setCalcValues((s) => ({ ...s, [f.k]: e.target.value }))} />
                       {f.hint && <span className="calc-hint">{f.hint}</span>}
                     </div>
@@ -481,7 +425,7 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
                     <div key={f.k} className="calc-field">
                       <label htmlFor={`fc-${f.k}`}>{f.label}</label>
                       <input id={`fc-${f.k}`} type="number" inputMode="decimal" step="any"
-                        value={calcValues[f.k] ?? ''} placeholder={f.hint ?? ''}
+                        value={calcValues[f.k] ?? ''} placeholder={f.def ?? ''}
                         onChange={(e) => setCalcValues((s) => ({ ...s, [f.k]: e.target.value }))} />
                       {f.hint && <span className="calc-hint">{f.hint}</span>}
                     </div>
@@ -492,9 +436,9 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
             )}
             <div className="full">
               <label htmlFor="docText">{calcMode || ddMode || forecastMode
-                ? <>추가 컨텍스트 <span className="opt">(선택)</span></>
+                ? <>추가 컨텍스트</>
                 : <>분석 대상 정보 <span className="req">*</span></>}</label>
-              <textarea id="docText" rows={calcMode || ddMode || forecastMode ? 3 : 6} value={documentText} onChange={(e) => setDocumentText(e.target.value)}
+              <textarea id="docText" rows={calcMode || ddMode || forecastMode ? 5 : 6} value={documentText} onChange={(e) => setDocumentText(e.target.value)}
                 placeholder={calcMode || ddMode || forecastMode ? '정성 정보(포지셔닝·매도자 우선순위·인허가 상황 등)를 자유롭게 덧붙이면 서술 품질이 올라갑니다. 핵심 사실은 위 입력으로 확정합니다.' : meta.placeholder} />
             </div>
           </div>
@@ -504,9 +448,7 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, initialDealTex
               {busy ? '분석 중…' : `${meta.label} 분석 · ${creditLabel(toolCosts?.[type])}`}
             </button>
             <p className="hint">
-              {calcMode || ddMode || forecastMode
-                ? '정성 정보를 자유롭게 덧붙이면 서술 품질이 올라갑니다.'
-                : '자유 텍스트로 자산·운영·토지 정보를 입력하면 단계별 전문 분석을 생성합니다.'}
+              정성 정보를 자유롭게 덧붙이면 서술 품질이 올라갑니다.
               <br />
               같은 딜 이름으로 쌓으면 이력에서 함께 보입니다.
             </p>
@@ -625,49 +567,6 @@ function MarketFactsCard({ facts }: { facts: MarketFact[] }) {
 }
 
 /** 코드 확정 수치 카드 - BOV·개발수익성·거래상대방 실사(결정론적 공공데이터). AI 서술 위에 표기. */
-/** 추출된 딜 미리보기 - 핵심 필드 칩 + '이 값으로 채우기'. */
-function ExtractedDeal({ extract: e, onApply }: { extract: DealExtract; onApply: () => void }) {
-  const chips: [string, string][] = []
-  if (e.buildingName) chips.push(['건물', e.buildingName])
-  if (e.assetType) chips.push(['유형', e.assetType])
-  if (e.location) chips.push(['위치', e.location])
-  if (e.parcelAddress) chips.push(['필지', e.parcelAddress])
-  if (e.seller) chips.push(['매도', e.seller])
-  if (e.preferredBidder) chips.push(['우협', e.preferredBidder])
-  if (e.buyer) chips.push(['매수', e.buyer])
-  if (e.dealPriceEok != null) chips.push(['거래가', `${e.dealPriceEok.toLocaleString('ko-KR')}억`])
-  if (e.noiEok != null) chips.push(['NOI', `${e.noiEok}억`])
-  if (e.areaPyeong != null) chips.push(['연면적', `${e.areaPyeong.toLocaleString('ko-KR')}평`])
-  if (e.marketCapPct != null) chips.push(['Cap', `${e.marketCapPct}%`])
-  // 딜 신호가 하나도 없으면(=상업용 부동산 딜 아님) 빈 카드 대신 안내.
-  const hasSignal = chips.length > 0 || !!e.dealName || !!e.tenantSummary
-  if (!hasSignal) {
-    return (
-      <div className="extracted-deal ed-empty">
-        <div className="ed-head"><strong>딜 정보가 아니에요</strong></div>
-        {e.summary && <p className="muted" style={{ margin: '0 0 0.4rem' }}>{e.summary}</p>}
-        <p className="hint" style={{ margin: 0 }}>
-          이 텍스트는 상업용 부동산 딜로 보이지 않습니다. 매입가·NOI·위치 같은 딜 정보가 담긴
-          IM/기사를 붙여넣거나, 아래 폼에 직접 입력해 분석하세요.
-        </p>
-      </div>
-    )
-  }
-  return (
-    <div className="extracted-deal">
-      <div className="ed-head">
-        <strong>{e.dealName ?? '추출된 딜'}</strong>
-        {e.confidence && <span className={`gl-badge ${e.confidence === 'HIGH' ? 'go' : e.confidence === 'LOW' ? 'no' : 'cond'}`}>{e.confidence}</span>}
-      </div>
-      {e.summary && <p className="muted" style={{ margin: '0 0 0.5rem' }}>{e.summary}</p>}
-      <div className="chips">{chips.map(([k, v]) => <span key={k} className="chip">{k} {v}</span>)}</div>
-      {e.tenantSummary && <p className="muted" style={{ margin: '0.5rem 0 0' }}>임차: {e.tenantSummary}</p>}
-      <button type="button" className="btn-primary" style={{ marginTop: '0.7rem' }} onClick={onApply}>
-        이 값으로 가격 예측 채우기 →
-      </button>
-    </div>
-  )
-}
 
 function CalcCard({ calc }: { calc: DocCalc }) {
   if (isBizHealthCalc(calc)) return <BizHealthCard calc={calc} />

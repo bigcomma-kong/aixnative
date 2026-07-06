@@ -3,6 +3,7 @@ package com.aixnative.marketfeed.service
 import com.aixnative.marketfeed.domain.MarketFeedItem
 import com.aixnative.marketfeed.repository.MarketFeedRepository
 import org.slf4j.LoggerFactory
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -26,6 +27,7 @@ class MarketFeedIngestService(
     private val props: MarketFeedProperties,
     private val briefingGenerator: MarketBriefingGenerator,
     private val newsletterService: com.aixnative.marketfeed.service.NewsletterService,
+    private val headlineService: com.aixnative.headline.service.HeadlineService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -43,9 +45,10 @@ class MarketFeedIngestService(
             log.info("[ingest] purge=true — 자동 카드 {}건 삭제 후 재수집", removed)
         }
 
-        val raw = runCatching { collector.collect() }
+        val collection = runCatching { collector.collect() }
             .onFailure { errors += "수집 실패: ${it.message}" }
-            .getOrDefault(emptyList())
+            .getOrDefault(RssNewsCollector.CollectionResult.EMPTY)
+        val raw = collection.items
 
         val cutoff = Instant.now().minus(props.recentHours, ChronoUnit.HOURS)
 
@@ -83,13 +86,27 @@ class MarketFeedIngestService(
         }
         log.info("[ingest] fetched={} filtered={} inserted={} skipped={}", raw.size, capped.size, inserted, skipped)
 
-        // 마켓 브리핑(무료 AI) — graceful.
+        // 업계 헤드라인 수집(별도 저장소·화면). 딜 카드와 무관 — 실패해도 전체 인제스트는 계속.
+        val headlinesInserted = runCatching { headlineService.ingest(purge) }
+            .onFailure { errors += "헤드라인 수집 실패: ${it.message}"; log.warn("[ingest] 헤드라인 수집 실패", it) }
+            .getOrDefault(0)
+
+        // 마켓 브리핑(무료 AI) — graceful. 입력 = 단일 fetch(filtered)가 아니라 **누적 DB 최근 풀**(cutoff 이내 저장 카드).
+        // → 하루 수집이 스로틀나도 어제까지 쌓인 카드가 남아 분석 건수가 15건으로 무너지지 않는다.
+        val briefingPool = repository
+            .findByPublishedAtAfterOrderByPublishedAtDescIdDesc(cutoff, PageRequest.of(0, BRIEFING_POOL_MAX))
+            .map { it.toNewsItem() }
         var briefingDone = false
         var briefingProvider: String? = null
-        if (props.briefingEnabled && filtered.isNotEmpty()) {
-            runCatching { briefingGenerator.generate(filtered) }
+        if (props.briefingEnabled && briefingPool.isNotEmpty()) {
+            runCatching { briefingGenerator.generate(briefingPool) }
                 .onSuccess { res -> briefingDone = res != null; briefingProvider = res }
                 .onFailure { errors += "브리핑 실패: ${it.message}"; log.warn("[ingest] 브리핑 실패", it) }
+        }
+
+        // 구글뉴스 스로틀(조용한 축소) 가시화 — 빈응답이 있으면 관리자 응답에 한 줄로 노출.
+        if (collection.googleQueriesThin > 0) {
+            errors += "구글뉴스 빈응답/실패 ${collection.googleQueriesThin}/${collection.googleQueriesTotal} (스로틀 의심)"
         }
 
         // 구독자 메일 발송(무료 재방문 유도) — 스케줄 경로(notify=true)에서 브리핑이 생성됐을 때만.
@@ -103,11 +120,25 @@ class MarketFeedIngestService(
             afterFilter = capped.size,
             inserted = inserted,
             skippedDuplicate = skipped,
+            headlinesInserted = headlinesInserted,
+            briefingPoolSize = briefingPool.size,
+            googleQueriesTotal = collection.googleQueriesTotal,
+            googleQueriesThin = collection.googleQueriesThin,
             briefingGenerated = briefingDone,
             briefingProvider = briefingProvider,
             errors = errors,
         )
     }
+
+    /** 저장된 카드 → 브리핑 입력용 NewsItem(누적 풀 분석). 링크·출처는 프롬프트 표기에만 쓰인다. */
+    private fun MarketFeedItem.toNewsItem(): NewsItem =
+        NewsItem(
+            title = title,
+            summary = summary ?: "",
+            link = sourceUrl ?: "",
+            publishedAt = publishedAt,
+            source = origin ?: "DB",
+        )
 
     private fun NewsItem.toEntity(dedupKey: String): MarketFeedItem =
         MarketFeedItem(
@@ -125,5 +156,7 @@ class MarketFeedIngestService(
     private companion object {
         const val TITLE_MAX = 200
         const val SOURCE_TEXT_MAX = 4000
+        /** 브리핑 분석용 누적 최근 풀 상한(최신순). 프롬프트엔 이 중 앞부분만 투입되지만 '종합 커버리지'로 표기. */
+        const val BRIEFING_POOL_MAX = 150
     }
 }

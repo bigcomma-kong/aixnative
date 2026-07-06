@@ -64,6 +64,8 @@
   font-synthesis-weight: none;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* 세로 스크롤바 자리를 항상 예약 → 탭 전환 시 스크롤바 유무로 콘텐츠가 좌우로 점프하는 현상 방지. */
+  scrollbar-gutter: stable;
 }
 
 * { box-sizing: border-box; }
@@ -157,9 +159,23 @@ label {
   font-weight: 600;
 }
 /* 필수/선택 표기 - 일관 규칙: 필수=빨강 *, 선택=회색 (선택) */
-.req { color: var(--no); font-weight: 700; }
+.req {
+  color: var(--no); font-weight: 800; font-size: 1.05rem; line-height: 1;
+  vertical-align: -0.08em; margin-left: 0.08em;
+}
 .opt { color: var(--ink-faint); font-weight: 500; text-transform: none; letter-spacing: 0; }
-.req-legend { font-size: 0.66rem; color: var(--ink-faint); font-weight: 500; text-transform: none; letter-spacing: 0; margin-left: 0.4rem; }
+/* 상단 '필수' 범례 - 연한 빨강칩으로 눈에 띄게(별표의 의미를 즉시 전달) */
+.req-legend {
+  display: inline-flex; align-items: center; gap: 0.15rem;
+  margin-left: 0.5rem; padding: 0.1rem 0.45rem;
+  font-size: 0.68rem; font-weight: 700; color: var(--no); background: var(--no-tint);
+  border-radius: 999px; text-transform: none; letter-spacing: 0;
+}
+/* 범례 안 별표는 칩 크기에 맞춰 축소 + 글리프가 위로 떠서 텍스트와 세로 중앙 맞춤 */
+.req-legend .req {
+  font-size: 0.72rem; line-height: 1; vertical-align: 0; margin: 0;
+  transform: translateY(0.12em); /* 별표 글리프 광학 중앙 보정 */
+}
 
 /* ── Surfaces ── */
 .card {
@@ -272,7 +288,7 @@ label {
 
 .credits {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.4rem;
   background: var(--accent-tint);
   color: var(--accent);
@@ -280,9 +296,13 @@ label {
   border-radius: 999px;
   font-weight: 600;
   font-size: 0.8rem;
+  line-height: 1;
   border: 1px solid oklch(90% 0.04 264);
 }
-.credits b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.credits b {
+  font-size: 1.05rem; line-height: 1; font-variant-numeric: tabular-nums;
+  transform: translateY(-1px); /* 큰 숫자 광학 중심 보정 */
+}
 .who { display: flex; align-items: center; gap: 0.5rem; }
 .avatar {
   width: 30px; height: 30px;
@@ -301,14 +321,15 @@ main {
   gap: var(--gap);
   width: 100%;
 }
-/* 시장 인텔리전스 탭만 더 넓게 - 브리핑·딜 그리드를 한눈에. */
-main.wide { max-width: min(1440px, 100%); }
 /* grid 자식은 기본 min-width:auto 라 내부 넓은 요소(표·다열 그리드)가 트랙을 밀어 가로 오버플로
    → 화면이 우측으로 삐져나가 보임. min-width:0 으로 트랙 안에서 줄어들게 해 오버플로 차단. */
 main > * { min-width: 0; }
 
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
-.page-head h1 { font-family: var(--font-display); font-size: var(--t-display); font-weight: 400; }
+.page-head h1 { font-family: var(--font-display); font-size: var(--t-display); font-weight: 400; letter-spacing: -0.025em; margin: 0.25rem 0 0.3rem; }
+/* 시장 인텔리전스(mi-head-text)와 통일: 영문 액센트 아이브로 + 국문 타이틀 + 설명 */
+.page-head .eyebrow { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.18em; color: var(--accent); }
+.page-sub { color: var(--ink-soft); margin: 0; line-height: 1.5; }
 
 .layout { display: grid; gap: var(--gap); align-items: start; }
 @media (min-width: 920px) {
@@ -362,20 +383,56 @@ main > * { min-width: 0; }
 
 /* ── Form ── */
 .form-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.1rem; }
-.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem 0.85rem; }
+/* 입력 초기화 - 텍스트 대신 리프레시 아이콘 버튼 */
+.reset-btn {
+  flex: none; width: 30px; height: 30px; padding: 0;
+  display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); color: var(--ink-soft);
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.reset-btn svg { display: block; transition: transform 0.4s var(--ease); }
+.reset-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); background: var(--accent-tint); }
+.reset-btn:hover:not(:disabled) svg { transform: rotate(-180deg); }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
 .form-grid .full { grid-column: 1 / -1; }
+/* 각 입력을 개별 그룹 카드로 - 필드 구분(테두리) + 라벨↔입력 한 묶음(그리드 gap) */
+.form-grid > div {
+  display: grid; gap: 0.4rem; align-content: start;
+  padding: 0.7rem 0.8rem 0.75rem;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--surface);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+/* 입력에 포커스 시 필드 카드도 함께 강조 → 라벨·입력이 한 세트임을 시각화 */
+.form-grid > div:focus-within { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+.form-grid > div > label {
+  margin: 0; text-transform: none; letter-spacing: 0;
+  font-size: 0.78rem; font-weight: 600; color: var(--ink-soft);
+}
 
-.seg { display: flex; gap: 0.3rem; background: var(--surface-sunken); padding: 0.3rem; border-radius: var(--r-sm); }
+.seg { display: flex; gap: 0.3rem; background: var(--surface-sunken); padding: 0.3rem; border-radius: var(--r-sm); min-width: 0; }
 .seg button {
-  flex: 1; background: transparent; color: var(--ink-soft);
+  flex: 1 1 0; min-width: 0; background: transparent; color: var(--ink-soft);
   padding: 0.45rem 0.3rem; font-size: 0.85rem; font-weight: 600; border-radius: 7px;
-  width: 150px;
+  white-space: nowrap;
 }
 .seg button[aria-pressed='true'] { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm); }
 
+/* page-head 안에 놓이는 세그: 내용 폭 기준으로 버튼 크기 결정(기본 flex:1 이면 찌부러져 텍스트가 삐져나옴). admin-seg 와 동일 규칙. */
+.head-seg { flex: none; }
+.head-seg button { flex: 0 0 auto; width: auto; padding: 0.45rem 0.9rem; }
+
+/* 시장 임베드 시 수집/새로고침 액션 바 — 통합 헤더 아래 우측 정렬 슬림 바. */
+.mi-actions-bar { justify-content: flex-end; margin-bottom: var(--gap); }
+
+/* 지난 브리핑(좌) · 지난 리포트(우) 2단 아카이브 행 — 좁으면 세로 적층. */
+.mi-archives { display: flex; gap: var(--gap); align-items: flex-start; margin-bottom: var(--gap); flex-wrap: wrap; }
+.mi-archives > .brief-archive, .mi-archives > .deep-history { flex: 1 1 300px; min-width: 0; margin: 0; }
+
 .actions { display: grid; gap: 0.6rem; margin-top: 1.3rem; }
 .actions .btn-primary { padding: 0.85rem; font-size: 0.95rem; }
-.hint { font-size: 0.76rem; color: var(--ink-faint); text-align: center; margin: 0.1rem 0 0; }
+.hint { font-size: 0.76rem; color: var(--ink-faint); text-align: center; margin: 0.1rem 0 0.5rem; }
 
 /* ── Section titles ── */
 .section-title {
@@ -718,11 +775,11 @@ td.warn { color: var(--no); font-weight: 600; }
 .placeholder strong { color: var(--ink); font-weight: 600; display: block; margin-bottom: 0.3rem; }
 .spinner { color: var(--accent); font-weight: 600; display: grid; place-items: center; min-height: 100vh; }
 
-.result-empty { display: grid; place-items: center; min-height: 460px; }
-
-/* 결과 미리보기(고스트) - 우측 패널을 분석별 안내로 채워 허전함 제거 */
+/* 결과 미리보기(고스트) - 우측 패널을 분석별 안내로 채워 허전함 제거. 언더라이팅·심화분석 공용. */
 .rp { display: flex; flex-direction: column; gap: 1.1rem; min-height: 440px; }
-.rp-top { display: flex; gap: 0.85rem; align-items: flex-start; }
+.rp-top { display: flex; gap: 0.85rem; align-items: flex-start; text-align: left; }
+/* 공용 .empty-ico 는 센터용(margin:0 auto) — 여기선 가로 행이라 auto 마진 제거해 좌측 정렬. */
+.rp-top .empty-ico { margin: 0; flex: none; }
 .rp-top h3 { font-family: var(--font-display); font-size: 1.08rem; font-weight: 600; letter-spacing: -0.01em; margin: 0.15rem 0 0; }
 .rp-top p { color: var(--ink-soft); font-size: 0.85rem; margin: 0.35rem 0 0; line-height: 1.55; }
 .rp-skeleton {
@@ -740,25 +797,12 @@ td.warn { color: var(--no); font-weight: 600; }
 .rp-lines { display: flex; flex-direction: column; gap: 0.6rem; margin-top: auto; padding-top: 0.3rem; }
 .rp-lines span { height: 9px; border-radius: 4px; background: var(--ink-faint); opacity: 0.15; }
 
-/* 결과 전 빈 상태 - 제품 프리뷰(고스트)로 우측을 채워 허전함 제거 */
-.empty-state { text-align: center; max-width: 380px; padding: 1rem; }
+/* 결과 미리보기 아이콘(고스트) - .rp-top 헤더의 엠블럼. 언더라이팅·심화분석 공용. */
 .empty-ico {
   width: 60px; height: 60px; border-radius: 18px; margin: 0 auto 1.1rem;
   display: grid; place-items: center; color: var(--accent);
   background: var(--accent-tint); border: 1px solid var(--line);
 }
-.empty-state h3 { font-family: var(--font-display); font-size: 1.2rem; font-weight: 600; letter-spacing: -0.01em; }
-.empty-state p { color: var(--ink-soft); font-size: 0.9rem; margin: 0.5rem 0 1.4rem; line-height: 1.6; }
-.empty-preview {
-  display: grid; gap: 0.5rem; padding: 1rem; border: 1px dashed var(--line-strong);
-  border-radius: var(--r); background: var(--surface-sunken); opacity: 0.85;
-}
-.empty-prev-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
-.epm { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 0.55rem 0.5rem; }
-.epm .epm-k { display: block; font-size: 0.56rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-faint); font-weight: 600; }
-.epm .epm-bar { display: block; height: 10px; margin-top: 0.45rem; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); opacity: 0.35; }
-.empty-prev-chart { display: flex; align-items: flex-end; gap: 0.4rem; height: 56px; padding: 0.6rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sm); }
-.empty-prev-chart i { flex: 1; border-radius: 3px 3px 0 0; background: var(--accent); opacity: 0.25; }
 
 /* ── History ── */
 .hist-empty { color: var(--ink-soft); font-size: 0.88rem; padding: 0.5rem 0; }
@@ -770,6 +814,12 @@ td.warn { color: var(--no); font-weight: 600; }
 .topnav button { background: transparent; color: var(--ink-soft); padding: 0.45rem 0.9rem; font-size: 0.85rem; border-radius: 7px; }
 .topnav button[aria-current='true'] { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm); }
 .topnav button:hover:not([aria-current='true']) { color: var(--ink); }
+/* 관리자 전용 BETA 배지 - 탭 라벨 우상단에 살짝 겹쳐 띄운다. */
+.nav-beta {
+  margin-left: 0.3rem; font-size: 0.58rem; font-weight: 800; letter-spacing: 0.05em;
+  padding: 0.08rem 0.32rem; border-radius: 999px; vertical-align: 0.28em;
+  background: oklch(55% 0.18 290); color: oklch(99% 0 0);
+}
 
 /* ── Plan pill (FREE / PAID) ── */
 .plan-pill { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; padding: 0.12rem 0.4rem; border-radius: 999px; }
@@ -783,14 +833,17 @@ td.warn { color: var(--no); font-weight: 600; }
 .paywall-bar { max-width: 1320px; margin: 0 auto; padding: 0 clamp(1.25rem, 4vw, 2.5rem); width: 100%; margin-top: var(--gap); }
 .paywall {
   display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  width: 100%;
   padding: 1rem 1.3rem; border-radius: var(--r); border: 1px solid var(--line-strong);
   background: linear-gradient(180deg, var(--accent-tint), var(--surface));
 }
-.paywall.is-empty { border-color: oklch(88% 0.06 26); background: linear-gradient(180deg, var(--no-tint), var(--surface)); }
+/* 소진 상태 - 경보(빨강) 대신 차분한 안내 톤. ProForma 무료 계속 사용 가능 메시지와 결이 맞게. */
+.paywall.is-empty { border-color: var(--line-strong); background: linear-gradient(180deg, var(--accent-tint), var(--surface)); }
 .paywall.card { box-shadow: var(--shadow); }
+.paywall-body { flex: 1 1 auto; min-width: 0; }
 .paywall-title { font-weight: 700; font-size: 1rem; letter-spacing: -0.01em; }
-.paywall.is-empty .paywall-title { color: var(--no); }
-.paywall-desc { margin: 0.25rem 0 0; color: var(--ink-soft); font-size: 0.86rem; max-width: 62ch; }
+.paywall.is-empty .paywall-title { color: var(--accent); }
+.paywall-desc { margin: 0.25rem 0 0; color: var(--ink-soft); font-size: 0.86rem; max-width: 74ch; }
 .paywall-action { flex: none; }
 .paywall-thanks { font-size: 0.85rem; color: var(--go); font-weight: 600; }
 
@@ -810,7 +863,7 @@ td.warn { color: var(--no); font-weight: 600; }
 /* ============================================================
    관리자 콘솔
    ============================================================ */
-/* 관리자 5탭 세그먼트 — 일반 .seg(flex:1·width:150px, 2~3버튼용)를 덮어 내용폭 탭으로.
+/* 관리자 5탭 세그먼트 - 일반 .seg(flex:1·width:150px, 2~3버튼용)를 덮어 내용폭 탭으로.
    짧은 화면에선 줄바꿈. 라벨 길이가 달라도 균일한 패딩으로 정돈되게. */
 .admin-seg { flex: none; flex-wrap: wrap; }
 .admin-seg button { flex: 0 0 auto; width: auto; padding: 0.45rem 0.85rem; }
@@ -818,7 +871,7 @@ td.warn { color: var(--no); font-weight: 600; }
 .table-scroll { overflow-x: auto; }
 /* 내용 기준으로 폭을 잡고(컬럼 안 깨짐), 좁으면 가로 스크롤. 화면 고정 폭 강제 안 함. */
 .admin-table { width: max-content; min-width: 100%; border-collapse: collapse; }
-/* 헤더·데이터 모두 좌측 정렬 — 전역 th,td{right} 상속으로 헤더(좌)·데이터(우)가 어긋나
+/* 헤더·데이터 모두 좌측 정렬 - 전역 th,td{right} 상속으로 헤더(좌)·데이터(우)가 어긋나
    컬럼이 안 맞아 보이던 문제 해소. 숫자열도 좌측 통일(헤더와 정확히 정렬). */
 .admin-table th, .admin-table td { white-space: nowrap; padding: 0.5rem 0.7rem; vertical-align: middle; text-align: left; }
 .admin-table thead th { font-size: 0.74rem; color: var(--ink-faint); font-weight: 700; }
@@ -962,7 +1015,10 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
   padding: 0.7rem 1rem; font-weight: 700;
   background: var(--accent-tint); color: var(--accent); border: 1px solid var(--accent-ring);
 }
-.free-calc:hover:not(:disabled) { background: color-mix(in oklch, var(--accent) 14%, var(--surface)); }
+.free-calc:hover:not(:disabled) {
+  background: oklch(93% 0.06 266);
+  border-color: var(--accent); box-shadow: var(--shadow-sm);
+}
 .free-calc-sub { font-size: 0.72rem; font-weight: 500; color: var(--ink-soft); }
 
 /* 신규 활성화 - 예시 딜 체험 픽커 + 결과 배너 */
@@ -1006,6 +1062,7 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
   background: var(--accent-tint); border: 1px solid var(--accent-ring);
   border-radius: var(--r-pill); padding: 0.15rem 0.55rem;
 }
+.deal-type.market { color: oklch(50% 0.17 300); background: oklch(96% 0.04 300); border-color: oklch(88% 0.07 300); }
 .deal-date { font-size: 0.74rem; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
 .deal-name { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); margin: 0; line-height: 1.35; }
 .deal-loc { font-size: 0.78rem; color: var(--ink-soft); }
@@ -1027,23 +1084,22 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 .stage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; }
 .stage-btn {
   display: flex; flex-direction: row; align-items: center; gap: 0.6rem;
-  padding: 0.6rem 0.7rem; text-align: left; border-radius: var(--r-sm);
+  padding: 0.6rem 1.55rem 0.6rem 0.7rem; text-align: left; border-radius: var(--r-sm);
   background: var(--surface); color: var(--ink);
   border: 1px solid var(--line-strong); box-shadow: var(--shadow-sm);
   position: relative; overflow: hidden;
 }
 .stage-num {
-  flex: none; width: 1.65rem; height: 1.65rem; border-radius: 50%;
-  display: grid; place-items: center;
-  font-size: 0.82rem; font-weight: 700; font-variant-numeric: tabular-nums;
-  background: var(--accent-tint); color: var(--accent); border: 1px solid var(--accent-ring);
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  flex: none; align-self: flex-start; min-width: 1.5rem;
+  font-size: 0.78rem; font-weight: 800; font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em; line-height: 1.5; color: var(--ink-faint);
+  transition: color var(--dur) var(--ease);
 }
 .stage-text { display: flex; flex-direction: column; gap: 0.12rem; min-width: 0; }
 .stage-btn:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-1px); box-shadow: var(--shadow); }
-.stage-btn:hover:not(:disabled) .stage-num { background: var(--accent); color: oklch(99% 0 0); }
+.stage-btn:hover:not(:disabled) .stage-num { color: var(--accent); }
 .stage-label { font-size: 0.92rem; font-weight: 650; }
-.stage-hint { font-size: 0.7rem; color: var(--ink-faint); font-weight: 500; }
+.stage-hint { font-size: 0.7rem; color: var(--ink-faint); font-weight: 500; line-height: 1.35; }
 .stage-btn:hover:not(:disabled) .stage-label { color: var(--accent); }
 
 /* 목적별 그룹 - 10종을 4묶음으로(선택 부담 완화) */
@@ -1055,22 +1111,59 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 }
 .doc-type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
 .doc-type-btn {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem;
-  padding: 0.55rem 0.7rem; text-align: left; cursor: pointer;
-  background: transparent; border: 1px solid oklch(90% 0.02 264); border-radius: 10px;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  position: relative;
+  display: flex; flex-direction: column; align-items: stretch; gap: 0.3rem;
+  padding: 0.6rem 0.75rem; text-align: left; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
-.doc-type-btn:hover { border-color: var(--accent); }
-.doc-type-btn[aria-pressed='true'] { border-color: var(--accent); background: var(--accent-tint); }
-.dt-top { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; width: 100%; }
-.dt-label { font-size: 0.85rem; font-weight: 650; }
-.dt-cost {
-  flex: none; font-size: 0.6rem; font-weight: 700; font-variant-numeric: tabular-nums;
-  padding: 0.08rem 0.36rem; border-radius: 999px; color: var(--accent);
-  background: var(--accent-tint); border: 1px solid var(--accent-ring);
+/* hover: 살짝 뜨는 입체감 */
+.doc-type-btn:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: var(--shadow); }
+/* 선택: 틴트 배경 + accent 라벨색(좌측 바·체크 없음). 크레딧은 우상단 금화 배지로 상시 표시. */
+.doc-type-btn[aria-pressed='true'] {
+  border-color: var(--accent); background: var(--accent-tint);
 }
-.doc-type-btn[aria-pressed='true'] .dt-cost { background: var(--surface); }
-.dt-hint { font-size: 0.67rem; opacity: 0.72; }
+.doc-type-btn[aria-pressed='true'] .dt-label { color: var(--accent); }
+/* 라벨(역할)은 전체 폭 한 줄(긴 제목도 안 접히게 살짝 축소·자간 타이트). */
+.dt-label { font-size: 0.85rem; font-weight: 650; line-height: 1.3; letter-spacing: -0.01em; color: var(--ink); }
+.dt-hint { font-size: 0.72rem; color: var(--ink-faint); line-height: 1.3; }
+/* 크레딧 = 주조 금속 동전(브랜드 블루). 실제 각인된 코인 느낌: conic 금속반사 + 도드라진 테두리 링 + 각인 숫자.
+   시각은 공유하고 배치만 분리 - 버튼 코너(.dt-coin/.stage-coin)는 absolute, 상단 잔액(.credit-coin)은 인라인. */
+.dt-coin,
+.stage-coin,
+.credit-coin {
+  /* 코인 주조색 - 여기만 바꾸면 세 코인 전부 반영. 보라색 시도. */
+  --coin: oklch(56% 0.19 300);
+  border-radius: 999px;
+  display: grid; place-items: center;
+  font-weight: 800; font-variant-numeric: tabular-nums; color: oklch(98% 0.01 300);
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 42%),
+    conic-gradient(from 215deg,
+      color-mix(in oklab, var(--coin) 58%, white),
+      color-mix(in oklab, var(--coin) 82%, black) 90deg,
+      color-mix(in oklab, var(--coin) 52%, white) 180deg,
+      color-mix(in oklab, var(--coin) 84%, black) 270deg,
+      color-mix(in oklab, var(--coin) 58%, white));
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.32),
+    inset 0 0 0 1.5px color-mix(in oklab, var(--coin) 50%, white),
+    inset 0 0 0 2.5px color-mix(in oklab, var(--coin) 80%, black);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+}
+/* 버튼 코너 배지 - absolute라 라벨 흐름 폭을 안 먹음(긴 라벨과 겹쳐도 무방). */
+.dt-coin,
+.stage-coin {
+  position: absolute; top: 0.1rem; right: 0.1rem;
+  width: 1.4rem; height: 1.4rem; font-size: 0.68rem;
+}
+/* 상단 바 잔액 동전 - 인라인, 자릿수 늘면 알약처럼 가로로 늘어남(원형 유지). */
+.credit-coin {
+  display: inline-grid; vertical-align: middle;
+  min-width: 1.5rem; height: 1.5rem; padding: 0 0.34rem;
+  font-size: 0.8rem; line-height: 1;
+}
 
 /* 사용 방법 3단계 스트립 */
 .use-steps {
@@ -1089,6 +1182,8 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 }
 .us-t { font-size: 0.74rem; line-height: 1.35; color: var(--ink-faint); }
 .us-t b { color: var(--ink); font-weight: 650; }
+/* 스텝 텍스트 안 별표는 작은 폰트에 맞춰 축소(폼 라벨의 큰 별표가 줄높이를 부풀리는 것 방지) */
+.us-t .req { font-size: 0.85rem; line-height: 1; vertical-align: -0.02em; margin-left: 0.04em; }
 .use-tip { margin: 0 0 1rem; font-size: 0.74rem; color: var(--ink-faint); }
 .use-tip b { color: var(--ink); }
 @media (max-width: 720px) { .use-steps { grid-template-columns: 1fr; } }
@@ -1108,11 +1203,18 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 .dg-v { color: var(--ink); line-height: 1.4; }
 
 /* 코드 계산 입력 그리드(BOV·개발타당성) */
-.calc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem 0.7rem; }
-.calc-field { display: flex; flex-direction: column; gap: 0.2rem; }
-.calc-field label { font-size: 0.72rem; font-weight: 600; color: var(--ink-faint); }
+.calc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+/* 언더라이팅 폼과 동일한 그룹 카드 - 필드 구분 + 라벨↔입력↔힌트 한 묶음 */
+.calc-field {
+  display: flex; flex-direction: column; gap: 0.35rem; min-width: 0;
+  padding: 0.65rem 0.75rem 0.7rem;
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.calc-field:focus-within { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+.calc-field label { font-size: 0.78rem; font-weight: 600; color: var(--ink-soft); }
 .calc-field input { width: 100%; }
-.calc-hint { font-size: 0.64rem; opacity: 0.66; }
+.calc-hint { font-size: 0.66rem; color: var(--ink-faint); opacity: 0.85; }
 
 /* 코드 확정 수치 카드 - AI 서술 위에 결정론적 수치 강조 */
 .calc-card { border: 1px solid var(--accent); border-radius: 12px; padding: 0.9rem 1rem; background: linear-gradient(180deg, var(--accent-tint), var(--surface)); margin-bottom: 0.5rem; }
@@ -1238,12 +1340,13 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 }
 .checkout-x {
   position: absolute; top: 0.9rem; right: 0.9rem;
-  width: 32px; height: 32px; display: grid; place-items: center;
+  width: 32px; height: 32px; padding: 0; display: grid; place-items: center;
   border: 1px solid var(--line); border-radius: 999px;
   background: var(--surface); color: var(--ink-soft);
   font-size: 0.82rem; line-height: 1; cursor: pointer;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
+.checkout-x svg { display: block; }
 .checkout-x:hover:not(:disabled) { background: var(--surface-sunken); color: var(--ink); border-color: var(--line-strong); }
 .checkout-x:disabled { opacity: 0.4; cursor: default; }
 
@@ -1261,13 +1364,16 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 .checkout-sub { margin: 0.2rem 0 0; font-size: 0.8rem; color: var(--ink-soft); }
 .checkout-balance {
   margin-left: auto; flex: none;
-  display: inline-flex; align-items: baseline; gap: 0.25rem;
-  padding: 0.4rem 0.75rem; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 0.28rem;
+  padding: 0.4rem 0.8rem; border-radius: 999px;
   background: var(--accent-tint); color: var(--accent);
-  font-size: 0.8rem; white-space: nowrap;
+  font-size: 0.8rem; line-height: 1; white-space: nowrap;
 }
-.checkout-balance small { font-size: 0.68rem; color: var(--ink-soft); }
-.checkout-balance b { font-size: 1.02rem; font-weight: 800; letter-spacing: -0.01em; }
+.checkout-balance small { font-size: 0.68rem; line-height: 1; color: var(--ink-soft); }
+.checkout-balance b {
+  font-size: 1.02rem; line-height: 1; font-weight: 800; letter-spacing: -0.01em;
+  transform: translateY(-1px); /* 큰 숫자 광학 중심 보정 */
+}
 
 .checkout-loading, .checkout-soon {
   padding: 2rem 1.5rem; text-align: center; color: var(--ink-soft); font-size: 0.9rem;
@@ -1278,6 +1384,43 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
   border: 2px solid var(--accent-tint); border-top-color: var(--accent);
   animation: spin 0.8s linear infinite;
 }
+
+/* ── 결제 오픈 전 안내(수동 크레딧 지급) ── */
+.checkout-notice {
+  margin-top: 1.1rem;
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(180deg, var(--accent-tint), var(--surface));
+  border-radius: var(--r-md, 14px);
+  padding: 1.9rem 1.5rem 1.6rem;
+  text-align: center;
+  display: grid; gap: 0.55rem; justify-items: center;
+}
+.checkout-notice-icon {
+  width: 48px; height: 48px; display: grid; place-items: center;
+  border-radius: 999px; background: var(--surface); border: 1px solid var(--line-strong);
+  font-size: 1.35rem; color: var(--accent); margin-bottom: 0.25rem;
+}
+.checkout-notice-lead {
+  margin: 0; font-size: 1.12rem; font-weight: 700; color: var(--ink); letter-spacing: -0.01em;
+}
+.checkout-notice-lead b { color: var(--accent); }
+.checkout-notice-body {
+  margin: 0; font-size: 0.9rem; line-height: 1.65; color: var(--ink-soft);
+}
+.checkout-notice-optin {
+  display: inline-flex; align-items: center; gap: 0.45rem; margin-top: 0.35rem;
+  font-size: 0.8rem; color: var(--ink-soft); cursor: pointer;
+}
+.checkout-notice-optin input {
+  width: 15px; height: 15px; flex: none; accent-color: var(--accent); cursor: pointer;
+}
+.checkout-notice-mail {
+  margin-top: 0.55rem; padding: 0.72rem 1.6rem; max-width: 100%;
+  text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+}
+.checkout-notice-fine { margin: 0.3rem 0 0; font-size: 0.8rem; color: var(--ink-soft); }
+.checkout-notice-fine a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.checkout-notice-fine a:hover { text-decoration: underline; text-underline-offset: 2px; }
 
 /* ── Pack cards ── */
 .pack-grid {
@@ -1460,9 +1603,12 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 /* 보고서 모달 - 서버 렌더 HTML(blob)을 iframe 으로. 새 창 대신 인앱 모달. */
 .report-frame { width: 100%; height: 76vh; border: none; display: block; border-radius: var(--r-md); background: #fff; }
 @media (max-width: 720px) { .report-frame { height: 80vh; } }
-.rm-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem;
+.rm-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;
   position: sticky; top: 0; z-index: 3; background: var(--surface);
-  padding-bottom: 0.7rem; border-bottom: 1px solid var(--line); }
+  /* 모달 패딩(1.4rem)만큼 위·좌·우로 확장해 헤더가 모달 가장자리까지 덮게 →
+     sticky 헤더 위/뒤 틈으로 스크롤 콘텐츠가 비쳐 보이던 현상 제거. overflow:auto+border-radius 라 모서리는 자동 라운드. */
+  margin: -1.4rem -1.4rem 1rem; padding: 1.4rem 1.4rem 0.7rem;
+  border-bottom: 1px solid var(--line); }
 .rm-tool { display: block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-press); }
 .rm-title { display: block; font-size: 1.15rem; letter-spacing: -0.01em; margin: 0.15rem 0; }
 .rm-date { font-size: 0.74rem; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
@@ -1764,7 +1910,7 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 }
 
 /* ── 메뉴 안내 - 언더라이팅 vs 심화 분석 ── */
-.modes-sub { color: var(--ink-soft); margin: 0.5rem auto 0; max-width: 52ch; line-height: 1.6; }
+.modes-sub { color: var(--ink-soft); margin: 0.5rem auto 0; line-height: 1.6; }
 .mode-grid { display: grid; gap: var(--gap); grid-template-columns: 1fr; }
 @media (min-width: 760px) { .mode-grid { grid-template-columns: 1fr 1fr; } }
 .mode-card {
@@ -1813,18 +1959,22 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 }
 .vc-row { display: grid; grid-template-columns: 1.1fr 1.45fr 1.45fr; align-items: stretch; }
 .vc-row + .vc-row { border-top: 1px solid var(--line); }
-.vc-cell { padding: 1rem 1.15rem; font-size: 0.9rem; line-height: 1.45; display: flex; flex-direction: column; justify-content: center; }
+.vc-cell { padding: 1.05rem 1.3rem; font-size: 0.9rem; line-height: 1.45; display: flex; flex-direction: column; justify-content: center; }
 .vc-row-head .vc-cell {
   font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;
   color: var(--ink-faint); font-weight: 700; background: var(--surface-sunken);
 }
 .vc-item strong { font-weight: 650; }
-.vc-detail { font-size: 0.74rem; color: var(--ink-faint); margin-top: 0.15rem; }
+.vc-detail { font-size: 0.74rem; color: var(--ink-faint); margin-top: 0.2rem; }
 .vc-them { color: var(--ink-soft); }
-/* 강조 컬럼 - 우리 */
-.vc-us { font-weight: 600; color: var(--ink); background: var(--accent-tint); flex-direction: row; align-items: center; gap: 0.45rem; }
+/* 강조 컬럼 - 우리: 좌측 정렬로 통일(체크+값 시작점 일치) + 좌측 경계선으로 컬럼 구분 */
+.vc-us {
+  font-weight: 650; color: var(--ink); background: var(--accent-tint);
+  flex-direction: row; align-items: center; justify-content: flex-start; gap: 0.5rem;
+  box-shadow: inset 1px 0 0 var(--accent-ring);
+}
 .vc-us svg { color: var(--accent); flex: none; }
-.vc-row-head .vc-us { color: var(--accent); background: var(--accent-tint); }
+.vc-row-head .vc-us { color: var(--accent); background: var(--accent-tint); letter-spacing: 0.05em; }
 .vc-foot { margin: 1.1rem 0 0; color: var(--ink-soft); font-size: 0.88rem; }
 .vc-disc { color: var(--ink-faint); font-size: 0.76rem; }
 @media (max-width: 640px) {
@@ -1875,7 +2025,8 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 /* ════════════════════════════════════════════════════════════
    시장 인텔리전스 - 마켓 브리핑(다크 히어로) + 딜 카드 그리드
    ════════════════════════════════════════════════════════════ */
-.mi { max-width: 100%; margin: 0 auto; padding: var(--pad); }
+/* main 이 이미 좌우 패딩을 주므로 .mi 는 추가 패딩 없이(이중 패딩 방지) 다른 탭 본문과 동일 폭 정렬. */
+.mi { max-width: 100%; padding: 0; }
 
 .mi-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; margin-bottom: var(--gap); }
 .mi-eyebrow {
@@ -1917,7 +2068,8 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 }
 .brief > * { position: relative; }
 
-.brief-top { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; margin-bottom: 0.9rem; }
+.brief-top { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+.brief-id { display: inline-flex; align-items: center; gap: 0.65rem; flex-wrap: wrap; min-width: 0; }
 .brief-badge {
   display: inline-flex; align-items: center; gap: 0.5rem;
   font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
@@ -1939,10 +2091,10 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 .brief-headline {
   font-family: var(--font-display); font-weight: 600;
   font-size: clamp(1.5rem, 1.1rem + 2vw, 2.5rem); line-height: 1.14; letter-spacing: -0.025em;
-  margin: 0 0 0.7rem; color: oklch(99% 0.005 266); max-width: 24ch;
+  margin: 0 0 0.7rem; color: oklch(99% 0.005 266);
 }
 .brief-outlook {
-  color: oklch(86% 0.018 266); line-height: 1.65; margin: 0 0 1.6rem; max-width: 78ch; font-size: 0.96rem;
+  color: oklch(86% 0.018 266); line-height: 1.65; margin: 0 0 1.6rem; font-size: 0.96rem;
 }
 
 /* flex 균등분할 - 블록이 조건부라 셋 중 일부만 있어도 항상 고르게 나눔(빈 열 방지) */
@@ -2040,6 +2192,24 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 }
 .fc-loc { font-size: 0.74rem; color: var(--ink-faint); }
 
+/* fc-top 배지 클릭 필터: 유형·출처 배지를 눌러 그 값으로 카드 묶기. 지역·날짜는 표시 전용. */
+.fc-chip { cursor: pointer; }
+.fc-chip:hover { box-shadow: var(--shadow-sm); }
+.fc-chip.on { box-shadow: 0 0 0 1.5px var(--surface), 0 0 0 3px var(--accent); }
+
+/* 유형·출처 외 필터(시장뉴스/출처) 활성 시 상단에 표시 + 해제 */
+.mi-active-filter {
+  display: inline-flex; align-items: center; gap: 0.45rem; margin: 0 0 0.7rem;
+  padding: 0.3rem 0.65rem; font-size: 0.8rem; color: var(--ink-soft);
+  background: var(--accent-tint); border-radius: 999px;
+}
+.mi-active-filter b { color: var(--accent); }
+.mi-filter-clear {
+  padding: 0; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-faint); font-size: 0.7rem; line-height: 1;
+}
+.mi-filter-clear:hover { color: var(--no); border-color: var(--no); }
+
 .fc-title {
   font-size: 1.05rem; line-height: 1.36; letter-spacing: -0.012em; margin: 0 0 0.5rem; color: var(--ink);
   display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
@@ -2048,7 +2218,6 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
   color: var(--ink-soft); font-size: 0.875rem; line-height: 1.55; margin: 0 0 0.9rem;
   display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
-.fc-foot { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.9rem; flex-wrap: wrap; }
 .fc-source {
   font-size: 0.68rem; color: var(--ink-faint); background: var(--surface-sunken);
   padding: 0.12rem 0.45rem; border-radius: var(--r-sm); border: 1px solid var(--line);
@@ -2155,28 +2324,32 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 }
 .brief-archive-list, .deep-history-list { display: flex; gap: 0.5rem; overflow-x: auto; padding-bottom: 0.2rem; }
 .brief-archive-chip, .deep-history-chip {
-  position: relative; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem;
-  min-width: 150px; max-width: 240px; padding: 0.5rem 0.75rem 0.5rem 0.9rem; border-radius: var(--r-md);
-  background: var(--surface); border: 1px solid var(--line); text-align: left;
-  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
+  flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 0.22rem;
+  min-width: 160px; max-width: 240px; padding: 0.55rem 0.8rem; border-radius: var(--r-md);
+  background: var(--surface); border: 1px solid var(--line); text-align: left; cursor: pointer;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease), background var(--dur) var(--ease);
 }
-.brief-archive-chip::before, .deep-history-chip::before {
-  content: ''; position: absolute; left: 0; top: 0.5rem; bottom: 0.5rem; width: 3px; border-radius: 99px;
-  background: var(--line-strong); transition: background var(--dur) var(--ease);
+.brief-archive-chip:hover, .deep-history-chip:hover { border-color: var(--accent-ring); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+.brief-archive-chip.active, .deep-history-chip.active {
+  border-color: var(--accent); background: var(--accent-tint); box-shadow: var(--shadow-sm);
 }
-.brief-archive-chip:hover, .deep-history-chip:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
-.brief-archive-chip.active, .deep-history-chip.active { border-color: var(--accent); box-shadow: var(--glow-accent); }
-.brief-archive-chip.active::before, .deep-history-chip.active::before { background: var(--accent); }
-.ba-date, .dh-date { font-size: 0.66rem; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.ba-date, .dh-date {
+  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--ink-faint); font-variant-numeric: tabular-nums;
+}
 .ba-title, .dh-title {
-  font-size: 0.8rem; font-weight: 600; color: var(--ink); max-width: 220px; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis;
+  font-size: 0.82rem; font-weight: 650; color: var(--ink); max-width: 220px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; line-height: 1.3;
 }
+.brief-archive-chip.active .ba-title, .deep-history-chip.active .dh-title { color: var(--accent-press); }
+/* '최신으로' 리셋 - 페이저(화살표) 밖 왼쪽에 배치해 › 반복 클릭 시 오작동 방지. */
 .brief-latest {
-  margin-left: 0.6rem; padding: 0; font-size: 0.76rem; font-weight: 700; color: oklch(82% 0.09 250);
-  background: none; border: none;
+  flex: none; padding: 0.18rem 0.6rem; border-radius: var(--r-pill);
+  font-size: 0.72rem; font-weight: 700; color: oklch(88% 0.09 250);
+  background: oklch(62% 0.16 250 / 0.16); border: 1px solid oklch(70% 0.12 250 / 0.35);
+  cursor: pointer; transition: background 120ms ease, color 120ms ease;
 }
-.brief-latest:hover { color: oklch(90% 0.1 250); text-decoration: underline; }
+.brief-latest:hover { background: oklch(62% 0.16 250 / 0.28); color: oklch(94% 0.1 250); }
 
 .deep-panel {
   position: relative; padding: var(--pad); margin: 0 auto var(--gap); border-radius: var(--r-lg);
@@ -2386,3 +2559,142 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 .ss-cta-note { font-size: 0.78rem; color: var(--ink-faint); }
 
 @media (max-width: 640px) { .ss-deal, .ss-body { padding: 1.1rem; } }
+
+/* ─────────────────────────────────────────────────────────────
+   자산관리(PM) - 임대차 관리
+   ───────────────────────────────────────────────────────────── */
+.pm-layout { display: grid; grid-template-columns: 268px 1fr; gap: var(--gap); align-items: start; }
+@media (max-width: 900px) { .pm-layout { grid-template-columns: 1fr; } }
+
+.pm-side-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; }
+.pm-blist { list-style: none; margin: 0.4rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
+.pm-bitem { width: 100%; text-align: left; display: grid; gap: 2px; padding: 0.6rem 0.75rem; border: 1px solid var(--line);
+  border-radius: var(--r-sm); background: var(--surface); cursor: pointer; transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease); }
+.pm-bitem:hover { border-color: var(--line-strong); }
+.pm-bitem.on { border-color: var(--accent); background: var(--accent-tint); }
+.pm-bname { font-weight: 650; color: var(--ink); font-size: 0.95rem; }
+.pm-bmeta { font-size: 0.78rem; color: var(--ink-faint); }
+.pm-bform { display: grid; gap: 0.5rem; padding: 0.75rem; margin-bottom: 0.6rem; border: 1px dashed var(--line-strong); border-radius: var(--r-sm); }
+.pm-bform input { width: 100%; }
+
+.pm-detail { display: grid; gap: var(--gap); }
+.pm-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.6rem; }
+.pm-detail-actions { display: flex; gap: 0.4rem; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.pm-title { font-size: 1.25rem; margin: 0 0 2px; }
+.pm-two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+@media (max-width: 720px) { .pm-two { grid-template-columns: 1fr; } }
+.pm-flags { display: grid; gap: 0.4rem; }
+
+/* 렌트롤 표 */
+.pm-rentroll { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.pm-rentroll th, .pm-rentroll td { padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--line); text-align: left; }
+.pm-rentroll th.num, .pm-rentroll td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.pm-rentroll thead th { color: var(--ink-faint); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.pm-row-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+.pm-dday { display: inline-block; margin-left: 0.4rem; font-size: 0.68rem; font-weight: 700; padding: 1px 6px; border-radius: var(--r-pill);
+  background: var(--surface-sunken); color: var(--ink-soft); }
+.pm-dday.no { background: var(--no-tint); color: var(--no); }
+.pm-dday.cond { background: var(--cond-tint); color: var(--cond); }
+.pm-dday.go { background: var(--go-tint); color: var(--go); }
+
+/* 임대료 가로 막대 */
+.rent-bars { display: grid; gap: 0.45rem; }
+.rb-row { display: grid; grid-template-columns: 130px 1fr 88px; align-items: center; gap: 0.6rem; }
+.rb-label { font-size: 0.82rem; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rb-track { height: 12px; background: var(--surface-sunken); border-radius: var(--r-pill); overflow: hidden; }
+.rb-fill { height: 100%; border-radius: var(--r-pill); background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.rb-value { text-align: right; font-size: 0.82rem; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--ink); }
+@media (max-width: 560px) { .rb-row { grid-template-columns: 96px 1fr 76px; } }
+
+/* 다가오는 일정 리스트 */
+.lease-cal { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
+.lc-item { display: flex; align-items: center; gap: 0.7rem; padding: 0.55rem 0.65rem; border: 1px solid var(--line); border-radius: var(--r-sm); }
+.lc-dday { flex-shrink: 0; min-width: 54px; text-align: center; font-size: 0.74rem; font-weight: 800; padding: 3px 8px; border-radius: var(--r-pill);
+  background: var(--surface-sunken); color: var(--ink-soft); }
+.lc-dday.no { background: var(--no-tint); color: var(--no); }
+.lc-dday.cond { background: var(--cond-tint); color: var(--cond); }
+.lc-dday.go { background: var(--go-tint); color: var(--go); }
+.lc-main { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex: 1; min-width: 0; }
+.lc-title { font-size: 0.9rem; color: var(--ink); display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
+.lc-type { font-size: 0.72rem; font-weight: 700; padding: 1px 7px; border-radius: var(--r-pill); background: var(--accent-tint); color: var(--accent-press); }
+.lc-type.t-expiry { background: var(--no-tint); color: var(--no); }
+.lc-type.t-escalation { background: var(--cond-tint); color: var(--cond); }
+.lc-date { font-size: 0.8rem; color: var(--ink-faint); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+
+/* 임대차 폼 */
+.lease-form { display: grid; gap: 0.8rem; }
+.lf-extract { display: grid; gap: 0.4rem; padding: 0.75rem; border: 1px dashed var(--line-strong); border-radius: var(--r-sm); background: var(--surface-sunken); }
+.lf-extract textarea { width: 100%; }
+.lf-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
+@media (max-width: 640px) { .lf-grid { grid-template-columns: 1fr 1fr; } }
+.lf-field { display: grid; gap: 3px; }
+.lf-field label { font-size: 0.75rem; color: var(--ink-soft); }
+.lf-field input { width: 100%; }
+.lf-notes { display: grid; gap: 3px; }
+.lf-notes textarea { width: 100%; }
+.lf-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+
+/* 작은 세그먼트(자산유형 선택) - 좁은 컨테이너에서 폭 고정으로 넘치지 않게 축소 허용 */
+.seg-sm { display: flex; flex-wrap: wrap; }
+.seg-sm button { font-size: 0.78rem; padding: 0.3rem 0.55rem; width: auto; min-width: 0; }
+
+/* PM 빈 상태 CTA */
+.pm-empty { display: grid; gap: 0.6rem; justify-items: start; }
+.pm-bform select { width: 100%; }
+
+/* ── 업계 헤드라인 보드 (틀은 main 표준: max-width/중앙/패딩은 main 담당, .mi 와 동일) ── */
+.hl-wrap { max-width: 100%; }
+.hl-state { color: var(--ink-faint); padding: 2.5rem 0; text-align: center; }
+.hl-error { color: var(--danger, #b91c1c); }
+
+.hl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--gap); align-items: start; }
+.hl-col { border: 1px solid var(--line); border-top: 3px solid var(--hl-accent, var(--ink-faint)); border-radius: var(--r-sm); background: var(--surface); overflow: hidden; }
+.hl-col-head { display: flex; align-items: center; justify-content: space-between; padding: 0.7rem 0.85rem; border-bottom: 1px solid var(--line); }
+.hl-badge { font-weight: 700; font-size: 0.9rem; color: var(--hl-accent, var(--ink)); }
+.hl-count { font-size: 0.75rem; color: var(--ink-faint); background: var(--accent-tint); border-radius: var(--r-pill); padding: 0.1rem 0.5rem; }
+
+.hl-list { list-style: none; margin: 0; padding: 0.25rem 0; }
+.hl-item + .hl-item { border-top: 1px solid var(--line); }
+.hl-link { display: flex; gap: 0.6rem; align-items: baseline; justify-content: space-between; padding: 0.6rem 0.85rem; text-decoration: none; color: inherit; transition: background 120ms ease; }
+a.hl-link:hover { background: color-mix(in srgb, var(--hl-accent, var(--accent)) 10%, transparent); }
+a.hl-link:hover .hl-title { color: var(--hl-accent, var(--accent)); }
+.hl-link--dead { cursor: default; opacity: 0.7; }
+.hl-title { font-size: 0.92rem; line-height: 1.4; font-weight: 500; color: var(--ink); }
+.hl-time { flex: 0 0 auto; font-size: 0.72rem; color: var(--ink-faint); white-space: nowrap; }
+.hl-foot { margin-top: var(--gap); font-size: 0.78rem; color: var(--ink-faint); }
+
+@media (max-width: 640px) { .hl-grid { grid-template-columns: 1fr; } }
+
+/* ── 마켓 브리핑: 날짜 네비게이터 + 핵심요약(TL;DR) ───────── */
+/* 브리핑 페이저 - 두 화살표 + 위치를 한 컨트롤로 묶어 prev/next 관계를 분명히.
+   ‹ = 더 최신(onNewer), › = 더 지난/과거(onOlder). 사용자 기대(목록을 앞→뒤로 넘김)에 맞춤. */
+.brief-pager {
+  display: inline-flex; align-items: center; gap: 0.1rem; flex: none;
+  padding: 0.18rem; border-radius: var(--r-pill);
+  background: oklch(100% 0 0 / 0.08); border: 1px solid oklch(100% 0 0 / 0.14);
+}
+.brief-navbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 27px; height: 27px; border-radius: 50%; font-size: 1.1rem; line-height: 1;
+  color: oklch(96% 0.01 266); background: transparent; border: none; cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.brief-navbtn:hover:not(:disabled) { background: oklch(100% 0 0 / 0.16); }
+.brief-navbtn:disabled { opacity: 0.28; cursor: default; }
+.brief-pos {
+  min-width: 2.5rem; text-align: center; font-size: 0.72rem; font-weight: 700;
+  font-variant-numeric: tabular-nums; letter-spacing: 0.02em; color: oklch(90% 0.02 266);
+}
+.brief-pos-sep { opacity: 0.45; margin: 0 0.12rem; }
+
+.brief-tldr { display: flex; align-items: flex-start; gap: 0.6rem; margin: 0 0 0.7rem; }
+.brief-tldr-label {
+  flex: 0 0 auto; margin-top: 0.35rem;
+  font-size: 0.66rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  color: oklch(88% 0.12 250); background: oklch(62% 0.16 250 / 0.18);
+  border: 1px solid oklch(70% 0.12 250 / 0.4); border-radius: var(--r-pill); padding: 0.16rem 0.55rem;
+}
+.brief-tldr .brief-headline { margin: 0; }
+
+/* 오늘의 딜 섹션 부제 - 거래 신호임을 명시(헤드라인과 성격 구분) */
+.mi-section-sub { margin: 0.15rem 0 0; font-size: 0.8rem; color: var(--muted, #64748b); }

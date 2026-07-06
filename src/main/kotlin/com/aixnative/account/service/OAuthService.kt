@@ -113,6 +113,7 @@ class OAuthService(
         val accessToken = exchangeCode(p, code, state, base)
         val profile = fetchProfile(p, accessToken)
         val user = findOrCreate(p, profile)
+        user.recordLogin(java.time.Instant.now()) // 리텐션 추적(마지막 접속·횟수)
         val userId = requireNotNull(user.id)
         return jwtService.issue(AuthPrincipal(userId, user.tenantId, user.email, user.role.name))
     }

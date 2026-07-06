@@ -40,6 +40,8 @@ class SecurityConfig(private val jwtAuthFilter: JwtAuthFilter) {
                     "/api/newsletter/unsubscribe",
                     // 읽기전용 공유 보고서(토큰 기반, 무인증 열람).
                     "/api/public/**",
+                    // 경량 행동 이벤트 수집(익명 방문자 포함). 서비스단 화이트리스트로 남용 차단.
+                    "/api/events",
                     "/actuator/health",
                     "/actuator/health/**",
                     "/error",

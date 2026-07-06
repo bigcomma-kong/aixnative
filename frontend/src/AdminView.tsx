@@ -35,8 +35,9 @@ export function AdminView({ currentEmail }: AdminViewProps) {
     <>
       <div className="page-head">
         <div>
-          <span className="eyebrow">관리자</span>
+          <span className="eyebrow">ADMIN CONSOLE</span>
           <h1>운영 콘솔</h1>
+          <p className="page-sub">가입·크레딧·매출 지표와 운영 상태를 한 화면에서 관리합니다.</p>
         </div>
         <div className="seg admin-seg" role="group" aria-label="관리자 섹션">
           <button type="button" aria-pressed={section === 'dashboard'} onClick={() => setSection('dashboard')}>대시보드</button>
@@ -84,6 +85,7 @@ function DashboardPanel() {
         <StatCard k="이메일 인증" v={String(stats.users.verified)} sub={`유료 전환 ${stats.users.paid}명`} />
         <StatCard k="총 분석 실행" v={String(stats.runs.total)} sub={`오늘 ${stats.runs.today} · 7일 ${stats.runs.last7d} · 성공 ${stats.runs.success}`} accent />
         <StatCard k="결제 매출" v={`${KRW(stats.payments.totalKrw)}원`} sub={`승인 ${stats.payments.confirmedCount}건`} accent />
+        <StatCard k="7일 활성 사용자" v={String(stats.events.activeUsers7d)} sub="최근 7일 화면 진입(로그인) 기준" />
       </div>
 
       <div className="dash-grid">
@@ -113,10 +115,42 @@ function DashboardPanel() {
             </table>
           )}
         </div>
+
+        <div className="card">
+          <div className="section-title">행동 퍼널 (오늘 · 7일)</div>
+          {FUNNEL_STEPS.every(([k]) => !(stats.events.last7d[k])) ? (
+            <p className="hint">아직 행동 이벤트가 없습니다.</p>
+          ) : (
+            <table className="admin-table">
+              <thead>
+                <tr><th>단계</th><th className="num">오늘</th><th className="num">7일</th></tr>
+              </thead>
+              <tbody>
+                {FUNNEL_STEPS.map(([k, label]) => (
+                  <tr key={k}>
+                    <td>{label}</td>
+                    <td className="num">{stats.events.today[k] ?? 0}</td>
+                    <td className="num"><b>{stats.events.last7d[k] ?? 0}</b></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </>
   )
 }
+
+/** 행동 퍼널 표시 순서·라벨(가입 유입 → 무료 체험 → 과금 진입 → 완료). */
+const FUNNEL_STEPS: ReadonlyArray<readonly [string, string]> = [
+  ['page_view', '화면 진입'],
+  ['free_calc', '무료 계산'],
+  ['analysis_start', '분석 시작(과금 진입)'],
+  ['analysis_done', '분석 완료'],
+  ['checkout_view', '크레딧 화면'],
+  ['credit_request', '크레딧 요청'],
+]
 
 function StatCard({ k, v, sub, accent }: { k: string; v: string; sub?: string; accent?: boolean }) {
   return (
@@ -242,7 +276,7 @@ function UsersPanel({ currentEmail }: { currentEmail: string }) {
           <thead>
             <tr>
               <th>이메일</th><th>권한</th><th>상태</th><th>인증</th><th>플랜</th><th>크레딧</th>
-              <th>가입</th><th className="admin-actions-col">크레딧 조정 · 권한 · 계정</th>
+              <th>가입</th><th>마지막 접속</th><th className="admin-actions-col">크레딧 조정 · 권한 · 계정</th>
             </tr>
           </thead>
           <tbody>
@@ -264,6 +298,11 @@ function UsersPanel({ currentEmail }: { currentEmail: string }) {
                   <td>{u.plan}</td>
                   <td className="num"><b>{u.creditBalance}</b></td>
                   <td className="num admin-date">{fmtDate(u.createdAt)}</td>
+                  <td className="num admin-date">
+                    {u.lastLoginAt
+                      ? <span title={`누적 ${u.loginCount}회`}>{fmtDate(u.lastLoginAt)}</span>
+                      : <span className="muted-x">미접속</span>}
+                  </td>
                   <td>
                     <div className="admin-row-actions">
                       <input

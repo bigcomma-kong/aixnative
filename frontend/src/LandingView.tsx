@@ -109,7 +109,7 @@ const STATS = [
   { v: '1분', k: '딜 한 건 심사' },
   { v: '4종', k: 'AI 분석 파이프라인' },
   { v: '9종', k: '심화 분석 도구' },
-  { v: '무료', k: '가입 시 크레딧' },
+  { v: '무료', k: '가입 즉시 크레딧' },
 ] as const
 
 const TRUST = ['자산운용', '디벨로퍼', 'REIT', 'PE / 펀드', '중개법인']
@@ -195,7 +195,7 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
             <div className="avatar-stack">
               <span className="av">K</span><span className="av">L</span><span className="av">P</span>
             </div>
-            <span className="hero-proof-text">카드 등록 없이 - 무료 크레딧으로 시작</span>
+            <span className="hero-proof-text">카드 등록 없이 - 가입 즉시 무료 분석</span>
           </div>
         </div>
 
@@ -302,7 +302,7 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
         </div>
         <p className="vc-foot">
           전문가 한 건 비용으로 수십 건을 돌려봅니다.
-          <span className="vc-disc"> * 비용·소요 시간은 예시이며 실제는 사례마다 다릅니다.</span>
+          <span className="vc-disc"> * 비용·소요 시간은 예시이며 실제는 사례마다 다르며, 단계 별 비용은 추후 변경될 수 있습니다.</span>
         </p>
       </section>
 
@@ -318,13 +318,13 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
             더 세분화된 전체 결과를 받습니다.
           </p>
         </div>
-        <SampleShowcase onSignup={() => focusAuth('signup')} />
+        <SampleShowcase />
       </section>
 
       <section className="auth-section reveal" aria-labelledby="auth-h">
         <div className="auth-section-copy">
           <h2 id="auth-h" className="auth-section-h">지금 첫 딜을<br />심사해 보세요</h2>
-          <p className="auth-section-sub">무료 크레딧으로 시작하세요. 소셜은 즉시, 이메일은 인증 후 지급 · 카드 등록 불필요.</p>
+          <p className="auth-section-sub">가입 즉시 무료 크레딧. 카드 등록은 필요 없습니다.</p>
           <ul className="auth-bullets">
             <li><Check /> ProForma 지표는 언제나 무료</li>
             <li><Check /> AI 분석 = 버튼 한 번, 분석별 1~5크레딧</li>

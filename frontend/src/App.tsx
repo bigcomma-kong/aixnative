@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { api, tokenStore, type AuthResult, type UserRole } from './api'
+import { api, tokenStore, track, type AuthResult, type UserRole } from './api'
 import { LandingView } from './LandingView'
 import { UnderwriteView } from './UnderwriteView'
 import { DocAnalysisView } from './DocAnalysisView'
-import { MarketFeedView } from './MarketFeedView'
-import { CreditHistoryView } from './CreditHistoryView'
-import { MyDealsView } from './MyDealsView'
+import { MarketView } from './MarketView'
+import { MyView } from './MyView'
+import { PropertyView } from './PropertyView'
 import { AdminView } from './AdminView'
 import { ResetPasswordView } from './ResetPasswordView'
 import { Paywall } from './Paywall'
@@ -36,7 +36,7 @@ function consumeOAuthHash(): { token?: string; error?: string } {
 }
 
 type Plan = 'FREE' | 'PAID'
-type Tab = 'feed' | 'mydeals' | 'underwrite' | 'advanced' | 'credits' | 'admin'
+type Tab = 'feed' | 'mydeals' | 'underwrite' | 'advanced' | 'pm' | 'admin'
 
 interface Session {
   email: string
@@ -54,8 +54,6 @@ function App() {
   const [toolCosts, setToolCosts] = useState<Record<string, number>>({})
   // 메일의 비밀번호 재설정 링크로 들어온 경우, 인증 상태와 무관하게 재설정 화면을 띄운다.
   const [resetToken, setResetToken] = useState<string | null>(() => readResetToken())
-  // 시장 피드 '이 딜 분석하기' → 심화 분석으로 넘길 딜 원문(진입 신호).
-  const [dealSeed, setDealSeed] = useState<string | undefined>(undefined)
   // 내 딜 대시보드 '이어서 분석' → 언더라이팅 탭에서 자동 로드할 딜명.
   const [openDealName, setOpenDealName] = useState<string | undefined>(undefined)
 
@@ -63,6 +61,11 @@ function App() {
     setOpenDealName(dealName)
     setTab('underwrite')
   }
+
+  // 화면 진입 이벤트(퍼널). 탭 전환마다 page_view 를 남겨 메뉴별 방문·이탈을 파악한다.
+  useEffect(() => {
+    track('page_view', { path: tab })
+  }, [tab])
   // 소셜 로그인 콜백 해시 소비(부팅 시 1회). 토큰이 있으면 세션 복원 흐름이 그대로 받아간다.
   const [oauthHash] = useState(() => consumeOAuthHash())
   const oauthError: string | null = oauthHash.error ?? null
@@ -86,11 +89,6 @@ function App() {
     if (tokenStore.get()) {
       api.me().then((me) => patchSession({ creditBalance: me.creditBalance })).catch(() => {})
     }
-  }
-
-  function analyzeDeal(sourceText: string) {
-    setDealSeed(sourceText)
-    setTab('advanced')
   }
 
   // 402 발생 시: 잔여 크레딧 0 으로 보정(상단 배너) + 중앙 안내 모달 노출.
@@ -187,10 +185,14 @@ function App() {
         <div className="brand">Aix<span>Native</span></div>
         <nav className="topnav" aria-label="주요 메뉴">
           <button aria-current={tab === 'feed'} onClick={() => setTab('feed')}>시장</button>
-          <button aria-current={tab === 'mydeals'} onClick={() => setTab('mydeals')}>내 딜</button>
           <button aria-current={tab === 'underwrite'} onClick={() => setTab('underwrite')}>언더라이팅</button>
           <button aria-current={tab === 'advanced'} onClick={() => setTab('advanced')}>심화 분석</button>
-          <button aria-current={tab === 'credits'} onClick={() => setTab('credits')}>사용 내역</button>
+          {isAdmin && (
+            <button aria-current={tab === 'pm'} onClick={() => setTab('pm')}>
+              자산관리<span className="nav-beta">BETA</span>
+            </button>
+          )}
+          <button aria-current={tab === 'mydeals'} onClick={() => setTab('mydeals')}>마이페이지</button>
           {isAdmin && (
             <button aria-current={tab === 'admin'} onClick={() => setTab('admin')}>관리자</button>
           )}
@@ -204,8 +206,7 @@ function App() {
               </>
             ) : (
               <>
-                {session.plan === 'FREE' && <span className="plan-pill free">무료</span>}
-                크레딧 <b className="num">{session.creditBalance}</b>
+                크레딧 <span className="credit-coin" aria-label={`${session.creditBalance} 크레딧`}>{session.creditBalance}</span>
                 <button type="button" className="btn-topup" onClick={openCheckout}>충전</button>
               </>
             )}
@@ -228,17 +229,21 @@ function App() {
         </div>
       )}
 
-      <main className={tab === 'feed' ? 'wide' : undefined}>
+      <main>
         {tab === 'feed' && (
-          <MarketFeedView
+          <MarketView
             isAdmin={isAdmin}
-            onAnalyzeDeal={analyzeDeal}
             onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
             onNeedCredits={handleNeedCredits}
             toolCosts={toolCosts}
           />
         )}
-        {tab === 'mydeals' && <MyDealsView onContinue={continueDeal} />}
+        {tab === 'mydeals' && (
+          <MyView
+            onContinue={continueDeal}
+            onSync={(plan, creditBalance) => patchSession({ plan, creditBalance })}
+          />
+        )}
         {tab === 'underwrite' && (
           <UnderwriteView
             onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
@@ -252,12 +257,15 @@ function App() {
           <DocAnalysisView
             onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
             onNeedCredits={handleNeedCredits}
-            initialDealText={dealSeed}
             toolCosts={toolCosts}
           />
         )}
-        {tab === 'credits' && (
-          <CreditHistoryView onSync={(plan, creditBalance) => patchSession({ plan, creditBalance })} />
+        {tab === 'pm' && isAdmin && (
+          <PropertyView
+            onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
+            onNeedCredits={handleNeedCredits}
+            toolCosts={toolCosts}
+          />
         )}
         {tab === 'admin' && isAdmin && (
           <AdminView currentEmail={session.email} />

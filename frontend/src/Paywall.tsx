@@ -24,10 +24,8 @@ export function Paywall({ creditBalance, variant = 'card', onTopUp }: PaywallPro
         </div>
         <p className="paywall-desc">
           {empty
-            ? <>AI 분석 크레딧이 소진되었습니다.<br />ProForma 계산(무료)은 계속 사용할 수 있어요.</>
+            ? <>AI 분석 크레딧이 소진되었습니다.{onTopUp ? '크레딧을 충전하면 바로 다시 분석할 수 있어요.' : '유료 결제는 곧 지원될 예정입니다.'}<br />ProForma 계산(무료)은 계속 사용할 수 있어요.</>
             : '크레딧이 곧 소진됩니다.'}
-          <br />
-          {onTopUp ? '크레딧을 충전하면 바로 다시 분석할 수 있어요.' : '유료 결제는 곧 지원될 예정입니다.'}
         </p>
       </div>
       <div className="paywall-action">

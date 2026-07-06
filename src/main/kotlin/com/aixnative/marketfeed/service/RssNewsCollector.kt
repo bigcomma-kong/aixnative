@@ -26,22 +26,81 @@ class RssNewsCollector(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    /** 모든 활성 소스에서 기사 수집(중복제거 전 원본). */
-    fun collect(): List<NewsItem> {
+    /** collect() 진단 결과 — 원본 아이템 + 구글뉴스 스로틀 가시화 카운트(조용한 축소 방지). */
+    data class CollectionResult(
+        val items: List<NewsItem>,
+        val googleQueriesTotal: Int = 0,
+        val googleQueriesThin: Int = 0,
+        val notes: List<String> = emptyList(),
+    ) {
+        companion object { val EMPTY = CollectionResult(emptyList()) }
+    }
+
+    /**
+     * 모든 활성 소스에서 기사 수집(중복제거 전 원본) + 수집 진단.
+     * 구글뉴스는 한 IP에서 몰아치면 429/빈응답으로 자주 막히므로 쿼리 간 간격 + 빈응답 1회 재시도로 완화하고,
+     * 빈응답/실패 쿼리 수를 [CollectionResult] 로 노출해 "소리 없는 축소"를 상위에서 볼 수 있게 한다.
+     */
+    fun collect(): CollectionResult {
         val out = ArrayList<NewsItem>()
+        val notes = ArrayList<String>()
+
         // 1) RSS. 부동산 전용 피드는 loose=false(앵커 불요), 경제/금융·종합지는 loose=true(부동산 앵커 필수).
         for ((name, url, loose) in RSS_FEEDS) {
-            runCatching { out += parseFeed(fetch(url), source = "RSS:$name", loose = loose, sector = null) }
-                .onFailure { log.warn("[ingest] RSS '{}' 실패: {}", name, it.message) }
+            val got = runCatching { parseFeed(fetch(url), source = "RSS:$name", loose = loose, sector = null) }
+                .getOrElse { notes += "RSS '$name' 실패: ${it.message}"; log.warn("[ingest] RSS '{}' 실패: {}", name, it.message); emptyList() }
+            out += got
+            log.debug("[ingest] RSS '{}' {}건", name, got.size)
         }
-        // 2) 구글뉴스 섹터 딜 검색(느슨한 소스 — 앵커 게이트 적용).
+
+        // 2) 구글뉴스 섹터 딜 검색(느슨한 소스 — 앵커 게이트 적용). 스로틀 완화: 간격 + 빈응답 재시도.
+        var googleTotal = 0
+        var googleThin = 0
         if (props.googleNewsEnabled) {
-            for ((sector, query) in DEAL_QUERIES) {
-                runCatching {
-                    out += parseFeed(fetch(googleNewsUrl(query)), source = "GOOGLE_NEWS", loose = true, sector = sector)
-                }.onFailure { log.warn("[ingest] 구글뉴스 '{}' 실패: {}", query, it.message) }
+            for ((idx, sq) in DEAL_QUERIES.withIndex()) {
+                googleTotal++
+                val got = fetchGoogleNews(query = sq.second, source = "GOOGLE_NEWS", loose = true, sector = sq.first, notes = notes)
+                if (got.isEmpty()) googleThin++ else out += got
+                if (idx < DEAL_QUERIES.lastIndex) sleepQuiet(GOOGLE_QUERY_SPACING_MS)
             }
+            if (googleThin > 0) log.warn("[ingest] 구글뉴스 빈응답/실패 {}/{} — 스로틀 의심", googleThin, googleTotal)
         }
+
+        return CollectionResult(items = out, googleQueriesTotal = googleTotal, googleQueriesThin = googleThin, notes = notes)
+    }
+
+    /** 구글뉴스 1개 쿼리 — 빈응답/오류면 백오프 후 재시도. 최종 실패 시 빈 리스트 + 진단 노트. 딜·헤드라인 공용. */
+    private fun fetchGoogleNews(query: String, source: String, loose: Boolean, sector: String?, notes: MutableList<String>): List<NewsItem> {
+        var lastError: String? = null
+        for (attempt in 0..GOOGLE_RETRIES) {
+            val items = runCatching { parseFeed(fetch(googleNewsUrl(query)), source = source, loose = loose, sector = sector) }
+                .getOrElse { lastError = it.message; emptyList() }
+            if (items.isNotEmpty()) return items
+            if (attempt < GOOGLE_RETRIES) sleepQuiet(GOOGLE_RETRY_BACKOFF_MS)
+        }
+        notes += "구글뉴스 '$query' 빈응답/실패${lastError?.let { " ($it)" } ?: ""}"
+        return emptyList()
+    }
+
+    /** 인터럽트 안전 슬립(스로틀 완화용 짧은 대기). */
+    private fun sleepQuiet(ms: Long) {
+        runCatching { Thread.sleep(ms) }.onFailure { Thread.currentThread().interrupt() }
+    }
+
+    /**
+     * 업계 헤드라인 소스(SPI·딜사이트·코어비트)를 구글뉴스 site: 검색으로 수집.
+     * 딜 카드 파이프라인과 무관 — 매체명을 source('HEADLINE:<매체>')에 실어 제목만 뽑는 용도.
+     * CRE 전문 매체라 앵커 게이트를 걸지 않는다(loose=false). 정제는 HeadlineTextCleaner 담당.
+     */
+    fun collectHeadlines(): List<NewsItem> {
+        val out = ArrayList<NewsItem>()
+        val notes = ArrayList<String>()
+        // 헤드라인 쿼리는 딜 수집 뒤 마지막에 몰려 스로틀당하기 쉽다 → 딜과 동일한 재시도+백오프+간격 경로 사용.
+        for ((idx, hs) in HEADLINE_SOURCES.withIndex()) {
+            out += fetchGoogleNews(query = hs.second, source = "HEADLINE:${hs.first}", loose = false, sector = null, notes = notes)
+            if (idx < HEADLINE_SOURCES.lastIndex) sleepQuiet(GOOGLE_QUERY_SPACING_MS)
+        }
+        if (notes.isNotEmpty()) log.warn("[headline] 구글뉴스 빈응답/실패: {}", notes)
         return out
     }
 
@@ -100,6 +159,12 @@ class RssNewsCollector(
     private companion object {
         const val SUMMARY_MAX = 600
 
+        // 구글뉴스 스로틀 완화 — 쿼리 간 간격 + 빈응답/오류 재시도. 스케줄 백그라운드라 소폭 지연 허용.
+        // 빈응답은 빠르게 돌아오므로 재시도 비용이 작다(타임아웃 아님). 마지막에 몰리는 헤드라인 회복 위해 2회.
+        const val GOOGLE_RETRIES = 2
+        const val GOOGLE_RETRY_BACKOFF_MS = 700L
+        const val GOOGLE_QUERY_SPACING_MS = 200L
+
         // 공개 RSS(키 불필요). Triple(매체명, URL, loose). loose=true 면 부동산 앵커 필수.
         //  - 부동산 전용 피드: loose=false (앵커 불요)
         //  - 경제/금융·종합 비즈니스 피드: loose=true (부동산 외 뉴스·외신/일본판 차단)
@@ -134,6 +199,15 @@ class RssNewsCollector(
             "pf" to "NPL 매각 site:marketinsight.hankyung.com",
             "office" to "부동산 자산운용 매입 우선협상대상자",
             "office" to "상업용 부동산 거래 site:dealsite.co.kr",
+        )
+
+        // 업계 헤드라인 매체 → 구글뉴스 site: 검색어. Pair(매체 라벨, 쿼리).
+        //  - SPI·코어비트: CRE 전문 매체라 전체 제목 수집.
+        //  - 딜사이트: 종합 딜/M&A 매체라 CRE 키워드로 스코프(비부동산 M&A 제외).
+        val HEADLINE_SOURCES = listOf(
+            "SPI" to "site:seoulpi.co.kr OR site:seoulpi.io",
+            "코어비트" to "site:corebeat.co.kr",
+            "딜사이트" to "site:dealsite.co.kr (부동산 OR 오피스 OR 물류 OR 리테일 OR 호텔 OR 매각 OR 리츠 OR 자산운용)",
         )
     }
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
-  api, ApiError,
+  api, ApiError, track,
   type AnalysisType, type AnalyzeResponse, type Analysis, type DealStage, type DuplicateCheck, type GuidelineSummary, type MarketFact, type ProForma, type ProFormaResponse,
   type RunResult, type RunSummary, type Scenario, type UnderwriteInput,
 } from './api'
@@ -23,10 +23,6 @@ interface UnderwriteViewProps {
 }
 
 /** "N크레딧" 라벨 - 단가 미로딩 시 숫자 생략("크레딧"). */
-function creditLabel(cost?: number): string {
-  return cost != null ? `${cost}크레딧` : '크레딧'
-}
-
 /** 중복 분석 재실행 확인 - 동일 입력으로 최근 같은 단계를 했을 때 과금 전 사용자 확인. */
 function confirmRerun(type: AnalysisType, dup: DuplicateCheck): boolean {
   const when = dup.lastRunAt
@@ -57,10 +53,10 @@ const ASSET_TYPES = ['오피스', '물류', '호텔', '리테일'] as const
 
 /** IM 분석 파이프라인 단계 (분석별 차등 크레딧 - 단가는 서버 ToolPricing). */
 const STAGES: { type: AnalysisType; label: string; hint: string }[] = [
-  { type: 'SCREENING', label: '스크리닝', hint: '지표·Flag·Go/No-Go' },
-  { type: 'MARKET_STUDY', label: '시장조사', hint: '권역·가정 검증' },
-  { type: 'UNDERWRITING', label: '언더라이팅', hint: 'IRR·DSCR 결론' },
-  { type: 'IC_MEMO', label: '투심 메모', hint: 'IC 상정용 종합' },
+  { type: 'SCREENING', label: '스크리닝', hint: '핵심 지표·리스크 플래그로 초기 Go/No-Go 판단' },
+  { type: 'MARKET_STUDY', label: '시장조사', hint: '권역·수요·입지 가정의 시장 타당성 검증' },
+  { type: 'UNDERWRITING', label: '언더라이팅', hint: 'IRR·DSCR 등 수익성 결론과 투자 논리 정리' },
+  { type: 'IC_MEMO', label: '투심 메모', hint: '앞 단계를 종합한 투자심의(IC) 상정 문서' },
 ]
 
 const STAGE_LABEL: Record<string, string> = Object.fromEntries(STAGES.map((s) => [s.type, s.label]))
@@ -273,20 +269,29 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
    * 필수 입력 검증. requireName=true(AI 분석)면 딜 이름도 필수.
    * 통과하지 못하면 안내 문자열 반환 → 호출부가 실행을 막아 빈 값/크레딧 낭비를 방지.
    */
-  function validate(requireName: boolean): string | null {
-    if (requireName && !form.dealName.trim()) return '딜 이름을 입력하세요. (분석 이력 구분에 필요합니다)'
-    if (!(Number(form.askingPriceEok) > 0)) return '매입가(억원)를 입력하세요.'
-    if (!(Number(form.noiEok) > 0)) return 'NOI(억원)를 입력하세요.'
+  function validate(requireName: boolean): { id: string; msg: string } | null {
+    if (requireName && !form.dealName.trim()) return { id: 'dealName', msg: '딜 이름을 입력하세요. (분석 이력 구분에 필요합니다)' }
+    if (!(Number(form.askingPriceEok) > 0)) return { id: 'askingPriceEok', msg: '매입가(억원)를 입력하세요.' }
+    if (!(Number(form.noiEok) > 0)) return { id: 'noiEok', msg: 'NOI(억원)를 입력하세요.' }
     const ltv = Number(form.ltvPct)
-    if (form.ltvPct.trim() === '' || ltv < 0 || ltv > 100) return 'LTV(%)는 0~100 사이로 입력하세요.'
-    if (!(Number(form.loanRatePct) >= 0) || form.loanRatePct.trim() === '') return '대출금리(%)를 입력하세요.'
-    if (!(Number(form.exitCapPct) > 0)) return 'Exit Cap(%)를 입력하세요.'
+    if (form.ltvPct.trim() === '' || ltv < 0 || ltv > 100) return { id: 'ltvPct', msg: 'LTV(%)는 0~100 사이로 입력하세요.' }
+    if (!(Number(form.loanRatePct) >= 0) || form.loanRatePct.trim() === '') return { id: 'loanRatePct', msg: '대출금리(%)를 입력하세요.' }
+    if (!(Number(form.exitCapPct) > 0)) return { id: 'exitCapPct', msg: 'Exit Cap(%)를 입력하세요.' }
     return null
+  }
+
+  /** 미입력 필드로 스크롤 + 포커스 - 배너 대신 직접 안내. */
+  function focusField(id: string) {
+    const el = document.getElementById(id)
+    if (!el) return
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    el.focus({ preventScroll: true })
   }
 
   async function runProforma() {
     const invalid = validate(false)
-    if (invalid) { setError(invalid); return }
+    if (invalid) { setError(invalid.msg); focusField(invalid.id); return }
+    track('free_calc', { path: 'underwrite' })
     setError(null)
     setBusy('proforma')
     try {
@@ -304,7 +309,8 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
 
   async function runStage(type: AnalysisType) {
     const invalid = validate(true)
-    if (invalid) { setError(invalid); return }
+    if (invalid) { setError(invalid.msg); focusField(invalid.id); return }
+    track('analysis_start', { path: 'underwrite', meta: type })
     setError(null)
     const input = buildInput()
     // 중복 분석 가드 - 동일 입력으로 최근 같은 단계를 이미 했으면 과금 전 확인(가드 실패는 분석을 막지 않음).
@@ -321,6 +327,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
         analysis: res.analysis, analysisRaw: res.analysisRaw, provider: res.provider, marketFacts: res.marketFacts, inputs: input,
       })
       setActiveTab(type)
+      track('analysis_done', { path: 'underwrite', meta: type })
       onCreditBalance(res.creditBalance)
       setHistoryVersion((v) => v + 1)
       void loadDealStages(input.dealName)
@@ -358,8 +365,9 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
     <>
       <div className="page-head">
         <div>
-          <span className="eyebrow">딜 언더라이팅</span>
+          <span className="eyebrow">AI DEAL UNDERWRITING</span>
           <h1>매물 한 건, 1분 심사.</h1>
+          <p className="page-sub">매입가·NOI·자본구조만 넣으면 IRR·DSCR·민감도까지 자동 계산하고, AI가 스크리닝 판정과 리스크를 짚어 드립니다.</p>
         </div>
       </div>
 
@@ -403,7 +411,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
             </div>
 
             <div className="full">
-              <label htmlFor="location">위치 / 권역 (선택)</label>
+              <label htmlFor="location">위치 / 권역</label>
               <input id="location" value={form.location} onChange={(e) => set('location', e.target.value)} placeholder="예: 서울 GBD, 판교" />
             </div>
 
@@ -416,7 +424,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
             <NumField id="rentGrowthPct" label="임대성장률 (%)" placeholder="기본 3" value={form.rentGrowthPct} onChange={(v) => set('rentGrowthPct', v)} />
 
             <div className="full">
-              <label htmlFor="notes">메모 (선택) · IM 요약·임대 현황·특이사항</label>
+              <label htmlFor="notes">IM 요약·임대 현황·특이사항</label>
               <textarea id="notes" rows={2} value={form.notes} onChange={(e) => set('notes', e.target.value)}
                 placeholder="예: 핵심 임차인 2026년 만기, 최근 리모델링 완료 등" />
             </div>
@@ -427,20 +435,25 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
               {busy === 'proforma' ? '계산 중…' : 'ProForma 계산 (무료)'}
               <span className="free-calc-sub">IRR·DSCR 등 지표 - 크레딧 차감 없음</span>
             </button>
-            <p className="stage-caption">무료 계산으로 지표를 먼저 본 뒤 <b>AI 분석</b>을 실행하세요 · <b>각 단계 독립 실행</b> 가능.</p>
+
+            <p className="stage-caption">무료 계산으로 지표를 먼저 본 뒤 <b>AI 분석</b>을 실행하세요<br/> 같은 딜 이름이면 1~4단계 데이터가 한 보고서에 모입니다. <br/>
+              ( <b>각 단계 독립 실행</b> 가능 )</p>
+
             <div className="stage-grid" role="list" aria-label="분석 파이프라인 - 권장 순서, 각 단계 독립 실행 가능">
               {STAGES.map((s, i) => (
                 <button key={s.type} type="button" className="stage-btn" role="listitem"
                   onClick={() => runStage(s.type)} disabled={busy !== 'none'}>
-                  <span className="stage-num" aria-hidden="true">{i + 1}</span>
+                  <span className="stage-num" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
                   <span className="stage-text">
                     <span className="stage-label">{busy === s.type ? '분석 중…' : s.label}</span>
-                    <span className="stage-hint">{s.hint} · {creditLabel(toolCosts?.[s.type])}</span>
+                    <span className="stage-hint">{s.hint}</span>
                   </span>
+                  {toolCosts?.[s.type] != null && (
+                    <span className="stage-coin" title={`${toolCosts[s.type]} 크레딧`} aria-label={`${toolCosts[s.type]} 크레딧`}>{toolCosts[s.type]}</span>
+                  )}
                 </button>
               ))}
             </div>
-            <p className="hint">단계마다 AI 1회 호출 = 분석별 1~5크레딧. 같은 딜 이름으로 단계를 쌓으면 보고서에 합본됩니다.</p>
           </div>
           {error && <p className="error">{error}</p>}
         </form>
@@ -450,7 +463,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
             <>
               {isSample && (
                 <div className="sample-banner">
-                  <span>📋 <b>예시 딜</b> · 무료 ProForma 결과입니다. AI 심층 심사는 좌측 버튼으로(가입 무료 크레딧 사용).</span>
+                  <span>📋 <b>예시 딜</b> · 무료 ProForma 결과입니다. AI 심층 심사는 좌측 버튼으로</span>
                   <button type="button" className="btn-link" onClick={() => { setForm(INITIAL); setResults(null); setIsSample(false); setStageMap({}); setActiveTab('FINANCE') }}>
                     내 딜 입력하기 →
                   </button>
@@ -470,26 +483,27 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
               />
             </>
           ) : (
-            <div className="result-empty">
-              <div className="empty-state">
+            <div className="rp">
+              <div className="rp-top">
                 <div className="empty-ico" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 3v18h18" />
                     <path d="M7 14l3.5-3.5L14 14l4-5" />
                   </svg>
                 </div>
-                <h3>분석 결과가 여기에 표시됩니다</h3>
-                <p>좌측에 딜 정보를 입력하고 <b>ProForma 계산</b>(무료) 또는 <b>AI 분석 단계</b>를 실행하세요.</p>
-                <div className="empty-preview" aria-hidden="true">
-                  <div className="empty-prev-metrics">
-                    {['IRR', 'EQUITY MULTIPLE', 'DSCR'].map((k) => (
-                      <div className="epm" key={k}><span className="epm-k">{k}</span><span className="epm-bar" /></div>
-                    ))}
-                  </div>
-                  <div className="empty-prev-chart">
-                    {[40, 58, 52, 70, 84].map((h, i) => <i key={i} style={{ height: `${h}%` }} />)}
-                  </div>
+                <div>
+                  <h3>분석 결과가 여기에 표시됩니다</h3>
+                  <p>좌측에 딜 정보를 입력하고 <b>ProForma 계산</b>(무료) 또는 <b>AI 분석 단계</b>를 실행하세요.</p>
                 </div>
+              </div>
+              <div className="rp-skeleton" aria-hidden="true">
+                <div className="rp-metrics">
+                  {['IRR', 'EQUITY MULTIPLE', 'DSCR'].map((k) => (
+                    <div className="rp-card" key={k}><span>{k}</span><i /></div>
+                  ))}
+                </div>
+                <div className="rp-verdict"><span /><i /></div>
+                <div className="rp-lines">{[100, 86, 94, 72, 88].map((w, i) => <span key={i} style={{ width: `${w}%` }} />)}</div>
               </div>
             </div>
           )}
@@ -585,7 +599,7 @@ function NumField({ id, label, value, onChange, required, placeholder }: NumFiel
   return (
     <div>
       <label htmlFor={id}>
-        {label}{required ? <span className="req"> *</span> : <span className="opt"> (선택)</span>}
+        {label}{required && <span className="req"> *</span>}
       </label>
       <input id={id} type="number" step="any" value={value} placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)} />

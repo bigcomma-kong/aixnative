@@ -103,6 +103,8 @@ class AuthService(
             user.role = UserRole.ADMIN
         }
 
+        user.recordLogin(java.time.Instant.now()) // 리텐션 추적(마지막 접속·횟수)
+
         val userId = requireNotNull(user.id)
         val balance = creditService.balance(user.tenantId, userId)
         val token = jwtService.issue(AuthPrincipal(userId, user.tenantId, user.email, user.role.name))

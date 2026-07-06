@@ -3,7 +3,6 @@ package com.aixnative.account.service
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.mail.SimpleMailMessage
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.mail.javamail.MimeMessageHelper
 import org.springframework.stereotype.Service
@@ -18,6 +17,8 @@ import org.springframework.stereotype.Service
 class EmailService(
     private val mailSenderProvider: ObjectProvider<JavaMailSender>,
     @Value("\${app.mail.from:no-reply@aixnative.com}") private val from: String,
+    // 수신자 메일앱에 보이는 발신자 표시 이름. 미설정 시 로컬파트("admin")가 노출되므로 브랜드명 사용.
+    @Value("\${app.mail.from-name:AixNative}") private val fromName: String,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -65,7 +66,7 @@ class EmailService(
         runCatching {
             val msg = sender.createMimeMessage()
             val helper = MimeMessageHelper(msg, true, "UTF-8")
-            helper.setFrom(from, "AixNative")
+            helper.setFrom(from, fromName)
             helper.setTo(toEmail)
             helper.setSubject(subject)
             helper.setText(html, true) // HTML 본문
@@ -81,13 +82,14 @@ class EmailService(
             log.warn("[email] SMTP 미설정 — {} 메일 본문 로그 출력 (to={}):\n{}", kind, toEmail, body)
             return
         }
-        val msg = SimpleMailMessage().apply {
-            setFrom(from)
-            setTo(toEmail)
-            setSubject(subject)
-            setText(body)
-        }
-        runCatching { sender.send(msg) }
-            .onFailure { log.error("[email] {} 메일 발송 실패 (to={}): {}", kind, toEmail, it.message) }
+        runCatching {
+            val msg = sender.createMimeMessage()
+            val helper = MimeMessageHelper(msg, false, "UTF-8")
+            helper.setFrom(from, fromName) // 표시 이름 포함(한글도 RFC 2047 인코딩됨)
+            helper.setTo(toEmail)
+            helper.setSubject(subject)
+            helper.setText(body, false) // 플레인 텍스트
+            sender.send(msg)
+        }.onFailure { log.error("[email] {} 메일 발송 실패 (to={}): {}", kind, toEmail, it.message) }
     }
 }

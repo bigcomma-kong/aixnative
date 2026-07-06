@@ -8,10 +8,7 @@ import { DeepReportContent } from './DeepReportPanel'
  * (표·신호등·리스크 매트릭스·시장 스코어보드)를 그대로 보여줘 제품 수준을 증명한다.
  * 정적 샘플 데이터라 API·크레딧 미사용.
  */
-interface SampleShowcaseProps {
-  /** '가입하고 내 딜 분석' - 가입 폼으로 유도. */
-  onSignup?: () => void
-}
+
 
 const KPIS: { k: string; v: string; unit: string }[] = [
   { k: '레버리지 IRR', v: '12.9', unit: '%' },
@@ -155,7 +152,7 @@ const STAGE_TABS: { type: AnalysisType; label: string; analysis: Analysis }[] = 
   { type: 'IC_MEMO', label: '투심 메모', analysis: IC_MEMO },
 ]
 
-export function SampleShowcase({ onSignup }: SampleShowcaseProps) {
+export function SampleShowcase() {
   const [active, setActive] = useState<ActiveTab>('SCREENING')
   const isDeep = active === 'DEEP_MARKET'
   const stage = STAGE_TABS.find((t) => t.type === active)
@@ -223,12 +220,6 @@ export function SampleShowcase({ onSignup }: SampleShowcaseProps) {
           : stage && <StageAnalysis type={stage.type} analysis={stage.analysis} />}
       </div>
 
-      <div className="ss-cta">
-        <button className="btn-primary" type="button" onClick={onSignup}>
-          {isDeep ? '이 심층 리포트 받기 - 무료로 시작 →' : '내 딜로 이 분석 받기 - 무료로 시작 →'}
-        </button>
-        <span className="ss-cta-note">가입 즉시 무료 크레딧 · 카드 등록 없이 · 실제는 더 상세한 전체 분석</span>
-      </div>
     </div>
   )
 }

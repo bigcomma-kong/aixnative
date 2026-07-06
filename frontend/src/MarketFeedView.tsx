@@ -9,26 +9,36 @@ import { ResultModal } from './ResultModal'
 
 interface MarketFeedViewProps {
   isAdmin: boolean
-  /** '이 딜 분석하기' - 카드 원문을 심화 분석(딜 진입)으로 넘긴다. */
-  onAnalyzeDeal: (sourceText: string) => void
   /** 심층 리포트(크레딧 소비) 후 잔액 갱신. */
   onCreditBalance: (balance: number) => void
   /** 크레딧 소진(402) 시 중앙 페이월 안내 노출. */
   onNeedCredits: () => void
   /** 분석유형 id → 크레딧 단가(서버 단일 소스). 미로딩 시 숫자 생략. */
   toolCosts?: Record<string, number>
+  /** 상위 시장 뷰에 임베드 시 자체 헤더 숨김(통합 헤더가 대신 렌더). 액션(수집/새로고침)만 남김. */
+  embedded?: boolean
 }
 
 const PAGE_SIZE = 60
 const ASSET_FILTERS = ['전체', '관심', '오피스', '물류', '호텔', '리테일'] as const
-type AssetFilter = (typeof ASSET_FILTERS)[number]
+
+/**
+ * 피드 필터. 카드의 배지(유형·출처)를 눌러 그 값으로 카드를 묶는다.
+ * 지역·날짜는 값이 제각각(자유서술)이라 필터 대상이 아니라 표시 전용.
+ */
+type Filter =
+  | { kind: 'all' }
+  | { kind: 'watch' }
+  | { kind: 'asset'; value: string }
+  | { kind: 'news' }
+  | { kind: 'source'; value: string }
 
 /**
  * 시장 인텔리전스 - 뉴스레터(마켓 브리핑) + 딜 모니터링(카드 피드)을 합친 surface.
  * 브리핑으로 큰 그림을 보고, 자산유형으로 딜을 좁혀 그 자리에서 AI 분석으로 진입.
  * 데이터는 스케줄러가 매일 자동 수집(이력 누적) - 관리자는 즉시 수집/추가/삭제.
  */
-export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeedCredits, toolCosts }: MarketFeedViewProps) {
+export function MarketFeedView({ isAdmin, onCreditBalance, onNeedCredits, toolCosts, embedded }: MarketFeedViewProps) {
   const deepCost = toolCosts?.['MARKET_DEEP_REPORT']
   const [items, setItems] = useState<MarketFeedItem[]>([])
   const [page, setPage] = useState(0)
@@ -42,7 +52,7 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeed
   const [error, setError] = useState<string | null>(null)
   const [ingesting, setIngesting] = useState(false)
   const [report, setReport] = useState<IngestReport | null>(null)
-  const [filter, setFilter] = useState<AssetFilter>('전체')
+  const [filter, setFilter] = useState<Filter>({ kind: 'all' })
   // 심층 리포트(크레딧)
   const [deep, setDeep] = useState<MarketDeepReport | null>(null)
   const [deepBusy, setDeepBusy] = useState(false)
@@ -163,6 +173,26 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeed
     }
   }
 
+  /**
+   * 날짜 네비게이터 — briefHistory(최신순) 인덱스로 이동. idx 0 = 최신(현재 표시로 마킹, isPast=false).
+   * 이전(과거)=idx+1, 다음(최신)=idx-1. 범위를 벗어나면 무시.
+   */
+  async function showBriefingAt(idx: number) {
+    if (idx < 0 || idx >= briefHistory.length) return
+    const target = briefHistory[idx]
+    setError(null)
+    try {
+      const b = await api.marketBriefingById(target.id)
+      setBriefing(b)
+      setBriefOpenId(idx === 0 ? null : target.id) // 0=최신 → 현재로 표시
+      requestAnimationFrame(() => {
+        document.getElementById('brief-hero')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      })
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.message : '브리핑을 불러오지 못했습니다.')
+    }
+  }
+
   useEffect(() => { void load(); loadHistory(); loadBriefHistory(); loadWatched() }, [])
 
   async function remove(id: number) {
@@ -195,20 +225,33 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeed
     return c
   }, [items, watched])
 
-  const visible =
-    filter === '전체' ? items
-    : filter === '관심' ? items.filter((it) => watched.has(it.id))
-    : items.filter((it) => it.assetType === filter)
+  const visible = ((): MarketFeedItem[] => {
+    switch (filter.kind) {
+      case 'all': return items
+      case 'watch': return items.filter((it) => watched.has(it.id))
+      case 'asset': return items.filter((it) => it.assetType === filter.value)
+      case 'news': return items.filter((it) => !it.assetType)
+      case 'source': return items.filter((it) => originLabel(it.origin) === filter.value)
+    }
+  })()
+
+  // 활성 필터 라벨(안내 문구용).
+  const activeLabel =
+    filter.kind === 'watch' ? '관심'
+    : filter.kind === 'asset' ? filter.value
+    : filter.kind === 'news' ? '시장 뉴스'
+    : filter.kind === 'source' ? filter.value
+    : null
+
+  // 브리핑 날짜 네비게이터 — briefHistory 는 최신순(0=최신). 현재 위치를 찾아 이전/다음 이동 가능 여부 계산.
+  const curBriefId = briefOpenId ?? briefing?.id ?? null
+  const rawBriefIdx = curBriefId != null ? briefHistory.findIndex((b) => b.id === curBriefId) : 0
+  const briefIdx = rawBriefIdx < 0 ? 0 : rawBriefIdx
 
   return (
     <section className="mi">
-      <header className="mi-head">
-        <div className="mi-head-text">
-          <span className="mi-eyebrow">AI MARKET INTELLIGENCE</span>
-          <h2 className="mi-title">시장 인텔리전스</h2>
-          <p className="mi-sub">매일 자동 수집되는 시장 브리핑과 딜 - 관심 딜은 그 자리에서 AI 언더라이팅으로.</p>
-        </div>
-        <div className="mi-actions">
+      {embedded ? (
+        <div className="mi-actions mi-actions-bar">
           {isAdmin && (
             <button className="btn-primary" onClick={() => void ingestNow()} disabled={ingesting}>
               {ingesting ? '수집 중…' : '지금 수집'}
@@ -218,7 +261,25 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeed
             {loading ? '불러오는 중…' : '새로고침'}
           </button>
         </div>
-      </header>
+      ) : (
+        <header className="mi-head">
+          <div className="mi-head-text">
+            <span className="mi-eyebrow">AI MARKET INTELLIGENCE</span>
+            <h2 className="mi-title">시장 인텔리전스</h2>
+            <p className="mi-sub">매일 자동 수집한 시장 브리핑과 거래 신호.</p>
+          </div>
+          <div className="mi-actions">
+            {isAdmin && (
+              <button className="btn-primary" onClick={() => void ingestNow()} disabled={ingesting}>
+                {ingesting ? '수집 중…' : '지금 수집'}
+              </button>
+            )}
+            <button className="btn-ghost" onClick={() => void load()} disabled={loading}>
+              {loading ? '불러오는 중…' : '새로고침'}
+            </button>
+          </div>
+        </header>
+      )}
 
       <NewsletterBar onError={setError} />
 
@@ -230,41 +291,43 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeed
       )}
       {error && <p className="form-error">{error}</p>}
 
-      {briefing && <BriefingHero briefing={briefing} isPast={briefOpenId != null} onLatest={() => void load()} />}
-
-      {briefHistory.length > 1 && (
-        <div className="brief-archive">
-          <span className="brief-archive-label">지난 브리핑 <span className="arc-count">{briefHistory.length}</span></span>
-          <div className="brief-archive-list">
-            {briefHistory.map((b) => {
-              const active = briefOpenId === b.id || (briefOpenId == null && briefing?.id === b.id)
-              return (
-                <button
-                  key={b.id}
-                  className={`brief-archive-chip${active ? ' active' : ''}`}
-                  onClick={() => void openPastBriefing(b.id)}
-                  title={b.headline ?? '브리핑'}
-                >
-                  <span className="ba-date">{fmtArchiveDate(b.generatedAt ?? b.briefingDate)}</span>
-                  <span className="ba-title">{b.headline ?? '시장 브리핑'}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
+      {briefing && (
+        <BriefingHero
+          briefing={briefing}
+          isPast={briefOpenId != null}
+          position={briefIdx + 1}
+          total={briefHistory.length}
+          hasOlder={briefIdx < briefHistory.length - 1}
+          hasNewer={briefIdx > 0}
+          onOlder={() => void showBriefingAt(briefIdx + 1)}
+          onNewer={() => void showBriefingAt(briefIdx - 1)}
+          onLatest={() => void load()}
+        />
       )}
 
-      {(items.length > 0 || history.length > 0) && (
-        <div className="deep-zone">
-          <div className="deep-bar">
-            <div className="deep-bar-text">
-              <strong>AI 심층 시장 분석</strong>
-              <span>무료 브리핑보다 깊은 섹터·모멘텀·액션 리포트 - Claude 기반</span>
+      {(briefHistory.length > 1 || history.length > 0) && (
+        <div className="mi-archives">
+          {briefHistory.length > 1 && (
+            <div className="brief-archive">
+              <span className="brief-archive-label">지난 브리핑 <span className="arc-count">{briefHistory.length}</span></span>
+              <div className="brief-archive-list">
+                {briefHistory.map((b) => {
+                  const active = briefOpenId === b.id || (briefOpenId == null && briefing?.id === b.id)
+                  return (
+                    <button
+                      key={b.id}
+                      className={`brief-archive-chip${active ? ' active' : ''}`}
+                      onClick={() => void openPastBriefing(b.id)}
+                      title={b.headline ?? '브리핑'}
+                    >
+                      <span className="ba-date">{fmtArchiveDate(b.generatedAt ?? b.briefingDate)}</span>
+                      <span className="ba-title">{b.headline ?? '시장 브리핑'}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-            <button className="btn-primary" onClick={() => void runDeepReport()} disabled={deepBusy || items.length === 0}>
-              {deepBusy ? 'AI 분석 중…' : `AI 심층 분석 · ${deepCost != null ? `${deepCost}크레딧` : '크레딧'}`}
-            </button>
-          </div>
+          )}
 
           {history.length > 0 && (
             <div className="deep-history">
@@ -284,6 +347,20 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeed
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {(items.length > 0 || history.length > 0) && (
+        <div className="deep-zone">
+          <div className="deep-bar">
+            <div className="deep-bar-text">
+              <strong>AI 심층 시장 분석</strong>
+              <span>무료 브리핑보다 깊은 섹터·모멘텀·액션 리포트 · Claude·Mistral 등 멀티 AI 엔진</span>
+            </div>
+            <button className="btn-primary" onClick={() => void runDeepReport()} disabled={deepBusy || items.length === 0}>
+              {deepBusy ? 'AI 분석 중…' : `AI 심층 분석 · ${deepCost != null ? `${deepCost}크레딧` : '크레딧'}`}
+            </button>
+          </div>
         </div>
       )}
 
@@ -318,22 +395,38 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeed
       {isAdmin && <AdminFeedForm onCreated={(it) => setItems((list) => [it, ...list])} onError={setError} />}
 
       <div className="mi-deals-head">
-        <h3 className="mi-section-title">오늘의 딜 <span className="mi-count">{items.length}</span></h3>
+        <div className="mi-deals-head-text">
+          <h3 className="mi-section-title">오늘의 딜 <span className="mi-count">{items.length}</span></h3>
+          <p className="mi-section-sub">시장에 나온 매각·우선협상 등 거래 신호</p>
+        </div>
         <div className="mi-filters" role="tablist" aria-label="자산유형 필터">
-          {ASSET_FILTERS.map((f) => (
-            <button
-              key={f}
-              role="tab"
-              aria-selected={filter === f}
-              className="mi-chip"
-              onClick={() => setFilter(f)}
-              disabled={f !== '전체' && !counts[f]}
-            >
-              {f === '관심' ? '★ 관심' : f}{counts[f] ? <span className="mi-chip-n">{counts[f]}</span> : null}
-            </button>
-          ))}
+          {ASSET_FILTERS.map((f) => {
+            const active =
+              (f === '전체' && filter.kind === 'all') ||
+              (f === '관심' && filter.kind === 'watch') ||
+              (filter.kind === 'asset' && filter.value === f)
+            return (
+              <button
+                key={f}
+                role="tab"
+                aria-selected={active}
+                className="mi-chip"
+                onClick={() => setFilter(f === '전체' ? { kind: 'all' } : f === '관심' ? { kind: 'watch' } : { kind: 'asset', value: f })}
+                disabled={f !== '전체' && !counts[f]}
+              >
+                {f === '관심' ? '★ 관심' : f}{counts[f] ? <span className="mi-chip-n">{counts[f]}</span> : null}
+              </button>
+            )
+          })}
         </div>
       </div>
+
+      {(filter.kind === 'source' || filter.kind === 'news') && (
+        <div className="mi-active-filter">
+          <span>필터 <b>{filter.kind === 'news' ? '시장 뉴스' : filter.value}</b></span>
+          <button type="button" className="mi-filter-clear" onClick={() => setFilter({ kind: 'all' })} aria-label="필터 해제">✕</button>
+        </div>
+      )}
 
       {!loading && items.length === 0 && (
         <p className="feed-empty">
@@ -342,7 +435,7 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeed
       )}
       {!loading && items.length > 0 && visible.length === 0 && (
         <p className="feed-empty">
-          {filter === '관심' ? '아직 관심 딜이 없습니다. 카드의 ★ 를 눌러 저장하세요.' : `‘${filter}’ 유형의 딜이 없습니다.`}
+          {filter.kind === 'watch' ? '아직 관심 딜이 없습니다. 카드의 ★ 를 눌러 저장하세요.' : '해당 조건의 딜이 없습니다.'}
         </p>
       )}
 
@@ -353,47 +446,81 @@ export function MarketFeedView({ isAdmin, onAnalyzeDeal, onCreditBalance, onNeed
             item={it}
             isAdmin={isAdmin}
             watched={watched.has(it.id)}
-            onAnalyze={onAnalyzeDeal}
+            filter={filter}
+            onFilter={setFilter}
             onDelete={remove}
             onToggleWatch={toggleWatch}
           />
         ))}
       </div>
 
-      {hasMore && filter === '전체' && (
+      {hasMore && filter.kind === 'all' && (
         <div className="feed-more">
           <button className="btn-ghost" onClick={() => void loadMore()} disabled={moreBusy}>
             {moreBusy ? '불러오는 중…' : '과거 딜 더 보기'}
           </button>
         </div>
       )}
-      {hasMore && filter !== '전체' && visible.length > 0 && (
-        <p className="feed-more-hint">‘{filter}’ 필터 중 - 과거 딜을 더 보려면 ‘전체’로 전환하세요.</p>
+      {hasMore && filter.kind !== 'all' && visible.length > 0 && (
+        <p className="feed-more-hint">‘{activeLabel}’ 필터 중 - 과거 딜을 더 보려면 ‘전체’로 전환하세요.</p>
       )}
     </section>
   )
 }
 
-/** 마켓 브리핑 - 프리미엄 다크 히어로(헤드라인·전망 + 동향/워치리스트/리스크). */
-function BriefingHero({ briefing, isPast = false, onLatest }: { briefing: MarketBriefing; isPast?: boolean; onLatest?: () => void }) {
+/** 마켓 브리핑 - 프리미엄 다크 히어로(날짜 네비 + 핵심요약 + 동향/워치리스트/리스크). */
+function BriefingHero({
+  briefing, isPast = false, position = 0, total = 0,
+  hasOlder = false, hasNewer = false, onOlder, onNewer, onLatest,
+}: {
+  briefing: MarketBriefing
+  isPast?: boolean
+  position?: number
+  total?: number
+  hasOlder?: boolean
+  hasNewer?: boolean
+  onOlder?: () => void
+  onNewer?: () => void
+  onLatest?: () => void
+}) {
   const date = briefing.generatedAt
     ? new Date(briefing.generatedAt).toLocaleString('ko-KR', { dateStyle: 'medium', timeStyle: 'short' })
     : briefing.briefingDate
+  const showNav = total > 1
   return (
     <section className="brief" id="brief-hero" aria-label="마켓 브리핑">
       <div className="brief-top">
-        <span className="brief-badge">
-          <span className="brief-dot" />{isPast ? '지난 브리핑' : 'AI 마켓 브리핑'}
-        </span>
-        <span className="brief-meta">
-          {briefing.articleCount ? `${briefing.articleCount}건 분석` : null}
-          {date ? ` · ${date}` : null}
+        <div className="brief-id">
+          <span className="brief-badge">
+            <span className="brief-dot" />{isPast ? '지난 브리핑' : 'AI 마켓 브리핑'}
+          </span>
+          <span className="brief-meta">
+            {[briefing.articleCount ? `${briefing.articleCount}건 분석` : null, date || null].filter(Boolean).join(' · ')}
+          </span>
           {isPast && onLatest && (
-            <button type="button" className="brief-latest" onClick={onLatest}>최신으로 →</button>
+            <button type="button" className="brief-latest" onClick={onLatest} title="최신 브리핑으로">최신으로 →</button>
           )}
-        </span>
+        </div>
+        {showNav && (
+          <div className="brief-pager" role="group" aria-label="브리핑 이동 (왼쪽=최신, 오른쪽=과거)">
+            <button
+              type="button" className="brief-navbtn" onClick={onNewer} disabled={!hasNewer}
+              aria-label="더 최신 브리핑" title="더 최신"
+            >‹</button>
+            <span className="brief-pos">{position}<span className="brief-pos-sep">/</span>{total}</span>
+            <button
+              type="button" className="brief-navbtn" onClick={onOlder} disabled={!hasOlder}
+              aria-label="더 지난(과거) 브리핑" title="더 지난"
+            >›</button>
+          </div>
+        )}
       </div>
-      {briefing.headline && <h3 className="brief-headline">{briefing.headline}</h3>}
+      {briefing.headline && (
+        <div className="brief-tldr">
+          <span className="brief-tldr-label">핵심</span>
+          <h3 className="brief-headline">{briefing.headline}</h3>
+        </div>
+      )}
       {briefing.outlook && <p className="brief-outlook">{briefing.outlook}</p>}
 
       <div className="brief-cols">
@@ -492,20 +619,24 @@ function fmtArchiveDate(s: string | null): string {
 }
 
 function FeedCard({
-  item, isAdmin, watched, onAnalyze, onDelete, onToggleWatch,
+  item, isAdmin, watched, filter, onFilter, onDelete, onToggleWatch,
 }: {
   item: MarketFeedItem
   isAdmin: boolean
   watched: boolean
-  onAnalyze: (sourceText: string) => void
+  filter: Filter
+  onFilter: (f: Filter) => void
   onDelete: (id: number) => void
   onToggleWatch: (item: MarketFeedItem) => void
 }) {
-  const seed = item.sourceText?.trim() || item.summary?.trim() || item.title
   const dateLabel = item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) : null
   const sourceLabel = originLabel(item.origin)
   // 자산유형이 분류된 카드만 "딜"로 간주(뉴스·인사이트엔 분석 CTA 대신 원문 보기).
-  const isDeal = !!item.assetType
+  const asset = item.assetType
+  // 배지 클릭 = 그 값으로 묶기(필터). 이미 그 필터면 해제(전체로).
+  const assetOn = asset != null && filter.kind === 'asset' && filter.value === asset
+  const newsOn = asset == null && filter.kind === 'news'
+  const sourceOn = filter.kind === 'source' && sourceLabel != null && filter.value === sourceLabel
 
   return (
     <article className="feed-card" data-asset={item.assetType ?? ''}>
@@ -519,27 +650,45 @@ function FeedCard({
         {watched ? '★' : '☆'}
       </button>
       <div className="fc-top">
-        {isDeal
-          ? <span className="fc-asset">{item.assetType}</span>
-          : <span className="fc-asset fc-news">뉴스·인사이트</span>}
+        {asset != null ? (
+          <button
+            type="button"
+            className={`fc-chip fc-asset${assetOn ? ' on' : ''}`}
+            onClick={() => onFilter(assetOn ? { kind: 'all' } : { kind: 'asset', value: asset })}
+            title={`‘${asset}’ 유형만 보기`}
+          >
+            {asset}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={`fc-chip fc-asset fc-news${newsOn ? ' on' : ''}`}
+            onClick={() => onFilter(newsOn ? { kind: 'all' } : { kind: 'news' })}
+            title="시장 뉴스만 보기"
+          >
+            시장 뉴스
+          </button>
+        )}
+        {sourceLabel && (
+          <button
+            type="button"
+            className={`fc-chip fc-source${sourceOn ? ' on' : ''}`}
+            onClick={() => onFilter(sourceOn ? { kind: 'all' } : { kind: 'source', value: sourceLabel })}
+            title={`‘${sourceLabel}’ 출처만 보기`}
+          >
+            {sourceLabel}
+          </button>
+        )}
         {item.location && <span className="fc-loc">{item.location}</span>}
+        {dateLabel && <span className="fc-date">{dateLabel}</span>}
       </div>
       <h3 className="fc-title">{item.title}</h3>
       {item.summary && <p className="fc-summary">{item.summary}</p>}
-      <div className="fc-foot">
-        {sourceLabel && <span className="fc-source">{sourceLabel}</span>}
-        {dateLabel && <span className="fc-date">{dateLabel}</span>}
-      </div>
       <div className="fc-actions">
-        {isDeal ? (
-          <button className="fc-analyze" onClick={() => onAnalyze(seed)}>이 딜 분석하기 →</button>
-        ) : item.sourceUrl ? (
+        {item.sourceUrl ? (
           <a className="fc-readmore" href={item.sourceUrl} target="_blank" rel="noreferrer">원문 보기 →</a>
         ) : (
           <span className="fc-news-note">시장 참고 정보</span>
-        )}
-        {isDeal && item.sourceUrl && (
-          <a className="fc-link" href={item.sourceUrl} target="_blank" rel="noreferrer" title="원문 보기">원문</a>
         )}
         {isAdmin && (
           <button className="fc-del" onClick={() => onDelete(item.id)} title="삭제">×</button>
@@ -616,7 +765,6 @@ function AdminFeedForm({
         <input placeholder="위치(예: 서울 중구)" value={form.location ?? ''} onChange={(e) => set('location', e.target.value)} />
       </div>
       <textarea rows={2} placeholder="요약(카드에 표시)" value={form.summary ?? ''} onChange={(e) => set('summary', e.target.value)} />
-      <textarea rows={3} placeholder="딜 원문 - '이 딜 분석하기' 진입 시 AI 추출에 사용" value={form.sourceText ?? ''} onChange={(e) => set('sourceText', e.target.value)} />
       <input placeholder="원문 URL(선택)" value={form.sourceUrl ?? ''} onChange={(e) => set('sourceUrl', e.target.value)} />
       <div className="fa-actions">
         <button type="button" className="btn-link" onClick={() => setOpen(false)}>취소</button>

@@ -41,6 +41,8 @@ export interface AdminUser {
   emailVerified: boolean
   creditBalance: number
   createdAt: string | null
+  lastLoginAt: string | null
+  loginCount: number
 }
 
 export interface AdminRun {
@@ -65,6 +67,18 @@ export interface AdminStats {
   runs: { total: number; success: number; today: number; last7d: number; byTool: Record<string, number> }
   credits: { granted: number; purchased: number; adminAdjust: number; spent: number }
   payments: { confirmedCount: number; totalKrw: number }
+  events: { today: Record<string, number>; last7d: Record<string, number>; activeUsers7d: number }
+}
+
+/** 관리자 최근 행동 이벤트 1행. */
+export interface AdminEvent {
+  id: number
+  userId: number | null
+  ownerEmail: string | null
+  event: string
+  path: string | null
+  meta: string | null
+  createdAt: string | null
 }
 
 /** 관리자 크레딧 내역 1행 - 전 사용자 원장. */
@@ -481,6 +495,19 @@ export interface MarketFeedPage {
   hasMore: boolean
 }
 
+/** 업계 헤드라인 1건(제목+원문링크+발행시각). 클릭 시 원문으로 이동. */
+export interface HeadlineView {
+  title: string
+  url: string | null
+  publishedAt: string | null
+}
+
+/** 매체별 헤드라인 묶음(SPI · 코어비트 · 딜사이트). */
+export interface HeadlineGroup {
+  source: string
+  items: HeadlineView[]
+}
+
 /** 관심 딜(찜) - 저장된 카드 스냅샷. */
 export interface DealWatch {
   id: number
@@ -732,6 +759,140 @@ export interface DocAnalyzeResponse {
   disclaimer: string
 }
 
+// ── 자산관리(PM) - 임대차 관리 ────────────────────────────────────────────
+/** 관리 대상 건물. leaseCount = 소속 임대차 수. */
+export interface PmBuilding {
+  id: number
+  name: string
+  address: string | null
+  assetType: string | null
+  gfaPyeong: number | null
+  notes: string | null
+  leaseCount: number
+  createdAt: string | null
+}
+
+/** 건물 생성/수정 입력. */
+export interface PmBuildingInput {
+  name: string
+  address?: string
+  assetType?: string
+  gfaPyeong?: number
+  notes?: string
+}
+
+/** 임대차 1건. status = ACTIVE|UPCOMING|EXPIRED|UNKNOWN(날짜 파생). 날짜는 ISO(yyyy-MM-dd) 문자열. */
+export interface PmLease {
+  id: number
+  buildingId: number
+  tenantName: string
+  unitLabel: string | null
+  areaPyeong: number | null
+  monthlyRentManwon: number | null
+  depositManwon: number | null
+  mgmtFeeManwon: number | null
+  leaseStartDate: string | null
+  leaseEndDate: string | null
+  rentFreeMonths: number | null
+  escalationPct: number | null
+  nextEscalationDate: string | null
+  notes: string | null
+  status: string
+  daysToExpiry: number | null
+}
+
+/** 임대차 생성/수정 입력. 날짜는 ISO(yyyy-MM-dd) 문자열. */
+export interface PmLeaseInput {
+  buildingId: number
+  tenantName: string
+  unitLabel?: string
+  areaPyeong?: number
+  monthlyRentManwon?: number
+  depositManwon?: number
+  mgmtFeeManwon?: number
+  leaseStartDate?: string
+  leaseEndDate?: string
+  rentFreeMonths?: number
+  escalationPct?: number
+  nextEscalationDate?: string
+  sourceText?: string
+  notes?: string
+}
+
+/** 계약서 AI 추출 결과 - 모르는 값은 null. 날짜는 ISO 문자열. */
+export interface PmLeaseExtract {
+  tenantName: string | null
+  unitLabel: string | null
+  areaPyeong: number | null
+  monthlyRentManwon: number | null
+  depositManwon: number | null
+  mgmtFeeManwon: number | null
+  leaseStartDate: string | null
+  leaseEndDate: string | null
+  rentFreeMonths: number | null
+  escalationPct: number | null
+  nextEscalationDate: string | null
+  notes: string | null
+  confidence: string | null
+}
+
+export interface PmLeaseExtractResponse {
+  extract: PmLeaseExtract | null
+  raw: string | null
+  provider: string
+  creditBalance: number
+}
+
+/** 리스크 플래그 - sections flags 와 동일(label/severity). */
+export interface PmRiskFlag {
+  label: string
+  severity: string
+}
+
+/** 렌트롤 집계(무료 코드 계산) + 리스크. */
+export interface PmRentRoll {
+  buildingId: number
+  buildingName: string
+  leaseCount: number
+  totalMonthlyRentManwon: number
+  totalDepositManwon: number
+  totalMgmtFeeManwon: number
+  annualRentManwon: number
+  waltYears: number | null
+  topTenantName: string | null
+  topTenantPct: number | null
+  avgRentPerPyeongManwon: number | null
+  leases: PmLease[]
+  flags: PmRiskFlag[]
+}
+
+/** 다가오는 임대 일정 1건. eventType = EXPIRY|ESCALATION|RENT_FREE_END. */
+export interface PmCalendarEvent {
+  leaseId: number
+  buildingId: number
+  tenantName: string
+  eventType: string
+  dueDate: string
+  daysUntil: number
+  title: string
+}
+
+export interface PmCalendarResponse {
+  events: PmCalendarEvent[]
+}
+
+/** AM 제출 보고서(AI sections). analysis 는 심화 분석과 동일 shape(DocAnalysis). */
+export interface PmAmReport {
+  buildingId: number
+  buildingName: string
+  analysis: DocAnalysis | null
+  analysisRaw: string | null
+  provider: string
+  creditBalance: number
+  generatedAt: string | null
+  disclaimer: string
+}
+
 // ── 결제(크레딧 충전, 토스페이먼츠) ──────────────────────────────────────────
 /** 판매 팩(가격표). */
 export interface CreditPack {
@@ -816,6 +977,27 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new ApiError(res.status, body?.error ?? `요청 실패 (${res.status})`)
   }
   return body.data as T
+}
+
+/**
+ * 경량 행동 이벤트 비콘. 화이트리스트 이벤트만 서버가 저장하며, 로그인 상태면 사용자에 귀속된다.
+ * fire-and-forget - 실패해도 절대 사용자 흐름을 막지 않는다(keepalive 로 화면 전환 중에도 전송).
+ */
+export function track(event: string, opts: { path?: string; meta?: string } = {}): void {
+  const token = tokenStore.get()
+  try {
+    void fetch(API_BASE + '/api/events', {
+      method: 'POST',
+      keepalive: true,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ event, path: opts.path, meta: opts.meta }),
+    }).catch(() => {})
+  } catch {
+    /* 이벤트 수집 실패 무시 */
+  }
 }
 
 export const api = {
@@ -947,6 +1129,9 @@ export const api = {
   marketDeepReportById: (id: number): Promise<MarketDeepReport> =>
     request(`/api/market-feed/deep-report/${id}`),
 
+  /** 무료 - 업계 헤드라인 보드(매체별 최신 제목). 클릭 시 원문으로 이동. */
+  headlines: (): Promise<HeadlineGroup[]> => request('/api/headlines'),
+
   /** 무료 - 마켓 브리핑 메일 구독 상태/구독/해지. */
   newsletterStatus: (): Promise<{ subscribed: boolean }> => request('/api/newsletter/status'),
   newsletterSubscribe: (): Promise<{ subscribed: boolean }> =>
@@ -975,6 +1160,9 @@ export const api = {
 
   /** 관리자 - 운영 대시보드 집계 지표. */
   adminStats: (): Promise<AdminStats> => request('/api/admin/stats'),
+
+  /** 관리자 - 최근 행동 이벤트(최신순). */
+  adminEvents: (): Promise<AdminEvent[]> => request('/api/admin/events'),
 
   /** 관리자 - 전 사용자 크레딧 원장(최신순). 충전 경로·사유 포함. */
   adminCredits: (): Promise<AdminCreditEntry[]> => request('/api/admin/credits'),
@@ -1029,6 +1217,48 @@ export const api = {
 
   /** 설정된 소셜 로그인 제공자 목록(소문자: google/kakao/naver). 미설정이면 빈 배열. */
   oauthProviders: (): Promise<string[]> => request('/api/auth/oauth/providers'),
+
+  // ── 자산관리(PM) - 임대차 관리 ──
+  /** 내 건물 목록(최신순). 무료. */
+  pmBuildings: (): Promise<PmBuilding[]> => request('/api/property/buildings'),
+  /** 건물 생성. */
+  pmCreateBuilding: (input: PmBuildingInput): Promise<PmBuilding> =>
+    request('/api/property/buildings', { method: 'POST', body: JSON.stringify(input) }),
+  /** 건물 수정. */
+  pmUpdateBuilding: (id: number, input: PmBuildingInput): Promise<PmBuilding> =>
+    request(`/api/property/buildings/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  /** 건물 삭제(하위 임대차 함께 삭제). */
+  pmDeleteBuilding: (id: number): Promise<{ deleted: boolean }> =>
+    request(`/api/property/buildings/${id}`, { method: 'DELETE' }),
+
+  /** 한 건물의 임대차 목록. 무료. */
+  pmLeases: (buildingId: number): Promise<PmLease[]> =>
+    request(`/api/property/leases?buildingId=${buildingId}`),
+  /** 임대차 생성. */
+  pmCreateLease: (input: PmLeaseInput): Promise<PmLease> =>
+    request('/api/property/leases', { method: 'POST', body: JSON.stringify(input) }),
+  /** 임대차 수정. */
+  pmUpdateLease: (id: number, input: PmLeaseInput): Promise<PmLease> =>
+    request(`/api/property/leases/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  /** 임대차 삭제. */
+  pmDeleteLease: (id: number): Promise<{ deleted: boolean }> =>
+    request(`/api/property/leases/${id}`, { method: 'DELETE' }),
+
+  /** 계약서 텍스트 → 구조화 추출(1크레딧). 성공 시에만 차감. */
+  pmExtractLease: (text: string): Promise<PmLeaseExtractResponse> =>
+    request('/api/property/extract-lease', { method: 'POST', body: JSON.stringify({ text }) }),
+
+  /** 렌트롤 집계 + 리스크(무료). */
+  pmRentRoll: (buildingId: number): Promise<PmRentRoll> =>
+    request(`/api/property/rent-roll?buildingId=${buildingId}`),
+
+  /** 다가오는 일정(무료). buildingId 생략 시 전체. */
+  pmCalendar: (buildingId?: number): Promise<PmCalendarResponse> =>
+    request(`/api/property/calendar${buildingId != null ? `?buildingId=${buildingId}` : ''}`),
+
+  /** AM 제출 보고서(AI, 5크레딧). */
+  pmAmReport: (buildingId: number): Promise<PmAmReport> =>
+    request('/api/property/am-report', { method: 'POST', body: JSON.stringify({ buildingId }) }),
 }
 
 /** 소셜 로그인 시작 URL(브라우저 전체 이동 - fetch 아님). 제공자 인증 페이지로 302. */

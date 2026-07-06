@@ -229,7 +229,7 @@ object NewsletterEmail {
         )
         append(
             "<div style=\"font-size:12px;color:$MUTED;margin-top:10px;\">" +
-                "ProForma 지표는 무료 &middot; AI 심층 분석은 1클릭</div>",
+                "ProForma 지표는 무료 &middot; AI 심층 분석은 원클릭</div>",
         )
         append("</div>")
     }

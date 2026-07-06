@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react'
 import { loadTossPayments } from '@tosspayments/tosspayments-sdk'
-import { api, ApiError, type CreditPack } from './api'
+import { api, ApiError, track, type CreditPack } from './api'
 import { InfoModal, type InfoPage } from './SiteFooter'
+
+/**
+ * 결제 오픈 여부. false 동안은 결제창 대신 "곧 오픈 + 이메일 문의" 안내를 노출하고,
+ * 크레딧은 운영자가 메일 확인 후 수동 지급한다. PG 심사·사업자 등록 완료 후 true 로 전환.
+ */
+const PAYMENT_OPEN: boolean = false
+/** 크레딧 추가 문의처(푸터·개인정보 표기와 동일). */
+const CONTACT_EMAIL = 'admin@aixnative.com'
 
 interface CheckoutProps {
   /** 현재 잔여 크레딧(안내용). */
@@ -22,11 +30,17 @@ export function Checkout({ creditBalance, customerEmail, onClose }: CheckoutProp
   const [configured, setConfigured] = useState(true)
   const [selected, setSelected] = useState<string | null>(null)
   const [infoPage, setInfoPage] = useState<InfoPage | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState<boolean>(PAYMENT_OPEN)
   const [paying, setPaying] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 결제 오픈 전 크레딧 문의 시 선택 수신동의(기본 off). mailto 본문에 동의 여부를 표기.
+  const [marketingOptIn, setMarketingOptIn] = useState(false)
+
+  // 결제/크레딧요청 화면 노출 이벤트(퍼널).
+  useEffect(() => { track('checkout_view') }, [])
 
   useEffect(() => {
+    if (!PAYMENT_OPEN) return // 결제 닫힘 - 가격/설정 조회 불필요, 안내만 노출
     let alive = true
     Promise.all([api.creditPacks(), api.paymentConfig()])
       .then(([p, cfg]) => {
@@ -85,12 +99,21 @@ export function Checkout({ creditBalance, customerEmail, onClose }: CheckoutProp
   const selectedPack = packs.find((p) => p.id === selected) ?? null
   // 크레딧당 최고 단가(=가장 비싼 팩) 기준으로 절약률 표시 → "묶음 살수록 이득" 을 직관적으로.
   const basePer = packs.length ? Math.max(...packs.map((p) => p.amountKrw / p.credits)) : 0
+  // 결제 오픈 전 수동 크레딧 지급 문의 - 계정 이메일을 본문에 미리 채워 회신 매칭을 쉽게.
+  const inquiryHref = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
+    '[AixNative] 크레딧 추가 요청',
+  )}&body=${encodeURIComponent(
+    `계정 이메일: ${customerEmail}\n요청 크레딧 수: \n사용 목적(선택): \n\n` +
+      `마케팅·서비스 소식 수신: ${marketingOptIn ? '동의함' : '미동의'}\n`,
+  )}`
 
   return (
     <div className="analyze-overlay" role="dialog" aria-modal="true" aria-label="크레딧 충전" onClick={onClose}>
       <div className="checkout-modal" onClick={(e) => e.stopPropagation()}>
         <button type="button" className="checkout-x" aria-label="닫기" onClick={onClose} disabled={paying}>
-          ✕
+          <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true" focusable="false">
+            <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+          </svg>
         </button>
 
         <div className="checkout-head">
@@ -108,6 +131,31 @@ export function Checkout({ creditBalance, customerEmail, onClose }: CheckoutProp
         {loading ? (
           <div className="checkout-loading">
             <span className="checkout-spinner" aria-hidden /> 가격 정보를 불러오는 중…
+          </div>
+        ) : !PAYMENT_OPEN ? (
+          <div className="checkout-notice">
+            <div className="checkout-notice-icon" aria-hidden>✉</div>
+            <p className="checkout-notice-lead">
+              크레딧 결제는 <b>오픈 준비 중</b>입니다
+            </p>
+            <p className="checkout-notice-body">
+              지금은 가입 시 지급된 <b>무료 크레딧</b>으로 모든 AI 분석을 이용하실 수 있어요.<br />
+              크레딧이 부족하시면 아래로 요청해 주세요.<br />
+              검토 후 <b>크레딧을 지급</b>해 드립니다.
+            </p>
+            <label className="checkout-notice-optin">
+              <input
+
+                type="checkbox"
+                checked={marketingOptIn}
+                onChange={(e) => setMarketingOptIn(e.target.checked)}
+              />
+              <span>(선택) 마케팅·서비스 소식 이메일 수신에 동의합니다</span>
+            </label>
+            <a className="btn-primary checkout-notice-mail" href={inquiryHref} onClick={() => track('credit_request', { meta: marketingOptIn ? 'optin' : 'no-optin' })}>크레딧 요청하기</a>
+            <p className="checkout-notice-fine">
+              문의 <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+            </p>
           </div>
         ) : !configured ? (
           <div className="checkout-soon">결제 준비 중입니다. 잠시 후 다시 시도해 주세요.</div>

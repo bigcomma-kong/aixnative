@@ -17,6 +17,7 @@ class AixnativeApplication : SpringBootServletInitializer() {
         builder.sources(AixnativeApplication::class.java)
 }
 
+
 fun main(args: Array<String>) {
     runApplication<AixnativeApplication>(*args)
 }

@@ -26,9 +26,11 @@ interface StageModalState {
 interface MyDealsViewProps {
   /** 딜 카드의 '이어서 분석' - 언더라이팅 탭으로 이동해 그 딜을 자동 로드. */
   onContinue?: (dealName: string) => void
+  /** 상위 뷰(내 딜)에 임베드 시 자체 헤더 숨김(통합 헤더가 대신 렌더). */
+  embedded?: boolean
 }
 
-export function MyDealsView({ onContinue }: MyDealsViewProps) {
+export function MyDealsView({ onContinue, embedded }: MyDealsViewProps) {
   const [deals, setDeals] = useState<DealSummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
@@ -112,12 +114,15 @@ export function MyDealsView({ onContinue }: MyDealsViewProps) {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <span className="eyebrow">내 딜</span>
-          <h1>내가 분석한 딜</h1>
+      {!embedded && (
+        <div className="page-head">
+          <div>
+            <span className="eyebrow">MY DEALS</span>
+            <h1>내가 분석한 딜</h1>
+            <p className="page-sub">지금까지 분석한 딜을 한눈에 모아 보고, 다시 열어 비교합니다.</p>
+          </div>
         </div>
-      </div>
+      )}
       {error && <p className="error">{error}</p>}
 
       {deals === null ? (
@@ -131,39 +136,37 @@ export function MyDealsView({ onContinue }: MyDealsViewProps) {
           {deals.map((d) => (
             <div className="deal-card" key={d.dealName}>
               <div className="deal-top">
-                {d.assetType && <span className="deal-type">{d.assetType}</span>}
+                {d.isMarketReport
+                  ? <span className="deal-type market">시장분석</span>
+                  : d.assetType && <span className="deal-type">{d.assetType}</span>}
                 <span className="deal-date">최근 {fmtDate(d.lastActivityAt)}</span>
               </div>
               <h3 className="deal-name">{d.dealName}</h3>
               {d.location && <div className="deal-loc">📍 {d.location}</div>}
-              <div className="deal-stages">
-                {d.isMarketReport ? (
-                  <span className="deal-stage-chip market">📊 AI 시장 분석</span>
-                ) : (
-                  <>
-                    {d.completedStages.map((s) =>
-                      LABEL_TO_TYPE[s] ? (
-                        <button
-                          key={s}
-                          type="button"
-                          className="deal-stage-chip clickable"
-                          disabled={loadingChip === `${d.dealName}:${s}`}
-                          onClick={() => void openStage(d.dealName, s)}
-                          title="분석 결과 보기"
-                        >
-                          {loadingChip === `${d.dealName}:${s}` ? '여는 중…' : s}
-                        </button>
-                      ) : (
-                        <span key={s} className="deal-stage-chip">{s}</span>
-                      ),
-                    )}
-                    {d.advancedCount > 0 && <span className="deal-stage-chip adv">심화 {d.advancedCount}종</span>}
-                    {d.completedStages.length === 0 && d.advancedCount === 0 && (
-                      <span className="deal-stage-none">완료 단계 없음</span>
-                    )}
-                  </>
-                )}
-              </div>
+              {!d.isMarketReport && (
+                <div className="deal-stages">
+                  {d.completedStages.map((s) =>
+                    LABEL_TO_TYPE[s] ? (
+                      <button
+                        key={s}
+                        type="button"
+                        className="deal-stage-chip clickable"
+                        disabled={loadingChip === `${d.dealName}:${s}`}
+                        onClick={() => void openStage(d.dealName, s)}
+                        title="분석 결과 보기"
+                      >
+                        {loadingChip === `${d.dealName}:${s}` ? '여는 중…' : s}
+                      </button>
+                    ) : (
+                      <span key={s} className="deal-stage-chip">{s}</span>
+                    ),
+                  )}
+                  {d.advancedCount > 0 && <span className="deal-stage-chip adv">심화 {d.advancedCount}종</span>}
+                  {d.completedStages.length === 0 && d.advancedCount === 0 && (
+                    <span className="deal-stage-none">완료 단계 없음</span>
+                  )}
+                </div>
+              )}
               {!d.isMarketReport && d.completedStages.some((s) => LABEL_TO_TYPE[s]) && (
                 <p className="deal-stage-hint">단계를 눌러 분석 결과를 다시 볼 수 있어요.</p>
               )}

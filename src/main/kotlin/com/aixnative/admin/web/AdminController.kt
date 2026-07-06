@@ -39,6 +39,8 @@ data class AdminUser(
     val emailVerified: Boolean,
     val creditBalance: Int,
     val createdAt: Instant?,
+    val lastLoginAt: Instant?,
+    val loginCount: Int,
 )
 
 /** 운영 대시보드 집계 지표. */
@@ -47,11 +49,24 @@ data class AdminStats(
     val runs: RunStat,
     val credits: CreditStat,
     val payments: PaymentStat,
+    val events: EventStat,
 )
 data class UserStat(val total: Int, val verified: Int, val admin: Int, val paid: Int, val newToday: Int, val new7d: Int)
 data class RunStat(val total: Int, val success: Int, val today: Int, val last7d: Int, val byTool: Map<String, Int>)
 data class CreditStat(val granted: Int, val purchased: Int, val adminAdjust: Int, val spent: Int)
 data class PaymentStat(val confirmedCount: Long, val totalKrw: Long)
+/** 행동 이벤트 퍼널 — 이벤트별 오늘/7일 건수 + 7일 활성(로그인) 사용자 근사. */
+data class EventStat(val today: Map<String, Int>, val last7d: Map<String, Int>, val activeUsers7d: Long)
+
+data class AdminEvent(
+    val id: Long,
+    val userId: Long?,
+    val ownerEmail: String?,
+    val event: String,
+    val path: String?,
+    val meta: String?,
+    val createdAt: Instant?,
+)
 
 data class RoleChangeRequest(val role: UserRole)
 data class CreditAdjustRequest(val delta: Int)
@@ -105,6 +120,7 @@ class AdminController(
     private val adminUserService: AdminUserService,
     private val ledger: CreditLedgerRepository,
     private val payments: PaymentRepository,
+    private val events: com.aixnative.analytics.repository.UserEventRepository,
 ) {
 
     /** 운영 대시보드 지표 — 사용자·분석·크레딧·결제 집계(전 테넌트). */
@@ -146,7 +162,32 @@ class AdminController(
             totalKrw = payments.sumAmountByStatus(PaymentStatus.CONFIRMED),
         )
 
-        return ApiResponse.ok(AdminStats(userStat, runStat, creditStat, paymentStat))
+        val eventStat = EventStat(
+            today = events.funnelSince(startToday).associate { it.event to it.cnt.toInt() },
+            last7d = events.funnelSince(since7d).associate { it.event to it.cnt.toInt() },
+            activeUsers7d = events.distinctUsersSince("page_view", since7d),
+        )
+
+        return ApiResponse.ok(AdminStats(userStat, runStat, creditStat, paymentStat, eventStat))
+    }
+
+    /** 최근 행동 이벤트 열람(감독/디버깅). 이메일은 로그인 사용자만 매핑(익명은 null). */
+    @GetMapping("/events")
+    @Transactional(readOnly = true)
+    fun listEvents(): ApiResponse<List<AdminEvent>> {
+        val emailById = users.findAll().associate { requireNotNull(it.id) to it.email }
+        val list = events.findTop200ByOrderByIdDesc().map { e ->
+            AdminEvent(
+                id = requireNotNull(e.id),
+                userId = e.userId,
+                ownerEmail = e.userId?.let { emailById[it] },
+                event = e.event,
+                path = e.path,
+                meta = e.meta,
+                createdAt = e.createdAt,
+            )
+        }
+        return ApiResponse.ok(list)
     }
 
     @GetMapping("/users")
@@ -268,6 +309,8 @@ class AdminController(
             emailVerified = this.emailVerified,
             creditBalance = creditService.balance(this.tenantId, id),
             createdAt = this.createdAt,
+            lastLoginAt = this.lastLoginAt,
+            loginCount = this.loginCount,
         )
     }
 }

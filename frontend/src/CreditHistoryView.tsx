@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { api, ApiError, type BillingHistory, type CreditReason, type RunSummary } from './api'
-import { Paywall } from './Paywall'
 import { ResultModal, toolLabel } from './ResultModal'
 
 const REASON_LABEL: Record<CreditReason, string> = {
@@ -13,10 +12,12 @@ const REASON_LABEL: Record<CreditReason, string> = {
 interface CreditHistoryViewProps {
   /** 잔액 변동을 상위 세션과 동기화 (헤더 표시용). */
   onSync?: (plan: 'FREE' | 'PAID', creditBalance: number) => void
+  /** 상위 뷰(내 딜)에 임베드 시 자체 헤더 숨김(통합 헤더가 대신 렌더). */
+  embedded?: boolean
 }
 
 /** 크레딧 내역(원장) 화면: 플랜·잔액 요약 + 지급/차감 기록. */
-export function CreditHistoryView({ onSync }: CreditHistoryViewProps) {
+export function CreditHistoryView({ onSync, embedded }: CreditHistoryViewProps) {
   const [data, setData] = useState<BillingHistory | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -42,12 +43,15 @@ export function CreditHistoryView({ onSync }: CreditHistoryViewProps) {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <span className="eyebrow">사용 내역</span>
-          <h1>크레딧 사용 현황</h1>
+      {!embedded && (
+        <div className="page-head">
+          <div>
+            <span className="eyebrow">CREDIT USAGE</span>
+            <h1>크레딧 사용 현황</h1>
+            <p className="page-sub">크레딧 적립·사용 내역과 잔여 크레딧을 확인합니다.</p>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="credit-summary card">
         <div className="cs-item">
@@ -59,8 +63,6 @@ export function CreditHistoryView({ onSync }: CreditHistoryViewProps) {
           <span className="cs-v num">{data.creditBalance}</span>
         </div>
       </div>
-
-      {data.creditBalance <= 1 && <Paywall creditBalance={data.creditBalance} variant="banner" />}
 
       <div className="card">
         <div className="section-title">크레딧 원장</div>

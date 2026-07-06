@@ -69,6 +69,14 @@ class User(
     /** 마케팅·이메일 수신 동의(선택). */
     @Column(name = "marketing_opt_in", nullable = false)
     var marketingOptIn: Boolean = false,
+
+    /** 마지막 로그인 시각(리텐션 추적). 가입만 하고 미로그인이면 null. */
+    @Column(name = "last_login_at")
+    var lastLoginAt: Instant? = null,
+
+    /** 누적 로그인 횟수(활성도 지표). */
+    @Column(name = "login_count", nullable = false)
+    var loginCount: Int = 0,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -81,4 +89,10 @@ class User(
     @LastModifiedDate
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant? = null
+
+    /** 로그인 성공 시 호출 — 마지막 접속 시각 갱신 + 횟수 증가(리텐션 추적). */
+    fun recordLogin(at: Instant) {
+        lastLoginAt = at
+        loginCount += 1
+    }
 }
