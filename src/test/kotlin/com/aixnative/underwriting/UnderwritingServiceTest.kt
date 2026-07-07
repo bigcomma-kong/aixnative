@@ -168,21 +168,36 @@ class UnderwritingServiceTest(
     }
 
     @Test
-    fun `딜 단계 합본 - 같은 딜의 완료 단계를 모아 반환(테넌트 스코프)`() {
+    fun `딜 단계 합본 - 같은 딜(PK)의 완료 단계를 모아 반환(테넌트 스코프)`() {
         asTenant()
         creditService.grantSignupCredits(tenantId, userId)
-        service.analyze(AnalysisType.SCREENING, req)
-        service.analyze(AnalysisType.MARKET_STUDY, req)
+        // 첫 분석은 새 딜(self-anchor) → deal_id == run_id. 이후 분석은 그 deal_id 로 이어붙인다.
+        val first = service.analyze(AnalysisType.SCREENING, req)
+        assertEquals(first.runId, first.dealId) // self-anchor
+        service.analyze(AnalysisType.MARKET_STUDY, req.copy(dealId = first.dealId))
 
-        val ds = service.dealStages("테스트딜")
+        val ds = service.dealStages(first.dealId)
+        assertEquals(first.dealId, ds.dealId)
         assertEquals("테스트딜", ds.dealName)
         val types = ds.stages.map { it.analysisType }.toSet()
         assertTrue(types.contains("SCREENING") && types.contains("MARKET_STUDY"))
         assertTrue(ds.stages.all { it.result != null && it.request != null }) // 결과·입력 JSON 포함
 
-        // 다른 테넌트는 같은 딜명을 조회해도 빈 결과(격리)
+        // 다른 테넌트는 같은 deal_id 를 조회해도 빈 결과(격리)
         TenantContext.set(TenantContext.Current(99L, 99L, "x@example.com"))
-        assertTrue(service.dealStages("테스트딜").stages.isEmpty())
+        assertTrue(service.dealStages(first.dealId).stages.isEmpty())
+    }
+
+    @Test
+    fun `이름이 같아도 dealId 를 안 주면 별개 딜로 분리된다`() {
+        asTenant()
+        creditService.grantSignupCredits(tenantId, userId)
+        // 같은 딜명·같은 입력이라도 dealId 미지정이면 각각 self-anchor → 서로 다른 딜.
+        val a = service.analyze(AnalysisType.SCREENING, req)
+        val b = service.analyze(AnalysisType.SCREENING, req)
+        assertTrue(a.dealId != b.dealId)
+        assertTrue(service.dealStages(a.dealId).stages.none { s -> s.runId == b.runId })
+        assertTrue(service.dealStages(b.dealId).stages.none { s -> s.runId == a.runId })
     }
 
     @Test

@@ -264,7 +264,7 @@ export function MarketFeedView({ isAdmin, onCreditBalance, onNeedCredits, toolCo
         <div className="deep-zone">
           <div className="deep-bar">
             <div className="deep-bar-text">
-              <strong>AI 심층 딜·브리핑 분석</strong>
+              <strong>AI 심층 시장 분석</strong>
               <span>무료 브리핑보다 깊은 섹터·모멘텀·액션 리포트 · Claude·Mistral 등 멀티 AI 엔진</span>
             </div>
             <button className="btn-primary" onClick={() => void runDeepReport()} disabled={deepBusy || items.length === 0}>
@@ -300,7 +300,7 @@ export function MarketFeedView({ isAdmin, onCreditBalance, onNeedCredits, toolCo
 
           {history.length > 0 && (
             <div className="deep-history">
-              <span className="deep-history-label">지난 딜 브리핑 분석 <span className="arc-count">{history.length}</span></span>
+              <span className="deep-history-label">지난 심층 분석 <span className="arc-count">{history.length}</span></span>
               <div className="deep-history-list">
                 {history.map((h) => (
                   <button
@@ -323,6 +323,7 @@ export function MarketFeedView({ isAdmin, onCreditBalance, onNeedCredits, toolCo
         <ResultModal
           run={{
             id: openId ?? 0,
+            dealId: null,
             dealName: deep.headline ?? '심층 시장 분석',
             tool: 'MARKET_DEEP_REPORT',
             status: 'SUCCESS',
@@ -341,7 +342,7 @@ export function MarketFeedView({ isAdmin, onCreditBalance, onNeedCredits, toolCo
             <strong className="analyze-modal-title">AI가 시장을 심층 분석 중…</strong>
             <p className="analyze-modal-sub">
               보통 30~60초 걸립니다. 이 창을 닫거나 이동하지 마세요.<br />
-              (완료된 분석은 ‘지난 딜 브리핑 분석’에도 저장되니 나중에 다시 볼 수 있습니다.)
+              (완료된 분석은 ‘지난 심층 분석’에도 저장되니 나중에 다시 볼 수 있습니다.)
             </p>
           </div>
         </div>

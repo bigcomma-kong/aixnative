@@ -20,6 +20,12 @@ function minDscr(d: RunDetail): number | undefined {
 const SERIES_COLORS = ['oklch(56% 0.17 266)', 'oklch(62% 0.15 150)', 'oklch(66% 0.16 40)']
 const MAX_SELECT = 3
 
+/**
+ * 비교 가능한 도구 = ProForma 를 결과에 담는 언더라이팅 파이프라인 4단계뿐.
+ * 심화(심층 시장 리포트·BOV·개발타당성 등)는 ProForma 가 없어 비교 지표가 없으므로 목록에서 제외한다.
+ */
+const PIPELINE_TOOLS = new Set(['DEAL_SCREENING', 'MARKET_STUDY', 'UNDERWRITING_NARRATIVE', 'IC_MEMO'])
+
 export function DealCompare({ onClose }: { onClose: () => void }) {
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [selected, setSelected] = useState<number[]>([])
@@ -30,16 +36,17 @@ export function DealCompare({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     api.runs()
       .then((list) => {
-        // 같은 딜끼리는 ProForma 가 동일해 비교가 무의미 → 딜(dealName)당 최신 1건만.
-        // api.runs 는 최신순이므로 첫 등장이 대표. 이름 없는 런은 개별 유지.
-        const seen = new Set<string>()
+        // 같은 딜끼리는 ProForma 가 동일해 비교가 무의미 → 딜(PK)당 최신 1건만.
+        // api.runs 는 최신순이므로 첫 등장이 대표. 딜 id 없는 런은 개별 유지.
+        // 파이프라인(ProForma 보유) 런만 대상 — 심화 런이 대표를 가로채 'ProForma 없음'이 뜨던 문제 차단.
+        const seen = new Set<number>()
         const deduped = list
           .filter((r) => r.status === 'SUCCESS')
+          .filter((r) => PIPELINE_TOOLS.has(r.tool))
           .filter((r) => {
-            const name = r.dealName?.trim()
-            if (!name) return true
-            if (seen.has(name)) return false
-            seen.add(name)
+            if (r.dealId == null) return true
+            if (seen.has(r.dealId)) return false
+            seen.add(r.dealId)
             return true
           })
         setRuns(deduped)
@@ -104,7 +111,7 @@ export function DealCompare({ onClose }: { onClose: () => void }) {
           <div className="compare-pick">
             <div className="compare-pick-label">분석 선택 (최대 {MAX_SELECT})</div>
             {loading ? <p className="hint">불러오는 중…</p> : runs.length === 0 ? (
-              <p className="hint">SUCCESS 상태의 분석 이력이 없습니다.</p>
+              <p className="hint">비교할 언더라이팅 분석이 없습니다. (스크리닝·시장조사·언더라이팅·투심 단계만 비교되며, 심화 리포트는 제외됩니다)</p>
             ) : (
               <ul className="compare-list">
                 {runs.map((r) => {

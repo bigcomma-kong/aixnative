@@ -16,8 +16,10 @@ interface UnderwriteViewProps {
   onNeedCredits: () => void
   /** 분석유형 id → 크레딧 단가(서버 단일 소스). 미로딩 시 숫자 생략. */
   toolCosts?: Record<string, number>
-  /** 내 딜 대시보드 '이어서 분석' - 이 딜명을 자동 로드(폼 프리필 + 무료 ProForma + 단계 탭). */
-  openDealName?: string
+  /** 현재 크레딧 잔액 - AI 단계 실행 전 사전 확인용(모자라면 시작조차 안 하고 안내). */
+  creditBalance?: number
+  /** 내 딜 대시보드 '이어서 분석' - 이 딜 id(PK)를 자동 로드(폼 프리필 + 무료 ProForma + 단계 탭). */
+  openDealId?: number
   /** 로드 완료 후 부모가 신호를 비우도록. */
   onDealOpened?: () => void
 }
@@ -120,6 +122,23 @@ const INPUT_FIELDS: { key: keyof UnderwriteInput; label: string; suffix?: string
   { key: 'rentGrowthPct', label: '임대성장', suffix: '%' },
 ]
 
+/** 저장된 언더라이팅 입력 → 폼 상태 복원. loadDeal(이어서 분석)·이력 불러오기 공용. */
+function formFromInput(req: UnderwriteInput, fallbackDealName: string): FormState {
+  return {
+    dealName: req.dealName ?? fallbackDealName,
+    assetType: req.assetType ?? '오피스',
+    location: req.location ?? '',
+    notes: req.notes ?? '',
+    askingPriceEok: String(req.askingPriceEok ?? ''),
+    noiEok: String(req.noiEok ?? ''),
+    ltvPct: String(req.ltvPct ?? ''),
+    loanRatePct: String(req.loanRatePct ?? ''),
+    exitCapPct: String(req.exitCapPct ?? ''),
+    holdYears: String(req.holdYears ?? '5'),
+    rentGrowthPct: String(req.rentGrowthPct ?? '3'),
+  }
+}
+
 /** FormState → 계산 입력. buildInput/loadSample 공용(폼 상태 비동기 문제 회피). */
 function inputOf(f: FormState): UnderwriteInput {
   return {
@@ -155,8 +174,10 @@ function resultsFromStage(s: DealStage): Results {
   }
 }
 
-export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, openDealName, onDealOpened }: UnderwriteViewProps) {
+export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, creditBalance, openDealId, onDealOpened }: UnderwriteViewProps) {
   const [form, setForm] = useState<FormState>(INITIAL)
+  // 현재 편집 중인 딜의 식별자(PK). null=아직 저장 안 된 새 딜. 첫 분석 후 응답 dealId 로 채워져 이후 분석이 같은 딜로 묶인다.
+  const [currentDealId, setCurrentDealId] = useState<number | null>(null)
   const [results, setResults] = useState<Results | null>(null)
   // 현재 딜의 완료된 단계 모음(합본 탭) - 같은 딜명으로 스크리닝·시장조사 등을 따로 했어도 한 화면에서 전환.
   const [stageMap, setStageMap] = useState<Partial<Record<AnalysisType, DealStage>>>({})
@@ -173,6 +194,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
   async function loadSample(s: Sample) {
     const f: FormState = { ...INITIAL, ...s.form }
     setForm(f)
+    setCurrentDealId(null) // 예시는 저장 안 된 새 딜
     setIsSample(true)
     setError(null)
     setStageMap({})
@@ -194,30 +216,19 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
     }
   }
 
-  /** '이어서 분석' - 딜의 저장된 단계에서 입력을 복원해 폼 프리필 + 무료 ProForma + 단계 탭 로드(무과금). */
-  async function loadDeal(dealName: string) {
+  /** '이어서 분석' - 딜 id(PK)의 저장된 단계에서 입력을 복원해 폼 프리필 + 무료 ProForma + 단계 탭 로드(무과금). */
+  async function loadDeal(dealId: number) {
     setError(null); setIsSample(false); setActiveTab('FINANCE')
+    setCurrentDealId(dealId)
     setBusy('proforma')
     try {
-      const ds = await api.dealStages(dealName)
+      const ds = await api.dealStages(dealId)
       const map: Partial<Record<AnalysisType, DealStage>> = {}
       for (const s of ds.stages) map[s.analysisType] = s
       setStageMap(map)
       const req = ds.stages.find((s) => s.request && s.request.askingPriceEok != null)?.request
       if (req) {
-        const f: FormState = {
-          dealName: req.dealName ?? dealName,
-          assetType: req.assetType ?? '오피스',
-          location: req.location ?? '',
-          notes: req.notes ?? '',
-          askingPriceEok: String(req.askingPriceEok ?? ''),
-          noiEok: String(req.noiEok ?? ''),
-          ltvPct: String(req.ltvPct ?? ''),
-          loanRatePct: String(req.loanRatePct ?? ''),
-          exitCapPct: String(req.exitCapPct ?? ''),
-          holdYears: String(req.holdYears ?? '5'),
-          rentGrowthPct: String(req.rentGrowthPct ?? '3'),
-        }
+        const f = formFromInput(req, ds.dealName ?? '')
         setForm(f)
         const input: UnderwriteInput = {
           dealName: f.dealName, assetType: f.assetType, location: f.location || undefined,
@@ -227,8 +238,8 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
         }
         const res = await api.proforma(input)
         setResults({ proForma: res.proForma, scenarios: res.scenarios, guidelineChecks: res.guidelineChecks, disclaimer: res.disclaimer, inputs: input })
-      } else {
-        setForm((cur) => ({ ...cur, dealName }))
+      } else if (ds.dealName) {
+        setForm((cur) => ({ ...cur, dealName: ds.dealName ?? cur.dealName }))
       }
     } catch (err: unknown) {
       setError(err instanceof ApiError ? err.message : '딜을 불러오지 못했습니다.')
@@ -237,19 +248,19 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
     }
   }
 
-  // 내 딜 대시보드 '이어서 분석' 진입 - openDealName 신호가 오면 그 딜을 로드하고 신호를 비운다.
+  // 내 딜 대시보드 '이어서 분석' 진입 - openDealId 신호가 오면 그 딜을 로드하고 신호를 비운다.
   useEffect(() => {
-    if (!openDealName) return
-    void loadDeal(openDealName)
+    if (openDealId == null) return
+    void loadDeal(openDealId)
     onDealOpened?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openDealName])
+  }, [openDealId])
 
-  /** 딜명으로 완료된 단계들을 모아 탭에 채운다(무과금). 실패해도 단일 결과 표시엔 지장 없음. */
-  async function loadDealStages(dealName?: string | null) {
-    if (!dealName) { setStageMap({}); return }
+  /** 딜 id(PK)로 완료된 단계들을 모아 탭에 채운다(무과금). 실패해도 단일 결과 표시엔 지장 없음. */
+  async function loadDealStages(dealId?: number | null) {
+    if (dealId == null) { setStageMap({}); return }
     try {
-      const ds = await api.dealStages(dealName)
+      const ds = await api.dealStages(dealId)
       const map: Partial<Record<AnalysisType, DealStage>> = {}
       for (const s of ds.stages) map[s.analysisType] = s
       setStageMap(map)
@@ -262,7 +273,19 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
   }
 
   function buildInput(): UnderwriteInput {
-    return inputOf(form)
+    // currentDealId 가 있으면 그 딜에 이어붙이고, 없으면 서버가 새 딜(self-anchor)로 만든다.
+    return { ...inputOf(form), dealId: currentDealId ?? undefined }
+  }
+
+  /**
+   * '새 딜로 시작' - 현재 입력값은 그대로 두고 딜 연결만 끊는다(currentDealId=null).
+   * 다음 분석이 새 dealId 로 갈라져, 이름 변경만으론 안 되던 '다른 딜로 분리'를 명시적으로 수행.
+   */
+  function startNewDeal() {
+    setCurrentDealId(null)
+    setStageMap({})
+    setActiveTab('FINANCE')
+    setError(null)
   }
 
   /**
@@ -299,7 +322,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
       const res: ProFormaResponse = await api.proforma(input)
       setResults({ proForma: res.proForma, scenarios: res.scenarios, guidelineChecks: res.guidelineChecks, disclaimer: res.disclaimer, inputs: input })
       setActiveTab('FINANCE')
-      void loadDealStages(input.dealName)
+      void loadDealStages(currentDealId)
     } catch (err: unknown) {
       setError(err instanceof ApiError ? err.message : '계산 중 오류가 발생했습니다.')
     } finally {
@@ -310,6 +333,12 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
   async function runStage(type: AnalysisType) {
     const invalid = validate(true)
     if (invalid) { setError(invalid.msg); focusField(invalid.id); return }
+    // 시작 전 크레딧 사전 확인 - 모자라면 분석을 시작조차 하지 않고 안내(모달만 떴다 사라지는 문제 방지).
+    const cost = toolCosts?.[type]
+    if (cost != null && creditBalance != null && creditBalance < cost) {
+      onNeedCredits()
+      return
+    }
     track('analysis_start', { path: 'underwrite', meta: type })
     setError(null)
     const input = buildInput()
@@ -321,6 +350,8 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
     setBusy(type)
     try {
       const res: AnalyzeResponse = await api.analyzeStage(type, input)
+      // 첫 분석이면 서버가 새 딜 id 를 발급 → 이후 분석이 같은 딜로 묶이도록 저장.
+      setCurrentDealId(res.dealId)
       setResults({
         runId: res.runId, analysisType: res.analysisType,
         proForma: res.proForma, scenarios: res.scenarios, guidelineChecks: res.guidelineChecks, disclaimer: res.disclaimer,
@@ -330,7 +361,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
       track('analysis_done', { path: 'underwrite', meta: type })
       onCreditBalance(res.creditBalance)
       setHistoryVersion((v) => v + 1)
-      void loadDealStages(input.dealName)
+      void loadDealStages(res.dealId)
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 402) {
         onNeedCredits()
@@ -345,12 +376,12 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
     }
   }
 
-  /** 현재 결과가 속한 딜의 분석 단계를 합본한 HTML 보고서를 새 창으로 연다. */
+  /** 현재 결과가 속한 딜의 언더라이팅 단계(파이프라인)를 합본한 HTML 보고서를 새 창으로 연다. */
   async function openReport() {
     if (!results?.runId) return
     setReportBusy(true)
     try {
-      const html = await api.reportHtml(results.runId)
+      const html = await api.reportHtml(results.runId, 'pipeline')
       const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
       window.open(url, '_blank', 'noopener')
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
@@ -371,11 +402,11 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
         </div>
       </div>
 
-      <div className="layout">
+      <div className="layout" id="uw-layout">
         <form className="card input-panel" onSubmit={(e) => { e.preventDefault(); runProforma() }}>
           <div className="form-head">
             <span className="section-title" style={{ margin: 0 }}>딜 입력 <span className="req-legend"><span className="req">*</span> 필수</span></span>
-            <button type="button" className="btn-link" onClick={() => { setForm(INITIAL); setResults(null); setError(null); setStageMap({}); setActiveTab('FINANCE'); setIsSample(false) }}>
+            <button type="button" className="btn-link" onClick={() => { setForm(INITIAL); setCurrentDealId(null); setResults(null); setError(null); setStageMap({}); setActiveTab('FINANCE'); setIsSample(false) }}>
               초기화
             </button>
           </div>
@@ -395,7 +426,23 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
 
           <div className="form-grid">
             <div className="full">
-              <label htmlFor="dealName">딜 이름 <span className="req">*</span></label>
+              <div className="deal-name-head">
+                <label htmlFor="dealName">딜 이름 <span className="req">*</span></label>
+                {currentDealId != null && (
+                  <>
+                    <span className="deal-id-chip" title="이 딜의 고유 번호입니다. 이름을 바꿔도 같은 딜에 누적됩니다.">딜 #{currentDealId}</span>
+                    <button
+                      type="button"
+                      className="btn-link deal-new-btn"
+                      onClick={startNewDeal}
+                      disabled={busy !== 'none'}
+                      title="현재 입력값은 유지하고, 다음 분석부터 별개의 새 딜로 시작합니다."
+                    >
+                      + 새 딜로 시작
+                    </button>
+                  </>
+                )}
+              </div>
               <input id="dealName" value={form.dealName} onChange={(e) => set('dealName', e.target.value)} placeholder="예: 강남 오피스 (AI 분석에 필수)" />
             </div>
 
@@ -464,7 +511,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
               {isSample && (
                 <div className="sample-banner">
                   <span>📋 <b>예시 딜</b> · 무료 ProForma 결과입니다. AI 심층 심사는 좌측 버튼으로</span>
-                  <button type="button" className="btn-link" onClick={() => { setForm(INITIAL); setResults(null); setIsSample(false); setStageMap({}); setActiveTab('FINANCE') }}>
+                  <button type="button" className="btn-link" onClick={() => { setForm(INITIAL); setCurrentDealId(null); setResults(null); setIsSample(false); setStageMap({}); setActiveTab('FINANCE') }}>
                     내 딜 입력하기 →
                   </button>
                 </div>
@@ -510,11 +557,21 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
         </div>
       </div>
 
-      <HistoryPanel version={historyVersion} onOpen={(r, runId, request) => {
+      <HistoryPanel version={historyVersion} onOpen={(r, runId, request, dealId) => {
         setResults({ ...r, runId, inputs: request })
+        setCurrentDealId(dealId) // 이 이력이 속한 딜로 컨텍스트 전환 → 이후 분석이 같은 딜로 묶임.
+        // 좌측 입력 폼도 저장된 값으로 복원 - 결과만 뜨고 폼이 비던 문제 수정(딜명·매입가 등).
+        if (request && request.askingPriceEok != null) {
+          setIsSample(false)
+          setForm(formFromInput(request, request.dealName ?? ''))
+        }
         const at = (r as unknown as { analysisType?: AnalysisType }).analysisType
         setActiveTab(at ?? 'FINANCE')
-        void loadDealStages(request?.dealName)
+        void loadDealStages(dealId)
+        // 불러온 데이터(폼·결과)로 부드럽게 이동 - 키보드 포커스는 뺏지 않음.
+        requestAnimationFrame(() => {
+          document.getElementById('uw-layout')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        })
       }} />
 
       {busy !== 'none' && (
@@ -536,7 +593,7 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, open
   )
 }
 
-function HistoryPanel({ version, onOpen }: { version: number; onOpen: (r: RunResult, runId: number, request: UnderwriteInput | null) => void }) {
+function HistoryPanel({ version, onOpen }: { version: number; onOpen: (r: RunResult, runId: number, request: UnderwriteInput | null, dealId: number | null) => void }) {
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [error, setError] = useState<string | null>(null)
   const [compareOpen, setCompareOpen] = useState(false)
@@ -553,7 +610,7 @@ function HistoryPanel({ version, onOpen }: { version: number; onOpen: (r: RunRes
   async function open(id: number) {
     try {
       const detail = await api.run(id)
-      if (detail.result) onOpen(detail.result, detail.id, detail.request)
+      if (detail.result) onOpen(detail.result, detail.id, detail.request, detail.dealId)
     } catch (err: unknown) {
       setError(err instanceof ApiError ? err.message : '이력 상세 조회 실패')
     }
@@ -573,15 +630,16 @@ function HistoryPanel({ version, onOpen }: { version: number; onOpen: (r: RunRes
         <p className="hist-empty">아직 AI 분석 이력이 없습니다. 분석을 실행하면 여기에 저장됩니다.</p>
       ) : (
         <table>
-          <thead><tr><th>딜</th><th>유형</th><th>상태</th><th>일시</th><th></th></tr></thead>
+          <thead><tr><th>딜 ID</th><th>딜</th><th>유형</th><th>상태</th><th>일시</th><th></th></tr></thead>
           <tbody>
             {runs.map((r) => (
               <tr key={r.id}>
+                <td><span className="hist-deal-id" title="딜 고유 번호 - 이름이 달라도 같은 번호면 같은 딜입니다">#{r.dealId ?? '-'}</span></td>
                 <td>{r.dealName ?? '(이름없음)'}</td>
                 <td>{STAGE_LABEL[canonicalTool(r.tool)] ?? r.tool}</td>
                 <td><span className={r.status === 'SUCCESS' ? 'st-ok' : 'st-fail'}>{r.status === 'SUCCESS' ? '성공' : r.status === 'FAILED' ? '실패' : r.status}</span></td>
                 <td className="num">{r.createdAt ? new Date(r.createdAt).toLocaleString('ko-KR') : '-'}</td>
-                <td><button className="btn-link" onClick={() => open(r.id)}>불러오기</button></td>
+                <td><button className="btn-link" onClick={() => open(r.id)}>보기</button></td>
               </tr>
             ))}
           </tbody>
@@ -792,16 +850,27 @@ function ShareButton({ runId }: { runId: number }) {
 
 /** 실측 시장데이터 카드 - 분석에 주입된 공공데이터(출처·기준일)를 노출. "실측 앵커링"을 가시화. */
 function MarketFactsCard({ facts }: { facts: MarketFact[] }) {
+  // 실거래가 등 '; ' 로 이어진 항목은 건별 줄로 분리(한 줄로 뭉치는 것 방지).
+  const linesOf = (detail: string): string[] => detail.split(';').map((s) => s.trim()).filter(Boolean)
   return (
     <section className="calc-card mkt-facts">
       <div className="section-title">실측 시장데이터 <span className="calc-badge">확정 · 공공데이터</span></div>
       <ul className="mkt-list">
-        {facts.map((f, i) => (
-          <li key={i} className="mkt-item">
-            <span className="mkt-src">{f.source}</span>
-            <span className="mkt-detail">{f.detail}</span>
-          </li>
-        ))}
+        {facts.map((f, i) => {
+          const lines = linesOf(f.detail)
+          return (
+            <li key={i} className="mkt-item">
+              <span className="mkt-src">{f.source}</span>
+              {lines.length > 1 ? (
+                <div className="mkt-comps">
+                  {lines.map((l, k) => <span key={k} className="mkt-comp">{l}</span>)}
+                </div>
+              ) : (
+                <span className="mkt-detail">{lines[0] ?? f.detail}</span>
+              )}
+            </li>
+          )
+        })}
       </ul>
       <p className="mkt-note">위 수치는 공공 API 실측값(출처·기준일 명시)으로, AI 추정이 아니라 분석의 근거로 직접 인용됩니다.<br />실측이 없는 항목은 본문에 "(추정)"·신뢰도로 표기됩니다.</p>
     </section>

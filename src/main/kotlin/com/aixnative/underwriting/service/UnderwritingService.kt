@@ -35,6 +35,7 @@ import com.aixnative.underwriting.domain.GuidelineEvaluator
 import com.aixnative.underwriting.domain.MarketFact
 import com.aixnative.underwriting.domain.PriceEstimator
 import com.aixnative.underwriting.domain.ProFormaCalculator
+import com.aixnative.underwriting.web.DealRenameResponse
 import com.aixnative.underwriting.web.DealStage
 import com.aixnative.underwriting.web.DealStagesResponse
 import com.aixnative.underwriting.web.DealSummary
@@ -115,7 +116,7 @@ class UnderwritingService(
                 )
             }
             AnalysisType.IC_MEMO ->
-                UnderwritingPrompts.icMemo(buildIcMemoFacts(facts, assetFacts, req.dealName), req.dealName)
+                UnderwritingPrompts.icMemo(buildIcMemoFacts(facts, assetFacts, req.dealId), req.dealName)
         }
         val marketFacts = parseMarketFacts(mfStr).takeIf { it.isNotEmpty() }
 
@@ -149,6 +150,7 @@ class UnderwritingService(
             status = RunStatus.SUCCESS,
             requestHash = sha256(prompt),
             dealName = req.dealName,
+            dealId = req.dealId,
             requestJson = objectMapper.writeValueAsString(req),
             resultJson = objectMapper.writeValueAsString(resultPayload),
         )
@@ -157,6 +159,7 @@ class UnderwritingService(
 
         return UnderwriteResponse(
             runId = run.id!!,
+            dealId = run.dealId!!,
             analysisType = type.name,
             proForma = result,
             scenarios = scenarios,
@@ -321,12 +324,14 @@ class UnderwritingService(
             status = RunStatus.SUCCESS,
             requestHash = sha256(prompt),
             dealName = req.dealName,
+            dealId = req.dealId,
             requestJson = objectMapper.writeValueAsString(req),
             resultJson = objectMapper.writeValueAsString(resultPayload),
         )
         val current = TenantContext.require()
         return DocAnalyzeResponse(
             runId = requireNotNull(run.id),
+            dealId = requireNotNull(run.dealId),
             analysisType = type.name,
             analysis = parsed,
             analysisRaw = if (parsed == null) ai.text else null,
@@ -406,6 +411,7 @@ class UnderwritingService(
     fun listRuns(): List<RunSummary> = aiToolRunService.listMine().map { r ->
         RunSummary(
             id = requireNotNull(r.id),
+            dealId = r.dealId,
             dealName = r.dealName,
             tool = r.tool,
             status = r.status.name,
@@ -414,16 +420,18 @@ class UnderwritingService(
     }
 
     /**
-     * 내 딜 대시보드 — 내 런을 딜명으로 집계(최근 활동순). 리텐션 허브(저장·상태·재방문).
-     * 딜명 없는 런은 제외. 완료 단계·심화 종수·최근 활동을 요약해 "내가 분석한 딜들"을 한눈에.
+     * 내 딜 대시보드 — 내 런을 딜 id(PK)로 집계(최근 활동순). 리텐션 허브(저장·상태·재방문).
+     * 이름 없는 딜(라벨 미지정)은 대시보드에서 제외. 완료 단계·심화 종수·최근 활동을 요약.
      */
     fun myDeals(): List<DealSummary> {
-        val byDeal = LinkedHashMap<String, MutableList<com.aixnative.ai.domain.AiToolRun>>()
+        val byDeal = LinkedHashMap<Long, MutableList<com.aixnative.ai.domain.AiToolRun>>()
         for (r in aiToolRunService.listMine()) { // 최신순
-            val name = r.dealName?.takeIf { it.isNotBlank() } ?: continue
-            byDeal.getOrPut(name) { mutableListOf() }.add(r)
+            val key = r.dealId ?: r.id ?: continue
+            byDeal.getOrPut(key) { mutableListOf() }.add(r)
         }
-        return byDeal.map { (name, group) ->
+        return byDeal.mapNotNull { (dealId, group) ->
+            // 딜 라벨 = 그룹 내 최신 비어있지 않은 딜명. 라벨이 전혀 없으면 대시보드에서 숨김.
+            val name = group.firstNotNullOfOrNull { it.dealName?.takeIf { n -> n.isNotBlank() } } ?: return@mapNotNull null
             val latest = group.first() // listMine 최신순 → 그룹 첫 원소가 최신
             val req = latest.requestJson?.let { runCatching { objectMapper.readTree(it) }.getOrNull() }
             val successTools = group.filter { it.status == RunStatus.SUCCESS }.map { it.tool }.toSet()
@@ -432,6 +440,7 @@ class UnderwritingService(
             // 파이프라인·심화가 없고 심층 시장 리포트만 있으면 '딜'이 아니라 시장 분석 항목.
             val marketReport = pipeline.isEmpty() && advanced == 0 && successTools.contains("MARKET_DEEP_REPORT")
             DealSummary(
+                dealId = dealId,
                 dealName = name,
                 assetType = req?.get("assetType")?.asText(null)?.takeIf { it.isNotBlank() },
                 location = req?.get("location")?.asText(null)?.takeIf { it.isNotBlank() },
@@ -449,10 +458,11 @@ class UnderwritingService(
 
     /**
      * 한 딜의 완료된 파이프라인 단계 모음(합본 탭 화면용). 단계별 최신 성공 결과를 한 번에 반환.
-     * 무과금·테넌트 스코프. 같은 딜명으로 스크리닝·시장조사 등을 따로 실행했어도 한 화면에서 모아 볼 수 있게 한다.
+     * 무과금·테넌트 스코프. 딜 id(PK)로 묶으므로 이름이 같아도 다른 딜은 섞이지 않는다.
      */
-    fun dealStages(dealName: String): DealStagesResponse {
-        val latest = aiToolRunService.latestSuccessRunsForDeal(dealName)
+    fun dealStages(dealId: Long): DealStagesResponse {
+        val latest = aiToolRunService.latestSuccessRunsForDeal(dealId)
+        val dealName = latest.values.firstNotNullOfOrNull { it.dealName?.takeIf { n -> n.isNotBlank() } }
         val stages = AnalysisType.PIPELINE.mapNotNull { type ->
             val run = latest[type.tool] ?: return@mapNotNull null
             DealStage(
@@ -462,7 +472,18 @@ class UnderwritingService(
                 result = run.resultJson?.let { runCatching { objectMapper.readTree(it) }.getOrNull() },
             )
         }
-        return DealStagesResponse(dealName, stages)
+        return DealStagesResponse(dealId, dealName, stages)
+    }
+
+    /**
+     * 딜 이름 변경 — 같은 딜(deal_id)의 모든 분석 이름을 통으로 바꾼다. 테넌트 스코프.
+     * 이름은 딜 단위 라벨이므로 한 분석만 바꾸면 옛 분석을 열 때 이름이 되돌아가 혼란 → 일괄 반영.
+     */
+    fun renameDeal(dealId: Long, name: String): DealRenameResponse {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) throw IllegalArgumentException("딜 이름을 입력하세요.")
+        val updated = aiToolRunService.renameDeal(dealId, trimmed)
+        return DealRenameResponse(dealId, trimmed, updated)
     }
 
     /** 읽기전용 공유 링크 발급(멱등) — 해당 run 에 공유 토큰을 부여하고 반환. 테넌트 스코프. */
@@ -473,6 +494,7 @@ class UnderwritingService(
         val r = aiToolRunService.get(id)
         return RunDetail(
             id = requireNotNull(r.id),
+            dealId = r.dealId,
             dealName = r.dealName,
             tool = r.tool,
             status = r.status.name,
@@ -487,8 +509,8 @@ class UnderwritingService(
      * 종합하고, 결정론적 Pro Forma 수치를 재무 베이스로 덧붙인다. 앞 단계가 있을수록 종합이 깊어진다.
      * (앞 단계가 없어도 ProForma·자산 facts 만으로 독립 동작.)
      */
-    private fun buildIcMemoFacts(facts: String, assetFacts: String, dealName: String?): String {
-        val priors = dealName?.takeIf { it.isNotBlank() }
+    private fun buildIcMemoFacts(facts: String, assetFacts: String, dealId: Long?): String {
+        val priors = dealId
             ?.let { aiToolRunService.latestSuccessResultsByTool(it) }
             ?: emptyMap()
         val sb = StringBuilder()

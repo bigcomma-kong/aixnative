@@ -5,14 +5,16 @@ import { CreditHistoryView } from './CreditHistoryView'
 type Section = 'deals' | 'credits'
 
 interface MyViewProps {
-  /** 딜 카드 '이어서 분석' → 언더라이팅 탭 이동. */
-  onContinue: (dealName: string) => void
+  /** 딜 카드 '언더라이팅 이어서' → 언더라이팅 탭 이동(딜 PK). */
+  onContinue: (dealId: number) => void
+  /** 딜 카드 '심화 이어서' → 심화분석 탭 이동(딜 PK). */
+  onContinueAdvanced: (dealId: number) => void
   /** 크레딧 잔액/플랜을 상위 세션에 동기화. */
   onSync: (plan: 'FREE' | 'PAID', creditBalance: number) => void
 }
 
 /** 개인 활동 통합 뷰: '내가 분석한 딜'과 '크레딧 사용 내역'을 한 메뉴에서 세그먼트로 전환. */
-export function MyView({ onContinue, onSync }: MyViewProps) {
+export function MyView({ onContinue, onContinueAdvanced, onSync }: MyViewProps) {
   const [section, setSection] = useState<Section>('deals')
   const isDeals = section === 'deals'
 
@@ -35,7 +37,7 @@ export function MyView({ onContinue, onSync }: MyViewProps) {
       </div>
 
       {isDeals
-        ? <MyDealsView onContinue={onContinue} embedded />
+        ? <MyDealsView onContinue={onContinue} onContinueAdvanced={onContinueAdvanced} embedded />
         : <CreditHistoryView onSync={onSync} embedded />}
     </>
   )

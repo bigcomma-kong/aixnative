@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, tokenStore, track, type AuthResult, type UserRole } from './api'
+import { api, tokenStore, track, setUnauthorizedHandler, type AuthResult, type UserRole } from './api'
 import { LandingView } from './LandingView'
 import { UnderwriteView } from './UnderwriteView'
 import { DocAnalysisView } from './DocAnalysisView'
@@ -11,6 +11,7 @@ import { ResetPasswordView } from './ResetPasswordView'
 import { Paywall } from './Paywall'
 import { Checkout } from './Checkout'
 import { SiteFooter } from './SiteFooter'
+import { FeedbackButton } from './FeedbackButton'
 import { PaymentResult, readPaymentCallback, type PaymentCallback } from './PaymentResult'
 
 /** 메일의 `/?reset=<token>` 링크로 진입했는지 - 부팅 시 한 번 읽는다. */
@@ -54,18 +55,34 @@ function App() {
   const [toolCosts, setToolCosts] = useState<Record<string, number>>({})
   // 메일의 비밀번호 재설정 링크로 들어온 경우, 인증 상태와 무관하게 재설정 화면을 띄운다.
   const [resetToken, setResetToken] = useState<string | null>(() => readResetToken())
-  // 내 딜 대시보드 '이어서 분석' → 언더라이팅 탭에서 자동 로드할 딜명.
-  const [openDealName, setOpenDealName] = useState<string | undefined>(undefined)
+  // 내 딜 대시보드 '이어서 분석' → 해당 탭에서 자동 로드할 딜 id(PK). 언더라이팅/심화 각각.
+  const [openDealId, setOpenDealId] = useState<number | undefined>(undefined)
+  const [openAdvancedDealId, setOpenAdvancedDealId] = useState<number | undefined>(undefined)
 
-  function continueDeal(dealName: string) {
-    setOpenDealName(dealName)
+  function continueDeal(dealId: number) {
+    setOpenDealId(dealId)
     setTab('underwrite')
+  }
+
+  function continueDealAdvanced(dealId: number) {
+    setOpenAdvancedDealId(dealId)
+    setTab('advanced')
   }
 
   // 화면 진입 이벤트(퍼널). 탭 전환마다 page_view 를 남겨 메뉴별 방문·이탈을 파악한다.
   useEffect(() => {
     track('page_view', { path: tab })
   }, [tab])
+  // 보호 API 가 401(만료·무효 토큰)이면 좀비 세션을 정리하고 랜딩으로 복귀. 화면은 로그인돼 보이지만
+  // 토큰이 죽은 상태에서 계속 익명 이벤트가 찍히던 문제를 근본에서 차단한다.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      tokenStore.clear()
+      setSession(null)
+      setOpenDealId(undefined)
+    })
+    return () => setUnauthorizedHandler(null)
+  }, [])
   // 소셜 로그인 콜백 해시 소비(부팅 시 1회). 토큰이 있으면 세션 복원 흐름이 그대로 받아간다.
   const [oauthHash] = useState(() => consumeOAuthHash())
   const oauthError: string | null = oauthHash.error ?? null
@@ -241,6 +258,7 @@ function App() {
         {tab === 'mydeals' && (
           <MyView
             onContinue={continueDeal}
+            onContinueAdvanced={continueDealAdvanced}
             onSync={(plan, creditBalance) => patchSession({ plan, creditBalance })}
           />
         )}
@@ -249,8 +267,9 @@ function App() {
             onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
             onNeedCredits={handleNeedCredits}
             toolCosts={toolCosts}
-            openDealName={openDealName}
-            onDealOpened={() => setOpenDealName(undefined)}
+            creditBalance={session.creditBalance}
+            openDealId={openDealId}
+            onDealOpened={() => setOpenDealId(undefined)}
           />
         )}
         {tab === 'advanced' && (
@@ -258,6 +277,9 @@ function App() {
             onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
             onNeedCredits={handleNeedCredits}
             toolCosts={toolCosts}
+            creditBalance={session.creditBalance}
+            openDealId={openAdvancedDealId}
+            onDealOpened={() => setOpenAdvancedDealId(undefined)}
           />
         )}
         {tab === 'pm' && isAdmin && (
@@ -273,6 +295,7 @@ function App() {
       </main>
 
       <SiteFooter />
+      <FeedbackButton />
 
       {showPaywall && (
         <div

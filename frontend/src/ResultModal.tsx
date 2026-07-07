@@ -187,7 +187,17 @@ export function ResultModal({ run, result, request, subtitle, onClose }: {
 
           {!isDeepReport && facts.length > 0 && (
             <Block title="실측·확정 데이터">
-              <ul className="rm-ul">{facts.map((f, i) => <li key={i}><b>{f.source}</b> - {f.detail}</li>)}</ul>
+              <ul className="rm-ul">{facts.map((f, i) => {
+                const lines = f.detail.split(';').map((s) => s.trim()).filter(Boolean)
+                return (
+                  <li key={i}>
+                    <b>{f.source}</b>
+                    {lines.length > 1
+                      ? <div className="mkt-comps">{lines.map((l, k) => <span key={k} className="mkt-comp">{l}</span>)}</div>
+                      : <> - {lines[0] ?? f.detail}</>}
+                  </li>
+                )
+              })}</ul>
             </Block>
           )}
 

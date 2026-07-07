@@ -308,6 +308,8 @@ export interface Analysis {
 
 export interface AnalyzeResponse {
   runId: number
+  /** 이 런이 속한 딜 식별자(PK). 이후 분석을 같은 딜로 이어붙일 때 사용. */
+  dealId: number
   analysisType?: string
   proForma: ProForma
   scenarios: Scenario[]
@@ -333,6 +335,7 @@ export interface DealStage {
 
 /** 한 딜에 대해 완료된 파이프라인 단계 모음. */
 export interface DealStagesResponse {
+  dealId: number
   dealName: string | null
   stages: DealStage[]
 }
@@ -347,14 +350,18 @@ export interface DuplicateCheck {
 
 export interface RunSummary {
   id: number
+  /** 이 런이 속한 딜 식별자(PK) - 그룹핑(탭)용. */
+  dealId: number | null
   dealName: string | null
   tool: string
   status: string
   createdAt: string | null
 }
 
-/** 내 딜 대시보드 항목 - 딜명으로 집계한 요약. */
+/** 내 딜 대시보드 항목 - 딜 id(PK)로 집계한 요약. */
 export interface DealSummary {
+  /** 딜 식별자(PK) - 이어서 분석·합본 진입 키. 이름이 같아도 딜은 분리된다. */
+  dealId: number
   dealName: string
   assetType: string | null
   location: string | null
@@ -384,6 +391,7 @@ export interface RunResult {
 
 export interface RunDetail {
   id: number
+  dealId: number | null
   dealName: string | null
   tool: string
   status: string
@@ -393,6 +401,8 @@ export interface RunDetail {
 }
 
 export interface UnderwriteInput {
+  /** 딜 식별자(PK). 있으면 그 딜에 이어붙이고, 없으면 새 딜(self-anchor)로 생성. */
+  dealId?: number
   dealName?: string
   assetType?: string
   location?: string
@@ -603,6 +613,8 @@ export interface MarketFeedInput {
 }
 
 export interface DocAnalyzeInput {
+  /** 딜 식별자(PK). 있으면 그 딜에 이어붙이고, 없으면 새 딜(self-anchor)로 생성. */
+  dealId?: number
   dealName?: string
   assetType?: string
   location?: string
@@ -748,6 +760,8 @@ export interface MarketFact {
 
 export interface DocAnalyzeResponse {
   runId: number
+  /** 이 런이 속한 딜 식별자(PK). 같은 딜로 이어붙일 때 사용. */
+  dealId: number
   analysisType: string
   analysis?: DocAnalysis | null
   analysisRaw?: string | null
@@ -946,6 +960,15 @@ export const tokenStore = {
   clear: (): void => localStorage.removeItem(TOKEN_KEY),
 }
 
+/**
+ * 세션 만료(보호 API 401) 훅. App 이 등록해 토큰 삭제 + 랜딩 복귀를 수행한다.
+ * 토큰을 물고 있던 "좀비 세션"(만료·시크릿 회전으로 무효화된 토큰)을 즉시 정리한다.
+ */
+let onUnauthorized: (() => void) | null = null
+export function setUnauthorizedHandler(fn: (() => void) | null): void {
+  onUnauthorized = fn
+}
+
 /** HTTP error that carries the response status (e.g. 402 paywall, 503 AI unavailable). */
 export class ApiError extends Error {
   readonly status: number
@@ -953,6 +976,22 @@ export class ApiError extends Error {
     super(message)
     this.status = status
   }
+}
+
+// em(—)·en(–)·수평바(―) 대시 → 하이픈. 제품 표기 규칙(em 대시 금지)을 응답 경계에서 일괄 적용.
+const DASH_RE = /[–—―]/g
+function normalizeDashes<T>(value: T): T {
+  if (typeof value === 'string') return value.replace(DASH_RE, '-') as unknown as T
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) value[i] = normalizeDashes(value[i])
+    return value
+  }
+  if (value && typeof value === 'object') {
+    const rec = value as Record<string, unknown>
+    for (const k of Object.keys(rec)) rec[k] = normalizeDashes(rec[k])
+    return value
+  }
+  return value
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -966,6 +1005,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     },
   })
 
+  // 토큰을 보냈는데 401 = 만료/무효 토큰. 좀비 세션 정리(랜딩 복귀). 인증 엔드포인트는 제외
+  // (로그인 실패 등은 전역 로그아웃 대상이 아님). Spring 시큐리티 401 은 본문이 없으므로 파싱 전에 처리.
+  if (res.status === 401) {
+    if (token && !path.startsWith('/api/auth/')) {
+      tokenStore.clear()
+      onUnauthorized?.()
+    }
+    throw new ApiError(401, '세션이 만료되었습니다. 다시 로그인해 주세요.')
+  }
+
   let body: ApiResponse<T> | null = null
   try {
     body = (await res.json()) as ApiResponse<T>
@@ -976,7 +1025,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!res.ok || !body.success) {
     throw new ApiError(res.status, body?.error ?? `요청 실패 (${res.status})`)
   }
-  return body.data as T
+  return normalizeDashes(body.data as T)
 }
 
 /**
@@ -1049,12 +1098,16 @@ export const api = {
   extractDeal: (text: string): Promise<DealExtractResponse> =>
     request('/api/underwriting/extract-deal', { method: 'POST', body: JSON.stringify({ text }) }),
 
-  /** 투자 보고서 HTML(원문). 인증 헤더가 필요하므로 fetch 로 받아 새 창에 띄운다. */
-  reportHtml: async (runId: number): Promise<string> => {
+  /**
+   * 투자 보고서 HTML(원문). 인증 헤더가 필요하므로 fetch 로 받아 새 창에 띄운다.
+   * scope: 'all'(합본) | 'pipeline'(언더라이팅 단계) | 'advanced'(심화분석).
+   */
+  reportHtml: async (runId: number, scope: 'all' | 'pipeline' | 'advanced' = 'all'): Promise<string> => {
     const token = tokenStore.get()
-    const res = await fetch(`${API_BASE}/api/underwriting/report/${runId}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
+    const res = await fetch(
+      `${API_BASE}/api/underwriting/report/${runId}?scope=${scope.toUpperCase()}`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    )
     if (!res.ok) throw new ApiError(res.status, `보고서를 불러오지 못했습니다 (${res.status})`)
     return res.text()
   },
@@ -1064,11 +1117,15 @@ export const api = {
   /** 내 딜 대시보드 - 딜명으로 집계(최근 활동순). */
   myDeals: (): Promise<DealSummary[]> => request('/api/underwriting/deals'),
 
+  /** 딜 이름 변경 - 그 딜(PK)의 모든 분석 이름을 일괄 변경. 무과금·테넌트 스코프. */
+  renameDeal: (dealId: number, name: string): Promise<{ dealId: number; dealName: string; updatedRuns: number }> =>
+    request(`/api/underwriting/deals/${dealId}/name`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+
   run: (id: number): Promise<RunDetail> => request(`/api/underwriting/runs/${id}`),
 
   /** 한 딜의 완료된 단계 모음(합본 탭). 무과금. */
-  dealStages: (dealName: string): Promise<DealStagesResponse> =>
-    request(`/api/underwriting/deal-stages?dealName=${encodeURIComponent(dealName)}`),
+  dealStages: (dealId: number): Promise<DealStagesResponse> =>
+    request(`/api/underwriting/deal-stages?dealId=${dealId}`),
 
   /** 읽기전용 공유 링크 발급(멱등). 토큰 반환 → 프런트가 origin 붙여 링크 구성. */
   shareReport: (runId: number): Promise<{ token: string }> =>
@@ -1158,8 +1215,9 @@ export const api = {
   adminDeleteUser: (id: number): Promise<{ deleted: boolean }> =>
     request(`/api/admin/users/${id}`, { method: 'DELETE' }),
 
-  /** 관리자 - 운영 대시보드 집계 지표. */
-  adminStats: (): Promise<AdminStats> => request('/api/admin/stats'),
+  /** 관리자 - 운영 대시보드 집계 지표. excludeAdmin 이면 관리자 계정 데이터 제외. */
+  adminStats: (excludeAdmin = false): Promise<AdminStats> =>
+    request(`/api/admin/stats${excludeAdmin ? '?excludeAdmin=true' : ''}`),
 
   /** 관리자 - 최근 행동 이벤트(최신순). */
   adminEvents: (): Promise<AdminEvent[]> => request('/api/admin/events'),

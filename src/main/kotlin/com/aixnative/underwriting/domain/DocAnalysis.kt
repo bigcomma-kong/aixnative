@@ -57,6 +57,8 @@ enum class DocAnalysisType(
  * 검증은 단계별로 서비스에서 수행한다(union 이라 bean validation 으로 표현 어려움).
  */
 data class DocAnalyzeRequest(
+    /** 딜 식별자(PK). 있으면 그 딜에 이어붙이고, 없으면 새 딜(self-anchor)로 생성된다. */
+    val dealId: Long? = null,
     val dealName: String? = null,
     val assetType: String? = null,
     val location: String? = null,
@@ -111,6 +113,8 @@ data class DevFeasibilityInput(
  */
 data class DocAnalyzeResponse(
     val runId: Long,
+    /** 이 런이 속한 딜 식별자(PK). 프런트가 같은 딜로 이어붙일 때 사용. */
+    val dealId: Long,
     val analysisType: String,
     val analysis: JsonNode? = null,
     val analysisRaw: String? = null,

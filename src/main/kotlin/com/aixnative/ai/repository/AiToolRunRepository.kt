@@ -20,13 +20,13 @@ interface AiToolRunRepository : JpaRepository<AiToolRun, Long> {
     ): List<AiToolRun>
 
     /**
-     * Active runs for one deal (tenant/user scoped), newest first.
-     * IC 메모 등 후행 단계가 같은 딜의 앞 단계 결과를 종합(체이닝)할 때 사용.
+     * Active runs for one deal (tenant/user scoped, keyed by deal_id), newest first.
+     * 합본 화면·IC 메모 체이닝이 같은 딜의 앞 단계 결과를 모을 때 사용. 식별은 딜명 아닌 deal_id.
      */
-    fun findByTenantIdAndOwnerUserIdAndDealNameAndDeletedAtIsNullOrderByIdDesc(
+    fun findByTenantIdAndOwnerUserIdAndDealIdAndDeletedAtIsNullOrderByIdDesc(
         tenantId: Long,
         ownerUserId: Long,
-        dealName: String,
+        dealId: Long,
     ): List<AiToolRun>
 
     /**

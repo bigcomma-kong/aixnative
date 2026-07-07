@@ -16,6 +16,8 @@ import com.aixnative.underwriting.domain.ProFormaCalculator
  * 선택 항목은 자산유형 통상값 기본 적용.
  */
 data class UnderwriteRequest(
+    /** 딜 식별자(PK). 있으면 그 딜에 이어붙이고, 없으면 새 딜(self-anchor)로 생성된다. */
+    val dealId: Long? = null,
     val dealName: String? = null,
     val assetType: String? = null,
     /** 권역/입지 (예: 서울 GBD, 판교). 시장조사·스크리닝 컨텍스트. 선택. */
@@ -75,6 +77,8 @@ data class ProFormaResponse(
 /** 분석 결과 = ProForma(코드 확정) + 선택 단계의 AI 분석. 1 크레딧 소비. */
 data class UnderwriteResponse(
     val runId: Long,
+    /** 이 런이 속한 딜 식별자(PK). 프런트가 이후 분석을 같은 딜로 이어붙일 때 사용. */
+    val dealId: Long,
     /** 실행된 분석 단계 (AnalysisType.name). */
     val analysisType: String = AnalysisType.UNDERWRITING.name,
     val proForma: ProFormaCalculator.Result,
@@ -105,17 +109,35 @@ data class DuplicateCheckResponse(
 /** 읽기전용 공유 링크 발급 결과 — 토큰(프런트가 origin 붙여 링크 구성). */
 data class ShareResponse(val token: String)
 
+/** 딜 이름 변경 요청 — 딜(deal_id)의 모든 분석 이름을 일괄 변경. */
+data class DealRenameRequest(
+    @field:jakarta.validation.constraints.NotBlank(message = "딜 이름을 입력하세요.")
+    @field:jakarta.validation.constraints.Size(max = 200)
+    val name: String,
+)
+
+/** 딜 이름 변경 결과 — 새 이름과 반영된 분석 수. */
+data class DealRenameResponse(
+    val dealId: Long,
+    val dealName: String,
+    val updatedRuns: Int,
+)
+
 /** 분석 이력 목록 항목. */
 data class RunSummary(
     val id: Long,
+    /** 이 런이 속한 딜 식별자(PK) — 프런트 그룹핑(탭)용. */
+    val dealId: Long?,
     val dealName: String?,
     val tool: String,
     val status: String,
     val createdAt: Instant?,
 )
 
-/** 내 딜 대시보드 항목 — 내 런을 딜명으로 집계한 요약(리텐션 허브). */
+/** 내 딜 대시보드 항목 — 내 런을 딜 id(PK)로 집계한 요약(리텐션 허브). */
 data class DealSummary(
+    /** 딜 식별자(PK) — 이어서 분석·합본 진입 키. 이름이 같아도 딜은 분리된다. */
+    val dealId: Long,
     val dealName: String,
     val assetType: String?,
     val location: String?,
@@ -145,6 +167,7 @@ data class DealStage(
 
 /** 한 딜에 대해 완료된 파이프라인 단계 모음(스크리닝·시장조사·언더라이팅·투심). 단계별 1건(최신 성공). */
 data class DealStagesResponse(
+    val dealId: Long,
     val dealName: String?,
     val stages: List<DealStage>,
 )
@@ -152,6 +175,7 @@ data class DealStagesResponse(
 /** 분석 이력 상세 — 저장된 입력/결과 JSON 포함. */
 data class RunDetail(
     val id: Long,
+    val dealId: Long?,
     val dealName: String?,
     val tool: String,
     val status: String,

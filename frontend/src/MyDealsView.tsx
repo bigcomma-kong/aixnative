@@ -24,18 +24,20 @@ interface StageModalState {
  * 다시 보거나 보고서로 재진입(리텐션 허브). 서버가 딜명으로 집계한 요약(`/api/underwriting/deals`).
  */
 interface MyDealsViewProps {
-  /** 딜 카드의 '이어서 분석' - 언더라이팅 탭으로 이동해 그 딜을 자동 로드. */
-  onContinue?: (dealName: string) => void
+  /** 딜 카드의 '언더라이팅 이어서' - 언더라이팅 탭으로 이동해 그 딜(PK)을 자동 로드. 파이프라인 입력이 있는 딜만. */
+  onContinue?: (dealId: number) => void
+  /** 딜 카드의 '심화 이어서' - 심화분석 탭으로 이동해 그 딜(PK)을 컨텍스트로 로드. 어떤 딜이든 가능. */
+  onContinueAdvanced?: (dealId: number) => void
   /** 상위 뷰(내 딜)에 임베드 시 자체 헤더 숨김(통합 헤더가 대신 렌더). */
   embedded?: boolean
 }
 
-export function MyDealsView({ onContinue, embedded }: MyDealsViewProps) {
+export function MyDealsView({ onContinue, onContinueAdvanced, embedded }: MyDealsViewProps) {
   const [deals, setDeals] = useState<DealSummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
-  // 딜명 → 단계 목록 캐시(칩 클릭 시 1회 로드). 모달 상태 + 로딩 중인 칩 키.
-  const [stagesCache, setStagesCache] = useState<Record<string, DealStage[]>>({})
+  // 딜 id → 단계 목록 캐시(칩 클릭 시 1회 로드). 모달 상태 + 로딩 중인 칩 키.
+  const [stagesCache, setStagesCache] = useState<Record<number, DealStage[]>>({})
   const [modal, setModal] = useState<StageModalState | null>(null)
   const [loadingChip, setLoadingChip] = useState<string | null>(null)
   // 보고서(HTML)를 새 창 대신 모달 iframe 으로 - blob URL 을 그대로 써 렌더 동일성 유지(닫을 때 revoke).
@@ -71,7 +73,7 @@ export function MyDealsView({ onContinue, embedded }: MyDealsViewProps) {
       const detail = await api.run(runId)
       if (!detail.result) { setError('결과를 찾지 못했습니다.'); return }
       setModal({
-        run: { id: detail.id, dealName: detail.dealName, tool: detail.tool, status: detail.status, createdAt: detail.createdAt },
+        run: { id: detail.id, dealId: detail.dealId, dealName: detail.dealName, tool: detail.tool, status: detail.status, createdAt: detail.createdAt },
         result: detail.result,
         request: detail.request,
       })
@@ -82,18 +84,18 @@ export function MyDealsView({ onContinue, embedded }: MyDealsViewProps) {
     }
   }
 
-  /** 완료단계 칩 클릭 → 해당 단계 결과를 모달로. 단계 목록은 딜별 1회 로드해 캐시. */
-  async function openStage(dealName: string, label: string) {
+  /** 완료단계 칩 클릭 → 해당 단계 결과를 모달로. 단계 목록은 딜별(PK) 1회 로드해 캐시. */
+  async function openStage(deal: DealSummary, label: string) {
     const type = LABEL_TO_TYPE[label]
     if (!type) return
     setError(null)
-    const chipKey = `${dealName}:${label}`
+    const chipKey = `${deal.dealId}:${label}`
     try {
-      let stages = stagesCache[dealName]
+      let stages = stagesCache[deal.dealId]
       if (!stages) {
         setLoadingChip(chipKey)
-        stages = (await api.dealStages(dealName)).stages
-        setStagesCache((c) => ({ ...c, [dealName]: stages! }))
+        stages = (await api.dealStages(deal.dealId)).stages
+        setStagesCache((c) => ({ ...c, [deal.dealId]: stages! }))
       }
       const stage = stages.find((s) => s.analysisType === type)
       if (!stage || !stage.result) {
@@ -101,7 +103,7 @@ export function MyDealsView({ onContinue, embedded }: MyDealsViewProps) {
         return
       }
       setModal({
-        run: { id: stage.runId, dealName, tool: stage.analysisType, status: 'SUCCESS', createdAt: null },
+        run: { id: stage.runId, dealId: deal.dealId, dealName: deal.dealName, tool: stage.analysisType, status: 'SUCCESS', createdAt: null },
         result: stage.result,
         request: stage.request,
       })
@@ -134,7 +136,7 @@ export function MyDealsView({ onContinue, embedded }: MyDealsViewProps) {
       ) : (
         <div className="deals-grid">
           {deals.map((d) => (
-            <div className="deal-card" key={d.dealName}>
+            <div className="deal-card" key={d.dealId}>
               <div className="deal-top">
                 {d.isMarketReport
                   ? <span className="deal-type market">시장분석</span>
@@ -151,11 +153,11 @@ export function MyDealsView({ onContinue, embedded }: MyDealsViewProps) {
                         key={s}
                         type="button"
                         className="deal-stage-chip clickable"
-                        disabled={loadingChip === `${d.dealName}:${s}`}
-                        onClick={() => void openStage(d.dealName, s)}
+                        disabled={loadingChip === `${d.dealId}:${s}`}
+                        onClick={() => void openStage(d, s)}
                         title="분석 결과 보기"
                       >
-                        {loadingChip === `${d.dealName}:${s}` ? '여는 중…' : s}
+                        {loadingChip === `${d.dealId}:${s}` ? '여는 중…' : s}
                       </button>
                     ) : (
                       <span key={s} className="deal-stage-chip">{s}</span>
@@ -171,30 +173,37 @@ export function MyDealsView({ onContinue, embedded }: MyDealsViewProps) {
                 <p className="deal-stage-hint">단계를 눌러 분석 결과를 다시 볼 수 있어요.</p>
               )}
               <div className="deal-foot">
-                <span className="deal-runs">분석 {d.runCount}건</span>
-                <div className="deal-actions">
-                  {!d.isMarketReport && onContinue && d.canContinue && (
-                    <button type="button" className="btn-ghost btn-xs" onClick={() => onContinue(d.dealName)}>
-                      이어서 분석 →
-                    </button>
+                <div className="deal-foot-row">
+                  {!d.isMarketReport && ((onContinue && d.canContinue) || onContinueAdvanced) && (
+                    <div className="deal-continue" role="group" aria-label="이어서 분석">
+                      <div className="dc-seg">
+                        {onContinue && d.canContinue && (
+                          <button type="button" className="dc-seg-btn" onClick={() => onContinue(d.dealId)}>언더라이팅</button>
+                        )}
+                        {onContinue && d.canContinue && onContinueAdvanced && <span className="dc-seg-div" aria-hidden="true" />}
+                        {onContinueAdvanced && (
+                          <button type="button" className="dc-seg-btn" onClick={() => onContinueAdvanced(d.dealId)}>심화 분석</button>
+                        )}
+                      </div>
+                    </div>
                   )}
                   {d.hasReport ? (
                     <button
                       type="button"
-                      className="btn-primary btn-xs"
+                      className="btn-primary btn-xs deal-report-btn"
                       disabled={busyId === d.anchorRunId}
                       onClick={() => void openReport(d.anchorRunId)}
                     >
-                      {busyId === d.anchorRunId ? '여는 중…' : '보고서 보기'}
+                      {busyId === d.anchorRunId ? '여는 중…' : '보고서 보기 →'}
                     </button>
                   ) : (
                     <button
                       type="button"
-                      className="btn-primary btn-xs"
+                      className="btn-primary btn-xs deal-report-btn"
                       disabled={busyId === d.anchorRunId}
                       onClick={() => void openRunResult(d.anchorRunId)}
                     >
-                      {busyId === d.anchorRunId ? '여는 중…' : '데이터 보기'}
+                      {busyId === d.anchorRunId ? '여는 중…' : '데이터 보기 →'}
                     </button>
                   )}
                 </div>

@@ -25,6 +25,13 @@ interface CreditLedgerRepository : JpaRepository<CreditLedger, Long> {
     @Query("select coalesce(sum(c.delta), 0) from CreditLedger c where c.reason = :reason")
     fun sumDeltaByReason(@Param("reason") reason: CreditReason): Int
 
+    /** 관리자 통계 — 사유별 delta 합계에서 특정 사용자(관리자) 제외. */
+    @Query("select coalesce(sum(c.delta), 0) from CreditLedger c where c.reason = :reason and c.userId not in :excludeUserIds")
+    fun sumDeltaByReasonExcludingUsers(
+        @Param("reason") reason: CreditReason,
+        @Param("excludeUserIds") excludeUserIds: Collection<Long>,
+    ): Int
+
     /** 계정 삭제 정리용 — 해당 사용자의 원장 전부 삭제. */
     fun deleteByUserId(userId: Long)
 }

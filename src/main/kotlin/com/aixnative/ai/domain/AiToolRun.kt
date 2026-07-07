@@ -33,6 +33,13 @@ class AiToolRun(
     @Column(name = "deal_name", length = 200)
     var dealName: String? = null,
 
+    /**
+     * 딜 식별자(PK) — 딜의 anchor(첫) 런 id. 첫 분석은 self-anchor(자기 id),
+     * 이후 분석은 같은 deal_id 로 묶인다. 딜명은 라벨일 뿐 식별은 이 값으로 한다.
+     */
+    @Column(name = "deal_id")
+    var dealId: Long? = null,
+
     /** 분석 입력(JSON) — 조회 API 재현용. */
     @Column(name = "request_json")
     var requestJson: String? = null,

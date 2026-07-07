@@ -128,6 +128,11 @@ export function SiteFooter() {
             ))}
           </nav>
         </div>
+        <p className="sf-beta">
+          의견·불편한 점·개선 아이디어를{' '}
+          <a href="mailto:admin@aixnative.com?subject=%5BAixNative%20%EB%B2%A0%ED%83%80%20%ED%94%BC%EB%93%9C%EB%B0%B1%5D">admin@aixnative.com</a>{' '}
+          로 보내주시면 큰 힘이 됩니다.
+        </p>
         <p className="sf-disc">본 서비스는 정보 제공 목적이며 투자자문이 아닙니다. 투자 판단의 책임은 이용자에게 있습니다.</p>
         <p className="sf-meta">
           문의 <a href="mailto:admin@aixnative.com">admin@aixnative.com</a> · © AixNative

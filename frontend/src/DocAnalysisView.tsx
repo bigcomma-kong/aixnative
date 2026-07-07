@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { TrustBadge } from './TrustBadge'
-import { printDocAnalysis, downloadDocAnalysisDoc } from './reportExport'
 import {
   api, ApiError, track, isBovCalc, isBizHealthCalc, isPriceForecastCalc,
   type AnalysisFlag, type BizHealthCalc, type BovInput, type DealSummary, type DevFeasibilityInput, type DocAnalysisType, type DocAnalyzeInput,
@@ -14,6 +13,12 @@ interface DocAnalysisViewProps {
   onNeedCredits: () => void
   /** 분석유형 id → 크레딧 단가(서버 단일 소스). 미로딩 시 숫자 생략. */
   toolCosts?: Record<string, number>
+  /** 현재 크레딧 잔액 - 실행 전 사전 확인용(모자라면 분석을 시작조차 안 하고 안내). */
+  creditBalance?: number
+  /** 내 딜 '심화 이어서' → 이 딜(PK)을 컨텍스트로 로드. 어떤 딜이든 가능(파이프라인·심화 무관). */
+  openDealId?: number
+  /** openDealId 처리 완료 통지(상위가 값을 비워 재진입 방지). */
+  onDealOpened?: () => void
 }
 
 /** "N크레딧" 라벨 - 단가 미로딩 시 숫자 생략. */
@@ -145,6 +150,57 @@ function isCalcType(t: DocAnalysisType): boolean {
   return t === 'BOV' || t === 'DEV_FEASIBILITY'
 }
 
+/**
+ * 언더라이팅 입력 → 현재 심화 분석의 계산 입력칸 프리필(대응되는 필드만).
+ * 내가 언더라이팅에서 입력한 NOI·Exit Cap 등을 재입력하지 않도록 가져온다. 계산 타입이 아니면 빈 맵.
+ */
+function calcPrefillFromUnderwrite(t: DocAnalysisType, u: UnderwriteInput): Record<string, string> {
+  const keys = new Set(
+    (t === 'BOV' ? BOV_FIELDS : t === 'DEV_FEASIBILITY' ? DEV_FIELDS : t === 'PRICE_FORECAST' ? FORECAST_FIELDS : [])
+      .map((f) => f.k),
+  )
+  const out: Record<string, string> = {}
+  const put = (k: string, v: number | undefined) => { if (v != null && keys.has(k)) out[k] = String(v) }
+  put('noiEok', u.noiEok)
+  put('stabilizedNoiEok', u.noiEok)
+  put('exitCapPct', u.exitCapPct)
+  put('holdYears', u.holdYears)
+  put('rentGrowthPct', u.rentGrowthPct)
+  return out
+}
+
+/**
+ * 저장된 요청(bov/dev/forecast)의 숫자 필드를 계산 입력칸(calcValues) 문자열 맵으로 역매핑.
+ * 지난 분석을 다시 열 때 그때 넣은 입력값을 폼에 복원하기 위함. 필드 키는 입력칸 키와 동일.
+ */
+function calcValuesFromRequest(req: DocAnalyzeInput): Record<string, string> {
+  const src = req.bov ?? req.dev ?? req.forecast
+  if (!src) return {}
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(src)) {
+    if (typeof v === 'number' && Number.isFinite(v)) out[k] = String(v)
+  }
+  return out
+}
+
+/** 표 셀이 순수 수치(선택적 쉼표·소수·%)인지 - 서술 표에서 수치 열만 우측정렬 판단용. */
+function isNumericCell(s: string): boolean {
+  const t = s.trim()
+  return t !== '' && /^[-+]?[\d,]+(?:\.\d+)?\s*%?$/.test(t)
+}
+
+/**
+ * 지정 요소의 상단으로 부드럽게 스크롤 — 결과 등 큰 콘텐츠가 렌더된 뒤 측정하도록 두 프레임 뒤에 실행.
+ * (single rAF 은 커밋 직후라 레이아웃 확정 전이라 위치가 중간에서 어긋날 수 있음.)
+ */
+function scrollToTopOf(id: string) {
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }),
+  )
+}
+
 /** 문자열 입력 → 숫자(빈값은 undefined). */
 function toNum(v: string | undefined): number | undefined {
   if (v == null || v.trim() === '') return undefined
@@ -193,7 +249,7 @@ function FlagList({ flags }: { flags: AnalysisFlag[] }) {
   )
 }
 
-export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts }: DocAnalysisViewProps) {
+export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts, creditBalance, openDealId, onDealOpened }: DocAnalysisViewProps) {
   const [type, setType] = useState<DocAnalysisType>('DEV_FEASIBILITY')
   const [dealName, setDealName] = useState('')
   const [assetType, setAssetType] = useState<string>('오피스')
@@ -206,6 +262,11 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts }: D
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<DocAnalyzeResponse | null>(null)
+  const [reportBusy, setReportBusy] = useState(false)
+  // 현재 편집 중인 딜 식별자(PK). null=새 딜. 첫 분석 후 응답 dealId 로 채워져 이후 분석이 같은 딜로 묶인다.
+  const [currentDealId, setCurrentDealId] = useState<number | null>(null)
+  // 현재 딜의 '커밋된' 이름(딜 단위 라벨). 이름칸을 바꿔 blur 하면 이 값과 비교해 딜 전체 이름 변경을 묻는다.
+  const [loadedDealName, setLoadedDealName] = useState('')
   const [historyVersion, setHistoryVersion] = useState(0)
   // 언더라이팅 딜 가져오기 - 내 딜(파이프라인 입력 보유분)에서 딜명·자산·위치·재무요약을 프리필.
   const [importDeals, setImportDeals] = useState<DealSummary[]>([])
@@ -221,33 +282,87 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts }: D
   }, [])
 
   /**
-   * 선택한 언더라이팅 딜의 입력을 심화 폼에 프리필.
-   * 딜명·자산유형·위치는 칸에 직접, 재무 수치는 서술칸(documentText) 앞에 요약으로 끼워넣어 기존 입력 보존.
+   * 딜(PK)을 심화 폼의 컨텍스트로 로드 — 딜명·자산·위치를 즉시 채우고, 파이프라인 입력이 있으면
+   * 재무 수치를 서술칸 요약 + 계산 입력칸으로 프리필. 어떤 딜이든(파이프라인·심화 무관) 동작한다.
+   * dropdown '가져오기'와 내 딜 '심화 이어서'가 공유.
    */
-  async function importFromDeal(anchorRunId: number) {
-    const deal = importDeals.find((d) => d.anchorRunId === anchorRunId)
-    if (!deal) return
+  async function loadDealContext(deal: DealSummary) {
     setImportBusy(true)
     setError(null)
+    setResult(null) // 직전 다른 분석 결과가 남아 '가져온 딜'을 덮는 것처럼 보이지 않도록 정리.
+    // 딜명·자산·위치는 이미 가진 DealSummary 로 '즉시' 반영 — dealStages 호출 실패와 무관하게 항상 채운다.
+    setCurrentDealId(deal.dealId) // 심화분석을 이 딜(PK)에 이어붙인다.
+    setDealName(deal.dealName)
+    setLoadedDealName(deal.dealName) // 딜의 커밋된 이름(라벨) 기준값.
+    if (deal.assetType && (ASSET_TYPES as readonly string[]).includes(deal.assetType)) setAssetType(deal.assetType)
+    if (deal.location) setLocation(deal.location)
     try {
-      const ds = await api.dealStages(deal.dealName)
+      const ds = await api.dealStages(deal.dealId)
       // 파이프라인 단계 중 재무 입력(askingPriceEok)이 있는 request = UnderwriteInput.
       const u = ds.stages.find((s) => s.request && s.request.askingPriceEok != null)?.request as UnderwriteInput | undefined
-      setDealName(deal.dealName)
+      // 언더라이팅 입력이 더 구체적이면 자산·위치를 덮어쓴다.
       const at = u?.assetType ?? deal.assetType ?? undefined
       if (at && (ASSET_TYPES as readonly string[]).includes(at)) setAssetType(at)
       const loc = u?.location ?? deal.location ?? ''
       if (loc) setLocation(loc)
       if (u) {
         const summary = summarizeUnderwrite(u)
-        setDocumentText((prev) => (prev.trim() ? `${summary}\n\n${prev}` : summary))
+        // 이전에 끼워넣은 요약 블록([언더라이팅 딜 요약]…)을 먼저 제거 후 새로 프리필 → 재-가져오기 시 중복 누적 방지.
+        setDocumentText((prev) => {
+          const cleaned = prev.replace(/\[언더라이팅 딜 요약\][\s\S]*?(?:\n\n|$)/, '').trimStart()
+          return cleaned.trim() ? `${summary}\n\n${cleaned}` : summary
+        })
+        // 계산 입력칸(NOI·Exit Cap 등)도 대응되는 값으로 채움 - 텍스트 요약만이 아니라 실제 입력값을 가져온다.
+        const prefill = calcPrefillFromUnderwrite(type, u)
+        if (Object.keys(prefill).length > 0) setCalcValues((s) => ({ ...s, ...prefill }))
       }
     } catch (err: unknown) {
       setError(err instanceof ApiError ? err.message : '딜 정보를 불러오지 못했습니다.')
     } finally {
       setImportBusy(false)
+      // 채워진 입력 폼으로 스크롤 — 가져온 딜의 딜명·데이터가 input 에 들어온 걸 바로 보이도록.
+      scrollToTopOf('doc-input')
     }
   }
+
+  /** dropdown '언더라이팅 딜에서 가져오기' - 후보(canContinue) 목록에서 선택. */
+  function importFromDeal(dealId: number) {
+    const deal = importDeals.find((d) => d.dealId === dealId)
+    if (deal) void loadDealContext(deal)
+  }
+
+  /**
+   * 내 딜 '심화 이어서'로 진입.
+   * 이 딜의 '최신 심화분석'을 열어 그때 넣은 입력(토지비·NOI 등)과 결과를 그대로 복원한다(openPastRun).
+   * 심화분석이 하나도 없는 딜(파이프라인만)이면 언더라이팅 입력을 프리필해 새 심화 분석을 시작하게 한다.
+   */
+  useEffect(() => {
+    if (openDealId == null) return
+    let active = true
+    ;(async () => {
+      try {
+        const runs = await api.runs() // 최신순
+        if (!active) return
+        const docTools = new Set(Object.keys(DOC_LABEL))
+        const latestDoc = runs.find((r) => r.status === 'SUCCESS' && docTools.has(r.tool) && r.dealId === openDealId)
+        if (latestDoc) {
+          await openPastRun(latestDoc.id) // 입력 + 결과 모두 복원
+        } else {
+          const ds = await api.myDeals()
+          if (!active) return
+          const deal = ds.find((d) => d.dealId === openDealId)
+          if (deal) await loadDealContext(deal)
+          else setError('딜 정보를 찾지 못했습니다.')
+        }
+      } catch {
+        if (active) setError('딜 정보를 불러오지 못했습니다.')
+      } finally {
+        if (active) onDealOpened?.()
+      }
+    })()
+    return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openDealId])
 
   const meta = DOC_TYPES.find((d) => d.type === type) ?? DOC_TYPES[0]
   const calcMode = isCalcType(type)
@@ -257,9 +372,9 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts }: D
 
   function selectType(next: DocAnalysisType) {
     setType(next)
-    setResult(null)
     setError(null)
-    setCalcValues({})
+    // 결과·입력값은 유지 — 같은 딜에서 분석유형만 바꾸는 것이므로 비우면 초기화된 것처럼 느껴진다.
+    // 딜명·위치·계산 입력·직전 결과는 그대로 두고, 완전 초기화는 상단 '초기화' 버튼으로만.
   }
 
   /** BOV/DEV 입력을 검증하고 요청 payload(bov/dev)를 구성. 실패 시 에러 문자열 반환. */
@@ -304,7 +419,14 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts }: D
   }
 
   async function run() {
+    // 시작 전 크레딧 사전 확인 - 잔액을 알고 있고 단가보다 모자라면 분석을 시작조차 하지 않고 안내(모달만 떴다 사라지는 문제 방지).
+    const cost = toolCosts?.[type]
+    if (cost != null && creditBalance != null && creditBalance < cost) {
+      onNeedCredits()
+      return
+    }
     const input: DocAnalyzeInput = {
+      dealId: currentDealId ?? undefined, // 있으면 그 딜에 이어붙이고, 없으면 새 딜(self-anchor).
       dealName: dealName || undefined,
       assetType: assetType || undefined,
       location: location || undefined,
@@ -351,6 +473,8 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts }: D
     try {
       const res = await api.analyzeDoc(type, input)
       setResult(res)
+      setCurrentDealId(res.dealId) // 첫 분석이면 새 딜 id 발급 → 이후 분석이 같은 딜로 묶임.
+      setLoadedDealName(dealName.trim()) // 이 분석에 쓴 이름이 딜의 커밋된 라벨.
       track('analysis_done', { path: 'advanced', meta: type })
       onCreditBalance(res.creditBalance)
       setHistoryVersion((v) => v + 1)
@@ -365,6 +489,107 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts }: D
     } finally {
       setBusy(false)
     }
+  }
+
+  /** 이력에서 지난 심화 분석을 다시 열어 우측 결과 패널에 표시(재과금 없음). 저장된 결과 = DocAnalyzeResponse 형태. */
+  async function openPastRun(id: number) {
+    setError(null)
+    try {
+      const detail = await api.run(id)
+      const raw = detail.result as unknown as DocAnalyzeResponse | null
+      if (!raw) { setError('결과를 불러올 수 없습니다.'); return }
+      // 같은 딜의 다른 분석을 여는 경우엔 딜 이름을 건드리지 않는다(딜 라벨은 하나 — 옛 스냅샷으로 되돌아가면 혼란).
+      // 다른 딜로 전환할 때만 그 딜의 이름으로 반영.
+      const sameDeal = detail.dealId != null && detail.dealId === currentDealId
+      if (detail.dealId != null) setCurrentDealId(detail.dealId) // 이 이력이 속한 딜로 컨텍스트 전환.
+      // 분석 유형·입력 폼도 그때 저장된 요청으로 복원 — '보기'만 해도 넣었던 데이터가 좌측에 그대로 보이도록.
+      const t = (raw.analysisType ?? detail.tool) as DocAnalysisType
+      if (t) setType(t)
+      const req = detail.request as unknown as DocAnalyzeInput | null
+      if (req) {
+        if (!sameDeal) {
+          const nm = req.dealName ?? detail.dealName ?? ''
+          setDealName(nm)
+          setLoadedDealName(nm)
+        }
+        if (req.assetType && (ASSET_TYPES as readonly string[]).includes(req.assetType)) setAssetType(req.assetType)
+        setLocation(req.location ?? '')
+        setDocumentText(req.documentText ?? '')
+        setParcelAddress(req.parcelAddress ?? '')
+        setBizNo(req.bizNo ?? '')
+        setCounterpartyName(req.counterpartyName ?? '')
+        setCalcValues(calcValuesFromRequest(req))
+      }
+      setResult({
+        ...raw,
+        runId: raw.runId ?? detail.id,
+        analysisType: raw.analysisType ?? detail.tool,
+        provider: raw.provider ?? '',
+        creditBalance: raw.creditBalance ?? 0,
+        disclaimer: raw.disclaimer ?? '',
+      })
+      // 결과 패널 상단으로 스크롤 — '보기'는 결과 확인이 목적이므로 doc-result 최상단(단계탭+결과)이 보이게.
+      // 큰 결과가 렌더된 뒤 측정하도록 두 프레임 뒤 실행(중간에서 멈추는 문제 방지). 입력은 이미 좌측/상단에 복원됨.
+      scrollToTopOf('doc-result')
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.message : '이력 상세 조회에 실패했습니다.')
+    }
+  }
+
+  /**
+   * 이 딜의 심화분석 전부를 합본한 HTML 보고서를 새 창으로 연다(언더라이팅 '보고서 보기'와 동일 UX).
+   * PDF·인쇄는 보고서 상단 툴바에서 처리 → 결과별 개별 PDF/Word 버튼을 대체한다.
+   */
+  async function openReport() {
+    if (!result?.runId) return
+    setReportBusy(true)
+    try {
+      const html = await api.reportHtml(result.runId, 'advanced')
+      const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
+      window.open(url, '_blank', 'noopener')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.message : '보고서를 불러오지 못했습니다.')
+    } finally {
+      setReportBusy(false)
+    }
+  }
+
+  /**
+   * 딜 이름칸 blur 시 - 기존 딜(currentDealId)의 이름을 바꿨으면 "이 딜의 모든 분석 이름을 바꿀까요?" 확인 후 일괄 변경.
+   * 이름은 run별 스냅샷이 아니라 딜 단위 라벨이어야 하므로(안 그러면 옛 분석을 열 때 이름이 되돌아감) 전 분석에 반영한다.
+   * 취소하면 원래 이름으로 되돌린다.
+   */
+  async function commitDealNameChange() {
+    const next = dealName.trim()
+    if (currentDealId == null) return // 새 딜: 아직 저장 전이라 라벨일 뿐, 첫 분석 때 확정.
+    if (next === loadedDealName) return
+    if (!next) { setDealName(loadedDealName); return } // 빈 이름 금지 - 되돌림.
+    const ok = window.confirm(`이 딜의 이름을 '${next}'(으)로 바꿀까요?\n이 딜의 모든 분석에 함께 반영됩니다.`)
+    if (!ok) { setDealName(loadedDealName); return }
+    try {
+      await api.renameDeal(currentDealId, next)
+      setLoadedDealName(next)
+      setHistoryVersion((v) => v + 1) // 단계탭·이력의 이름 라벨 갱신.
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.message : '딜 이름 변경에 실패했습니다.')
+      setDealName(loadedDealName)
+    }
+  }
+
+  /** 새 딜로 시작 - 딜 컨텍스트·입력·결과를 비운다(다음 분석은 별도 딜로 self-anchor). */
+  function startNewDeal() {
+    setCurrentDealId(null)
+    setResult(null)
+    setError(null)
+    setDealName('')
+    setLoadedDealName('')
+    setLocation('')
+    setDocumentText('')
+    setCalcValues({})
+    setParcelAddress('')
+    setBizNo('')
+    setCounterpartyName('')
   }
 
   return (
@@ -383,9 +608,12 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts }: D
         <li><span className="us-n">3</span><span className="us-t"><b>실행</b> 분석별 1~5크레딧 - 결과는 우측·이력에 저장됩니다</span></li>
       </ol>
       <div className="layout">
-        <form className="card input-panel" onSubmit={(e) => { e.preventDefault(); run() }}>
+        <form id="doc-input" className="card input-panel" onSubmit={(e) => { e.preventDefault(); run() }}>
           <div className="form-head">
             <span className="section-title" style={{ margin: 0 }}>분석 선택 <span className="req-legend"><span className="req">*</span> 필수</span></span>
+            <button type="button" className="btn-link" onClick={startNewDeal} title="딜 컨텍스트·입력·결과를 비우고 새 딜로 시작">
+              초기화
+            </button>
           </div>
 
           <div className="doc-type-groups">
@@ -420,7 +648,7 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts }: D
           <div className="form-grid">
             {importDeals.length > 0 && (
               <div className="full">
-                <label htmlFor="importDeal">언더라이팅 딜에서 가져오기 <span className="opt">(딜명·자산·위치·재무요약 자동 채움)</span></label>
+                <label htmlFor="importDeal">언더라이팅 분석 데이터 가져오기</label>
                 <select
                   id="importDeal"
                   className="import-deal-select"
@@ -428,9 +656,9 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts }: D
                   disabled={importBusy}
                   onChange={(e) => { if (e.target.value) void importFromDeal(Number(e.target.value)) }}
                 >
-                  <option value="">{importBusy ? '불러오는 중…' : '딜 선택…'}</option>
+                  <option value="">{importBusy ? '불러오는 중…' : '선택'}</option>
                   {importDeals.map((d) => (
-                    <option key={d.anchorRunId} value={d.anchorRunId}>
+                    <option key={d.dealId} value={d.dealId}>
                       {d.dealName}{d.completedStages.length > 0 ? ` · ${d.completedStages.join('·')}` : ''}
                     </option>
                   ))}
@@ -438,8 +666,14 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts }: D
               </div>
             )}
             <div className="full">
-              <label htmlFor="docDeal">딜/자산 이름</label>
-              <input id="docDeal" value={dealName} onChange={(e) => setDealName(e.target.value)} placeholder="예: 강남 오피스" />
+              <label htmlFor="docDeal">딜/자산 이름
+                {currentDealId != null && <span className="doc-deal-tag" title="이 딜에 이어서 분석 중">이어서 분석 중</span>}
+              </label>
+              <input id="docDeal" value={dealName} onChange={(e) => setDealName(e.target.value)}
+                onBlur={() => void commitDealNameChange()} placeholder="예: 강남 오피스" />
+              {currentDealId != null && (
+                <span className="field-hint">이름을 바꾸면 이 딜의 모든 분석에 함께 반영됩니다.</span>
+              )}
             </div>
             {!ddMode && (
               <div className="full">
@@ -532,17 +766,72 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts }: D
           {error && <p className="error">{error}</p>}
         </form>
 
-        <div className="card">
+        <div className="card" id="doc-result">
+          <DocStageStrip dealId={currentDealId} version={historyVersion} activeRunId={result?.runId} onOpen={openPastRun} />
           {result ? (
-            <DocResult res={result} label={DOC_LABEL[result.analysisType] ?? result.analysisType} />
+            <DocResult res={result} label={DOC_LABEL[result.analysisType] ?? result.analysisType}
+              onReport={openReport} reportBusy={reportBusy} />
           ) : (
             <ResultPreview meta={meta} />
           )}
         </div>
       </div>
 
-      <DocHistoryPanel version={historyVersion} />
+      <DocHistoryPanel version={historyVersion} onOpen={openPastRun} />
+
+      {busy && (
+        <div className="analyze-overlay" role="alertdialog" aria-busy="true" aria-live="assertive" aria-label="분석 진행 중">
+          <div className="analyze-modal">
+            <div className="analyze-spinner" aria-hidden="true" />
+            <strong className="analyze-modal-title">{meta.label} 분석 중…</strong>
+            <p className="analyze-modal-sub">AI가 딜을 분석하고 있습니다 · 보통 30~60초 걸립니다. 창을 닫지 마세요.</p>
+          </div>
+        </div>
+      )}
     </>
+  )
+}
+
+/**
+ * 이 딜의 완료된 심화분석을 탭처럼 나열 - 언더라이팅 단계 탭처럼 "한 딜로 여러 분석"을 이어서 보고 전환.
+ * 딜 id(PK)와 일치하는 성공 런을 유형별 최신 1건씩 pill 로. 클릭 시 재열람(무과금).
+ */
+function DocStageStrip({ dealId, version, activeRunId, onOpen }: {
+  dealId: number | null; version: number; activeRunId?: number; onOpen: (id: number) => void
+}) {
+  const [runs, setRuns] = useState<RunSummary[]>([])
+  useEffect(() => {
+    if (dealId == null) { setRuns([]); return }
+    let active = true
+    const docTools = new Set(Object.keys(DOC_LABEL))
+    api.runs()
+      .then((list) => {
+        if (!active) return
+        const seen = new Set<string>()
+        // api.runs() 는 최신순 → 유형별 첫 등장이 최신. 같은 딜(PK)·성공·심화툴만.
+        const mine = list
+          .filter((r) => r.status === 'SUCCESS' && docTools.has(r.tool) && r.dealId === dealId)
+          .filter((r) => (seen.has(r.tool) ? false : (seen.add(r.tool), true)))
+        setRuns(mine)
+      })
+      .catch(() => { if (active) setRuns([]) })
+    return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dealId, version])
+
+  if (runs.length === 0) return null
+  return (
+    <div className="doc-stage-strip" role="tablist" aria-label="이 딜의 심화분석">
+      <span className="dss-label">이 딜의 심화분석</span>
+      <div className="dss-pills">
+        {runs.map((r) => (
+          <button key={r.id} type="button" role="tab" aria-selected={r.id === activeRunId}
+            className={`dss-pill${r.id === activeRunId ? ' active' : ''}`} onClick={() => onOpen(r.id)}>
+            {DOC_LABEL[r.tool] ?? r.tool}
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -575,7 +864,9 @@ function ResultPreview({ meta }: { meta: DocTypeMeta }) {
   )
 }
 
-function DocResult({ res, label }: { res: DocAnalyzeResponse; label: string }) {
+function DocResult({ res, label, onReport, reportBusy }: {
+  res: DocAnalyzeResponse; label: string; onReport: () => void; reportBusy: boolean
+}) {
   const a = res.analysis
   return (
     <div className="ai-block">
@@ -583,8 +874,10 @@ function DocResult({ res, label }: { res: DocAnalyzeResponse; label: string }) {
         <span className="stage-pill">{label}</span>
         {res.provider && <span className="muted">· {res.provider}</span>}
         <span className="result-head-actions">
-          <button type="button" className="btn-ghost btn-xs" onClick={() => printDocAnalysis(res, label)} title="PDF로 저장(인쇄)">PDF</button>
-          <button type="button" className="btn-ghost btn-xs" onClick={() => downloadDocAnalysisDoc(res, label)} title="Word(.doc)로 저장">Word</button>
+          <button type="button" className="btn-ghost btn-report" onClick={onReport} disabled={reportBusy}
+            title="이 딜의 심화분석 전체를 합본 보고서로 보기 (PDF 저장은 보고서에서)">
+            {reportBusy ? '보고서 여는 중…' : '보고서 보기'}
+          </button>
         </span>
       </div>
 
@@ -622,6 +915,13 @@ function DocResult({ res, label }: { res: DocAnalyzeResponse; label: string }) {
 
 /** 실측 시장데이터 카드 - 분석에 주입된 공공데이터(실거래·공시지가·임대시장·매크로)를 출처와 함께 노출.
  *  "이 분석은 실측에 앵커링됐다"를 가시화 = AI 환각과 구분되는 확정 사실. */
+const cleanDash = (s: string): string => s.replace(/—/g, '-')
+
+/** 실거래가처럼 '; ' 로 이어진 항목을 줄 단위로 분리. 단일 항목이면 길이 1. */
+function detailLines(detail: string): string[] {
+  return cleanDash(detail).split(';').map((s) => s.trim()).filter(Boolean)
+}
+
 function MarketFactsCard({ facts }: { facts: MarketFact[] }) {
   return (
     <section className="calc-card mkt-facts">
@@ -629,12 +929,21 @@ function MarketFactsCard({ facts }: { facts: MarketFact[] }) {
         실측 시장데이터 <span className="calc-badge">확정 · 공공데이터</span>
       </div>
       <ul className="mkt-list">
-        {facts.map((f, i) => (
-          <li key={i} className="mkt-item">
-            <span className="mkt-src">{f.source}</span>
-            <span className="mkt-detail">{f.detail}</span>
-          </li>
-        ))}
+        {facts.map((f, i) => {
+          const lines = detailLines(f.detail)
+          return (
+            <li key={i} className="mkt-item">
+              <span className="mkt-src">{cleanDash(f.source)}</span>
+              {lines.length > 1 ? (
+                <div className="mkt-comps">
+                  {lines.map((l, k) => <span key={k} className="mkt-comp">{l}</span>)}
+                </div>
+              ) : (
+                <span className="mkt-detail">{lines[0] ?? cleanDash(f.detail)}</span>
+              )}
+            </li>
+          )
+        })}
       </ul>
       <p className="mkt-note">위 수치는 공공 API 실측값으로, AI 추정이 아니라 분석의 근거로 직접 인용됩니다.</p>
     </section>
@@ -788,7 +1097,7 @@ function TaxGuides({ guides, priceVerdict }: { guides: TaxGuide[]; priceVerdict?
         진단 {priceVerdict && <span className={`sev-badge ${verdictTone(priceVerdict)}`}>가격 {priceVerdict}</span>}
       </div>
       {guides.map((g, i) => (
-        <div key={i} className="risk" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+        <div key={i} className="risk" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
           <span className="r-name flag-line">
             {g.kind && <span className={`sev-badge ${g.kind === '절세' ? 'go' : g.kind === '주의' ? 'no' : 'cond'}`}>{g.kind}</span>}
             <span>{g.title}</span>
@@ -802,6 +1111,32 @@ function TaxGuides({ guides, priceVerdict }: { guides: TaxGuide[]; priceVerdict?
   )
 }
 
+/** AI 서술 표 - 텍스트 열은 좌측·줄바꿈, 수치 위주 열은 우측정렬. 좁은 화면은 가로 스크롤. */
+function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
+  // 열 단위 수치 판정: 비어있지 않은 셀 중 수치가 텍스트 이상이면 우측정렬('미사용' 등 소수 텍스트 혼재 허용).
+  const numCol = headers.map((_, c) => {
+    let num = 0, txt = 0
+    for (const r of rows) {
+      const v = (r[c] ?? '').trim()
+      if (v === '') continue
+      if (isNumericCell(v)) num++; else txt++
+    }
+    return num > 0 && num >= txt
+  })
+  return (
+    <div className="md-table-wrap">
+      <table className="md-table">
+        <thead><tr>{headers.map((h, i) => <th key={i} className={numCol[i] ? 'md-num' : undefined}>{h}</th>)}</tr></thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i}>{r.map((c, j) => <td key={j} className={numCol[j] ? 'md-num' : undefined}>{c}</td>)}</tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function Sections({ sections }: { sections: DocSection[] }) {
   return (
     <>
@@ -810,16 +1145,7 @@ function Sections({ sections }: { sections: DocSection[] }) {
           {s.title && <div className="section-title">{s.title}</div>}
           {s.text && <p className="narrative">{s.text}</p>}
           {s.bullets && s.bullets.length > 0 && <ul>{s.bullets.map((b, j) => <li key={j}>{b}</li>)}</ul>}
-          {s.table && s.table.headers && (
-            <table>
-              <thead><tr>{s.table.headers.map((h, j) => <th key={j}>{h}</th>)}</tr></thead>
-              <tbody>
-                {s.table.rows.map((row, j) => (
-                  <tr key={j}>{row.map((c, k) => <td key={k}>{c}</td>)}</tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          {s.table && s.table.headers && <DataTable headers={s.table.headers} rows={s.table.rows} />}
         </section>
       ))}
     </>
@@ -841,12 +1167,7 @@ function Markdown({ md }: { md: string }) {
     if (tableRows.length) {
       const [head, ...rest] = tableRows
       const body = rest.filter((r) => !r.every((c) => /^-+$/.test(c.trim()) || c.trim() === ''))
-      nodes.push(
-        <table key={key++}>
-          <thead><tr>{head.map((h, i) => <th key={i}>{h}</th>)}</tr></thead>
-          <tbody>{body.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{c}</td>)}</tr>)}</tbody>
-        </table>,
-      )
+      nodes.push(<DataTable key={key++} headers={head} rows={body} />)
       tableRows = []
     }
   }
@@ -869,7 +1190,7 @@ function Markdown({ md }: { md: string }) {
   return <section>{nodes}</section>
 }
 
-function DocHistoryPanel({ version }: { version: number }) {
+function DocHistoryPanel({ version, onOpen }: { version: number; onOpen: (id: number) => void }) {
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [error, setError] = useState<string | null>(null)
   const docTools = new Set(Object.keys(DOC_LABEL))
@@ -891,14 +1212,16 @@ function DocHistoryPanel({ version }: { version: number }) {
         <p className="hist-empty">아직 심화 분석 이력이 없습니다.</p>
       ) : (
         <table>
-          <thead><tr><th>딜</th><th>유형</th><th>상태</th><th>일시</th></tr></thead>
+          <thead><tr><th>딜 ID</th><th>딜</th><th>유형</th><th>상태</th><th>일시</th><th></th></tr></thead>
           <tbody>
             {runs.map((r) => (
               <tr key={r.id}>
+                <td><span className="hist-deal-id" title="딜 고유 번호 - 이름이 달라도 같은 번호면 같은 딜입니다">#{r.dealId ?? '-'}</span></td>
                 <td>{r.dealName ?? '(이름없음)'}</td>
                 <td>{DOC_LABEL[r.tool] ?? r.tool}</td>
                 <td><span className={r.status === 'SUCCESS' ? 'st-ok' : 'st-fail'}>{r.status === 'SUCCESS' ? '성공' : r.status === 'FAILED' ? '실패' : r.status}</span></td>
                 <td className="num">{r.createdAt ? new Date(r.createdAt).toLocaleString('ko-KR') : '-'}</td>
+                <td>{r.status === 'SUCCESS' && <button type="button" className="btn-link" onClick={() => onOpen(r.id)}>보기</button>}</td>
               </tr>
             ))}
           </tbody>

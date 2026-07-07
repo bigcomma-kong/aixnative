@@ -18,6 +18,10 @@ import com.aixnative.ai.repository.AiToolRunRepository
 @Service
 class AiToolRunService(private val repository: AiToolRunRepository) {
 
+    /**
+     * 분석 런 저장. [dealId] 가 오면 그 딜에 이어붙이고, null 이면 새 딜로 self-anchor
+     * (저장 후 확정된 자기 id 를 deal_id 로 세팅). 이후 같은 딜의 분석은 이 deal_id 로 묶인다.
+     */
     @Transactional
     fun record(
         tool: String,
@@ -25,6 +29,7 @@ class AiToolRunService(private val repository: AiToolRunRepository) {
         requestHash: String? = null,
         resultRef: String? = null,
         dealName: String? = null,
+        dealId: Long? = null,
         requestJson: String? = null,
         resultJson: String? = null,
     ): AiToolRun {
@@ -35,12 +40,19 @@ class AiToolRunService(private val repository: AiToolRunRepository) {
             requestHash = requestHash,
             resultRef = resultRef,
             dealName = dealName,
+            dealId = dealId,
             requestJson = requestJson,
             resultJson = resultJson,
         )
         run.tenantId = current.tenantId
         run.ownerUserId = current.userId
-        return repository.save(run)
+        val saved = repository.save(run)
+        // 새 딜(dealId 미지정)이면 자기 id 를 deal_id 로 확정(self-anchor). IDENTITY 라 insert 후에만 id 존재.
+        if (saved.dealId == null) {
+            saved.dealId = saved.id
+            return repository.save(saved)
+        }
+        return saved
     }
 
     @Transactional(readOnly = true)
@@ -57,12 +69,12 @@ class AiToolRunService(private val repository: AiToolRunRepository) {
      * IC 메모 등 후행 단계가 앞 단계(스크리닝·시장조사·언더라이팅) 결과를 종합(체이닝)하는 데 사용.
      */
     @Transactional(readOnly = true)
-    fun latestSuccessResultsByTool(dealName: String): Map<String, String> {
+    fun latestSuccessResultsByTool(dealId: Long): Map<String, String> {
         val current = TenantContext.require()
-        val runs = repository.findByTenantIdAndOwnerUserIdAndDealNameAndDeletedAtIsNullOrderByIdDesc(
+        val runs = repository.findByTenantIdAndOwnerUserIdAndDealIdAndDeletedAtIsNullOrderByIdDesc(
             current.tenantId,
             current.userId,
-            dealName,
+            dealId,
         )
         val latest = LinkedHashMap<String, String>()
         for (run in runs) {
@@ -96,12 +108,12 @@ class AiToolRunService(private val repository: AiToolRunRepository) {
      * 결과 합본 화면(딜 한 건의 스크리닝·시장조사·언더라이팅·투심을 한 번에)에서 사용.
      */
     @Transactional(readOnly = true)
-    fun latestSuccessRunsForDeal(dealName: String): Map<String, AiToolRun> {
+    fun latestSuccessRunsForDeal(dealId: Long): Map<String, AiToolRun> {
         val current = TenantContext.require()
-        val runs = repository.findByTenantIdAndOwnerUserIdAndDealNameAndDeletedAtIsNullOrderByIdDesc(
+        val runs = repository.findByTenantIdAndOwnerUserIdAndDealIdAndDeletedAtIsNullOrderByIdDesc(
             current.tenantId,
             current.userId,
-            dealName,
+            dealId,
         )
         val latest = LinkedHashMap<String, AiToolRun>()
         for (run in runs) {
@@ -157,5 +169,24 @@ class AiToolRunService(private val repository: AiToolRunRepository) {
         val run = get(id) // enforces tenant scope
         run.deletedAt = Instant.now()
         repository.save(run)
+    }
+
+    /**
+     * 딜 이름 변경 — 같은 딜(deal_id)의 모든 활성 런의 dealName 을 통으로 바꾼다(테넌트/유저 스코프).
+     * 이름은 run 별 스냅샷이 아니라 딜 단위 라벨이어야 하므로, 이름 변경 시 전 분석에 일괄 반영.
+     * @return 변경된 런 수
+     */
+    @Transactional
+    fun renameDeal(dealId: Long, newName: String): Int {
+        val current = TenantContext.require()
+        val runs = repository.findByTenantIdAndOwnerUserIdAndDealIdAndDeletedAtIsNullOrderByIdDesc(
+            current.tenantId,
+            current.userId,
+            dealId,
+        )
+        if (runs.isEmpty()) throw NotFoundException("딜을 찾을 수 없습니다.")
+        runs.forEach { it.dealName = newName }
+        repository.saveAll(runs)
+        return runs.size
     }
 }

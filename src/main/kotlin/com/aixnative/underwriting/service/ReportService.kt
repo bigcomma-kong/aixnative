@@ -7,6 +7,14 @@ import com.aixnative.common.Disclaimer
 import com.aixnative.common.web.NotFoundException
 import org.springframework.stereotype.Service
 import com.aixnative.underwriting.domain.AnalysisType
+import com.aixnative.underwriting.domain.DocAnalysisType
+
+/**
+ * 보고서 범위 — 화면별로 다른 것을 보여준다.
+ * PIPELINE=언더라이팅(스크리닝·시장조사·언더라이팅·투심) 화면, ADVANCED=심화분석 화면(문서기반 심층 전부),
+ * ALL=내 딜(둘을 합본).
+ */
+enum class ReportScope { ALL, PIPELINE, ADVANCED }
 
 /**
  * 투자 보고서(IM) HTML 생성. 한 딜의 분석 단계(스크리닝·시장조사·언더라이팅·투심)를 모아
@@ -22,29 +30,44 @@ class ReportService(
 ) {
 
     /** 주어진 run 이 속한 딜의 단계들을 모아 보고서 HTML 을 만든다. 테넌트 스코프(get 이 검증). */
-    fun buildHtml(runId: Long): String =
-        buildFrom(aiToolRunService.get(runId), aiToolRunService.listMine())
+    fun buildHtml(runId: Long, scope: ReportScope = ReportScope.ALL): String =
+        buildFrom(aiToolRunService.get(runId), aiToolRunService.listMine(), scope)
 
-    /** 공유 토큰으로 공개(무인증) 보고서 HTML. 토큰의 소유자 범위로 딜 단계를 모은다. */
+    /** 공유 토큰으로 공개(무인증) 보고서 HTML. 토큰의 소유자 범위로 딜 단계를 모은다. 공유는 전체 합본. */
     fun buildHtmlByToken(token: String): String {
         val anchor = aiToolRunService.getByShareToken(token)
             ?: throw NotFoundException("공유된 보고서를 찾을 수 없습니다.")
-        return buildFrom(anchor, aiToolRunService.listForOwner(anchor.tenantId, anchor.ownerUserId))
+        return buildFrom(anchor, aiToolRunService.listForOwner(anchor.tenantId, anchor.ownerUserId), ReportScope.ALL)
     }
 
-    private fun buildFrom(anchor: com.aixnative.ai.domain.AiToolRun, ownerRuns: List<com.aixnative.ai.domain.AiToolRun>): String {
+    private fun buildFrom(
+        anchor: com.aixnative.ai.domain.AiToolRun,
+        ownerRuns: List<com.aixnative.ai.domain.AiToolRun>,
+        scope: ReportScope,
+    ): String {
         val dealName = anchor.dealName
+        val dealId = anchor.dealId ?: anchor.id
+        val includePipeline = scope != ReportScope.ADVANCED
+        val includeAdvanced = scope != ReportScope.PIPELINE
 
-        // 같은 딜의 단계별 최신 결과 (ownerRuns 는 최신순). dealName 이 같으면(둘 다 null 포함) 합본.
+        // 같은 딜의 단계별 최신 결과 (ownerRuns 는 최신순). 딜 식별은 deal_id(PK) — 이름이 같아도 딜은 분리.
+        // 파이프라인(스크리닝·시장조사·언더라이팅·투심)과 심화(문서기반 심층 도구)를 각각 도구별 최신 1건씩 수집.
         val byTool = LinkedHashMap<AnalysisType, JsonNode>()
+        val advByTool = LinkedHashMap<DocAnalysisType, JsonNode>()
         for (run in ownerRuns) {
-            if (run.dealName != dealName) continue
-            val type = AnalysisType.fromTool(run.tool) ?: continue
-            if (byTool.containsKey(type)) continue // 최신만
+            if ((run.dealId ?: run.id) != dealId) continue
             val node = run.resultJson?.let { runCatching { objectMapper.readTree(it) }.getOrNull() } ?: continue
-            byTool[type] = node
+            val type = AnalysisType.fromTool(run.tool)
+            if (type != null) {
+                if (!byTool.containsKey(type)) byTool[type] = node // 최신만
+                continue
+            }
+            val docType = DocAnalysisType.fromTool(run.tool)
+            if (docType != null && !advByTool.containsKey(docType)) advByTool[docType] = node // 심화, 도구별 최신 1건
         }
-        if (byTool.isEmpty()) throw NotFoundException("보고서를 만들 분석 결과가 없습니다.")
+        val hasPipeline = includePipeline && byTool.isNotEmpty()
+        val hasAdvanced = includeAdvanced && advByTool.isNotEmpty()
+        if (!hasPipeline && !hasAdvanced) throw NotFoundException("보고서를 만들 분석 결과가 없습니다.")
 
         // 입력/ProForma 는 아무 단계 결과에서나 동일 — anchor 우선, 없으면 첫 단계.
         val anchorResult = anchor.resultJson?.let { runCatching { objectMapper.readTree(it) }.getOrNull() }
@@ -61,29 +84,38 @@ class ReportService(
         sb.append("<div class='toolbar no-print'><button onclick='window.print()'>PDF로 저장 · 인쇄</button>")
         sb.append("<span class='gen'>생성 $generatedAt KST</span></div>")
         sb.appendCover(dealName, requestNode, generatedAt)
-        if (proFormaNode != null) sb.appendMetrics(proFormaNode)
+        if (includePipeline && proFormaNode != null) sb.appendMetrics(proFormaNode)
 
-        // 단계 순서대로 섹션 렌더 (있는 것만).
-        for (type in AnalysisType.PIPELINE) {
-            val node = byTool[type] ?: continue
-            val analysis = node.get("analysis")
-            sb.append("<section class='step'>")
-            sb.append("<h2>${esc(type.label)}</h2>")
-            if (analysis != null && !analysis.isNull) {
-                when (type) {
-                    AnalysisType.SCREENING -> sb.appendScreening(analysis)
-                    AnalysisType.MARKET_STUDY -> sb.appendMarketStudy(analysis)
-                    AnalysisType.UNDERWRITING -> sb.appendUnderwriting(analysis)
-                    AnalysisType.IC_MEMO -> sb.appendIcMemo(analysis)
+        // 파이프라인 단계 순서대로 섹션 렌더 (있는 것만). ADVANCED 범위면 생략.
+        if (includePipeline) {
+            for (type in AnalysisType.PIPELINE) {
+                val node = byTool[type] ?: continue
+                val analysis = node.get("analysis")
+                sb.append("<section class='step'>")
+                sb.append("<h2>${esc(type.label)}</h2>")
+                if (analysis != null && !analysis.isNull) {
+                    when (type) {
+                        AnalysisType.SCREENING -> sb.appendScreening(analysis)
+                        AnalysisType.MARKET_STUDY -> sb.appendMarketStudy(analysis)
+                        AnalysisType.UNDERWRITING -> sb.appendUnderwriting(analysis)
+                        AnalysisType.IC_MEMO -> sb.appendIcMemo(analysis)
+                    }
+                } else {
+                    val raw = node.get("analysisRaw")?.asText()
+                    sb.append("<p class='raw'>${esc(raw ?: "(분석 본문 없음)")}</p>")
                 }
-            } else {
-                val raw = node.get("analysisRaw")?.asText()
-                sb.append("<p class='raw'>${esc(raw ?: "(분석 본문 없음)")}</p>")
+                sb.append("</section>")
             }
-            sb.append("</section>")
+            if (proFormaNode != null) sb.appendProFormaTable(proFormaNode)
         }
 
-        if (proFormaNode != null) sb.appendProFormaTable(proFormaNode)
+        // 심화 분석(문서기반 심층 도구) — 도구별 최신 1건. PIPELINE 범위면 생략.
+        if (includeAdvanced) {
+            for ((docType, node) in advByTool) {
+                sb.appendAdvancedSection(docType, node)
+            }
+        }
+
         sb.append("<footer class='disclaimer'>")
         sb.append("<p class='src'><b>데이터 출처</b> — 한국은행 ECOS(매크로) · 국토교통부 RTMS(실거래) · 한국부동산원 R-ONE(공실·임대·수익률) · V-World(공시지가). ")
         sb.append("수치(IRR·EM·DSCR·민감도)는 결정론적 코드 계산이며, AI는 확정 수치를 근거로 서술·심사만 합니다.</p>")
@@ -208,6 +240,80 @@ class ReportService(
             append("<tr><td>Y${esc(r.txt("year") ?: "")}</td><td>${esc(r.txt("noi") ?: "")}</td><td>${esc(r.txt("interest") ?: "")}</td><td>${esc(r.txt("leveredCf") ?: "")}</td><td>${esc(r.txt("dscr") ?: "")}</td><td>${esc(r.txt("cocPct") ?: "")}</td></tr>")
         }
         append("</tbody></table></section>")
+    }
+
+    /**
+     * 심화 분석 섹션 — 문서기반 심층 도구(BOV·AM·개발타당성·심층시장·상대방실사·가격전망 등).
+     * result 는 DocAnalyzeResponse JSON: analysis(도구별 스키마)·analysisRaw·marketFacts.
+     * analysis 공통 키(headline·verdict·flags·sections·recommend·im_markdown)를 렌더하고,
+     * 인식 못 하면 analysisRaw 로 우아하게 폴백한다.
+     */
+    private fun StringBuilder.appendAdvancedSection(type: DocAnalysisType, result: JsonNode) {
+        val a = result.get("analysis")?.takeIf { !it.isNull && it.isObject }
+        append("<section class='step adv'>")
+        append("<h2>${esc(type.label)}<span class='adv-tag'>심화</span></h2>")
+        val bodyStart = length
+        if (a != null) {
+            a.txt("headline")?.let { append("<p class='thesis'>${esc(it)}</p>") }
+            val v = a.txt("verdict") ?: a.txt("priceVerdict")
+            if (!v.isNullOrBlank()) {
+                val reason = listOfNotNull(
+                    a.txt("confidence")?.let { "신뢰도 $it" },
+                    a.txt("priceComment"), a.txt("recommendation_reason"), a.txt("rationale"),
+                ).joinToString(" · ").ifBlank { null }
+                verdict(v, reason)
+            }
+            a.get("flags")?.takeIf { it.isArray && it.size() > 0 }?.let { flags ->
+                append("<h3>주요 플래그</h3><ul class='risks'>")
+                flags.forEach {
+                    val sev = it.txt("severity") ?: ""
+                    append("<li>${esc(it.txt("label") ?: "")} <span class='tag ${signalClass(sev)}'>${esc(sev)}</span></li>")
+                }
+                append("</ul>")
+            }
+            a.get("recommend")?.takeIf { it.isObject && it.size() > 0 }?.let { rec ->
+                append("<h3>평가 점수</h3><table class='grid'><tbody>")
+                rec.fields().forEach { append("<tr><td>${esc(it.key)}</td><td>${esc(it.value.asText())}</td></tr>") }
+                append("</tbody></table>")
+            }
+            a.get("sections")?.takeIf { it.isArray && it.size() > 0 }?.forEach { appendDocSection(it) }
+            a.txt("im_markdown")?.let { append("<div class='raw'>${esc(it)}</div>") }
+        }
+        if (length == bodyStart) {
+            // 인식된 구조 없음 — 원문으로 폴백.
+            result.txt("analysisRaw")?.let { append("<div class='raw'>${esc(it)}</div>") }
+        }
+        // 실측 시장데이터(있으면 근거로 명시) — AI 추정과 구분되는 확정 사실.
+        result.get("marketFacts")?.takeIf { it.isArray && it.size() > 0 }?.let { facts ->
+            append("<h3>실측 시장데이터 · 공공데이터</h3><ul class='facts'>")
+            facts.forEach { append("<li><b>${esc(it.txt("source") ?: "")}</b> ${esc(it.txt("detail") ?: "")}</li>") }
+            append("</ul>")
+        }
+        append("</section>")
+    }
+
+    /** 심화 섹션 한 블록(title·text·bullets·table) 렌더. Sections 컴포넌트와 동일 스키마. */
+    private fun StringBuilder.appendDocSection(s: JsonNode) {
+        s.txt("title")?.let { append("<h3>${esc(it)}</h3>") }
+        s.txt("text")?.let { append("<p>${esc(it)}</p>") }
+        s.get("bullets")?.takeIf { it.isArray && it.size() > 0 }?.let { b ->
+            append("<ul>")
+            b.forEach { append("<li>${esc(it.asText())}</li>") }
+            append("</ul>")
+        }
+        val table = s.get("table")
+        val headers = table?.get("headers")
+        if (headers != null && headers.isArray && headers.size() > 0) {
+            append("<table class='grid'><thead><tr>")
+            headers.forEach { append("<th>${esc(it.asText())}</th>") }
+            append("</tr></thead><tbody>")
+            table.get("rows")?.takeIf { it.isArray }?.forEach { row ->
+                append("<tr>")
+                row.forEach { append("<td>${esc(it.asText())}</td>") }
+                append("</tr>")
+            }
+            append("</tbody></table>")
+        }
     }
 
     // ── 단계 보조 표 렌더러 (인라인 화면과 동일 데이터) ──
@@ -455,6 +561,15 @@ class ReportService(
 
             .raw { white-space:pre-wrap; font-size:13.5px; color:var(--soft); background:var(--sunken);
                    padding:12px 14px; border-radius:9px; }
+
+            /* ── 심화 분석(부록) ── 파이프라인과 시각적으로 구분되는 딥다이브 */
+            .step.adv { margin-top:30px; padding-top:22px; border-top:1px dashed var(--line); }
+            .adv-tag { display:inline-block; vertical-align:middle; margin-left:9px; padding:2px 9px; border-radius:999px;
+                       font-size:10px; font-weight:700; letter-spacing:.03em; background:var(--accent-tint); color:var(--accent-press); }
+            ul.facts { list-style:none; padding-left:0; margin:8px 0; }
+            ul.facts li { padding:8px 12px; margin:5px 0; background:var(--sunken); border-radius:8px;
+                          font-size:13px; line-height:1.5; }
+            ul.facts li b { color:var(--accent-press); margin-right:7px; font-variant-numeric:tabular-nums; }
             .disclaimer { margin:36px 44px 0; padding-top:16px; border-top:1px solid var(--line); font-size:12px; color:var(--faint); }
             .disclaimer .src { margin:0 0 8px; line-height:1.6; }
 

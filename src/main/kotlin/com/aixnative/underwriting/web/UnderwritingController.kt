@@ -6,6 +6,7 @@ import jakarta.validation.Valid
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -18,6 +19,7 @@ import com.aixnative.underwriting.domain.DealExtractResponse
 import com.aixnative.underwriting.domain.DocAnalysisType
 import com.aixnative.underwriting.domain.DocAnalyzeRequest
 import com.aixnative.underwriting.domain.DocAnalyzeResponse
+import com.aixnative.underwriting.service.ReportScope
 import com.aixnative.underwriting.service.ReportService
 import com.aixnative.underwriting.service.UnderwritingService
 
@@ -88,8 +90,11 @@ class UnderwritingController(
      * 무료(저장된 분석 결과 조립일 뿐 AI 미호출). 다른 테넌트의 run 이면 404.
      */
     @GetMapping("/report/{runId}", produces = [MediaType.TEXT_HTML_VALUE])
-    fun report(@PathVariable runId: Long): ResponseEntity<String> =
-        ResponseEntity.ok().contentType(MediaType.TEXT_HTML).body(reportService.buildHtml(runId))
+    fun report(
+        @PathVariable runId: Long,
+        @RequestParam(required = false, defaultValue = "ALL") scope: ReportScope,
+    ): ResponseEntity<String> =
+        ResponseEntity.ok().contentType(MediaType.TEXT_HTML).body(reportService.buildHtml(runId, scope))
 
     /** 읽기전용 공유 링크 발급(멱등). 토큰 반환 → 프런트가 {origin}/api/public/report/{token} 링크 구성. */
     @PostMapping("/report/{runId}/share")
@@ -101,8 +106,8 @@ class UnderwritingController(
      * 저장된 결과 조립일 뿐 AI 미호출. 테넌트 스코프(다른 사용자 딜은 보이지 않음).
      */
     @GetMapping("/deal-stages")
-    fun dealStages(@RequestParam dealName: String): ApiResponse<DealStagesResponse> =
-        ApiResponse.ok(service.dealStages(dealName))
+    fun dealStages(@RequestParam dealId: Long): ApiResponse<DealStagesResponse> =
+        ApiResponse.ok(service.dealStages(dealId))
 
     /** 내 분석 이력 목록 (최신순). */
     @GetMapping("/runs")
@@ -111,6 +116,13 @@ class UnderwritingController(
     /** 내 딜 대시보드 — 딜명으로 집계한 요약(최근 활동순). 리텐션 허브. */
     @GetMapping("/deals")
     fun deals(): ApiResponse<List<DealSummary>> = ApiResponse.ok(service.myDeals())
+
+    /** 딜 이름 변경 — 그 딜(PK)의 모든 분석 이름을 일괄 변경. 테넌트 스코프. */
+    @PatchMapping("/deals/{dealId}/name")
+    fun renameDeal(
+        @PathVariable dealId: Long,
+        @Valid @RequestBody req: DealRenameRequest,
+    ): ApiResponse<DealRenameResponse> = ApiResponse.ok(service.renameDeal(dealId, req.name))
 
     /** 분석 이력 상세 — 저장된 입력/결과. 다른 테넌트의 id 면 404. */
     @GetMapping("/runs/{id}")

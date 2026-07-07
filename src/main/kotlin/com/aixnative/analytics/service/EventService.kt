@@ -28,12 +28,21 @@ class EventService(private val events: UserEventRepository) {
         "credit_request",  // 크레딧 요청 메일 CTA 클릭
     )
 
+    /**
+     * 로그인 전엔 진입 자체가 불가한 인앱 화면 경로(SPA 탭). 익명(토큰 없음/만료)으로 이 경로 이벤트가
+     * 오면 만료 토큰을 문 "좀비 세션" 흔적이므로 저장하지 않는다(방문자 지표 오염 방지).
+     * path 없는 퍼널 이벤트(checkout_view·credit_request 등)는 영향 없음.
+     */
+    private val protectedPaths = setOf("feed", "underwrite", "advanced", "pm", "mydeals", "admin")
+
     @Transactional
     fun record(event: String, path: String?, meta: String?) {
         val name = event.trim()
         if (name !in allowed) return // 화이트리스트 외 → 무시
 
         val ctx = TenantContext.currentOrNull()
+        if (ctx?.userId == null && path?.trim() in protectedPaths) return // 익명 + 보호경로 = 좀비 → 스킵
+
         runCatching {
             events.save(
                 UserEvent(

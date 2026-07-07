@@ -32,31 +32,63 @@ const CREDIT_REASON_LABEL: Record<CreditReason, string> = {
 
 export function AdminView({ currentEmail }: AdminViewProps) {
   const [section, setSection] = useState<'dashboard' | 'access' | 'users' | 'credits' | 'runs' | 'market'>('dashboard')
+  // 전역 '관리자 계정 표시' - 끄면 모든 패널에서 관리자 계정 데이터 제외(관리자 자신의 테스트 활동이 지표를 오염시키지 않게).
+  const [showAdmin, setShowAdmin] = useState(false)
+  const [adminIds, setAdminIds] = useState<Set<number>>(new Set())
+  // 새로고침 키 - 증가시키면 활성 패널이 리마운트되어 최신 데이터를 다시 불러온다(패널 내부 수정 불필요).
+  const [reloadKey, setReloadKey] = useState(0)
+
+  useEffect(() => {
+    api.adminUsers()
+      .then((us) => setAdminIds(new Set(us.filter((u) => u.role === 'ADMIN').map((u) => u.id))))
+      .catch(() => setAdminIds(new Set()))
+  }, [reloadKey])
 
   return (
     <>
-      <div className="page-head">
+      <div className="page-head admin-page-head">
         <div>
           <span className="eyebrow">ADMIN CONSOLE</span>
           <h1>운영 콘솔</h1>
           <p className="page-sub">가입·크레딧·매출 지표와 운영 상태를 한 화면에서 관리합니다.</p>
         </div>
-        <div className="seg admin-seg" role="group" aria-label="관리자 섹션">
-          <button type="button" aria-pressed={section === 'dashboard'} onClick={() => setSection('dashboard')}>대시보드</button>
-          <button type="button" aria-pressed={section === 'access'} onClick={() => setSection('access')}>접속</button>
-          <button type="button" aria-pressed={section === 'users'} onClick={() => setSection('users')}>사용자·크레딧</button>
-          <button type="button" aria-pressed={section === 'credits'} onClick={() => setSection('credits')}>크레딧 내역</button>
-          <button type="button" aria-pressed={section === 'runs'} onClick={() => setSection('runs')}>분석 데이터</button>
-          <button type="button" aria-pressed={section === 'market'} onClick={() => setSection('market')}>시장</button>
+        <div className="admin-head-right">
+          <div className="admin-head-tools">
+            <button
+              type="button"
+              className="admin-refresh"
+              onClick={() => setReloadKey((k) => k + 1)}
+              title="현재 화면을 최신 데이터로 다시 불러옵니다"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <path d="M21 3v6h-6" />
+              </svg>
+              새로고침
+            </button>
+            <label className="admin-toggle" title="끄면 모든 지표·목록에서 관리자 계정 데이터를 제외합니다">
+              <input type="checkbox" checked={showAdmin} onChange={(e) => setShowAdmin(e.target.checked)} />
+              <span className="admin-toggle-track" aria-hidden="true"><span className="admin-toggle-knob" /></span>
+              <span className="admin-toggle-text">관리자 계정 표시</span>
+            </label>
+          </div>
+          <div className="seg admin-seg" role="group" aria-label="관리자 섹션">
+            <button type="button" aria-pressed={section === 'dashboard'} onClick={() => setSection('dashboard')}>대시보드</button>
+            <button type="button" aria-pressed={section === 'access'} onClick={() => setSection('access')}>접속</button>
+            <button type="button" aria-pressed={section === 'users'} onClick={() => setSection('users')}>사용자·크레딧</button>
+            <button type="button" aria-pressed={section === 'credits'} onClick={() => setSection('credits')}>크레딧 내역</button>
+            <button type="button" aria-pressed={section === 'runs'} onClick={() => setSection('runs')}>분석 데이터</button>
+            <button type="button" aria-pressed={section === 'market'} onClick={() => setSection('market')}>시장</button>
+          </div>
         </div>
       </div>
 
-      {section === 'dashboard' && <DashboardPanel />}
-      {section === 'access' && <AccessPanel />}
-      {section === 'users' && <UsersPanel currentEmail={currentEmail} />}
-      {section === 'credits' && <CreditsPanel />}
-      {section === 'runs' && <RunsPanel />}
-      {section === 'market' && <MarketPanel />}
+      {section === 'dashboard' && <DashboardPanel key={reloadKey} showAdmin={showAdmin} />}
+      {section === 'access' && <AccessPanel key={reloadKey} showAdmin={showAdmin} />}
+      {section === 'users' && <UsersPanel key={reloadKey} currentEmail={currentEmail} showAdmin={showAdmin} />}
+      {section === 'credits' && <CreditsPanel key={reloadKey} showAdmin={showAdmin} adminIds={adminIds} />}
+      {section === 'runs' && <RunsPanel key={reloadKey} showAdmin={showAdmin} adminIds={adminIds} />}
+      {section === 'market' && <MarketPanel key={reloadKey} />}
     </>
   )
 }
@@ -64,17 +96,18 @@ export function AdminView({ currentEmail }: AdminViewProps) {
 const KRW = (n: number): string => n.toLocaleString('ko-KR')
 
 /** 운영 대시보드 - 사용자·분석·크레딧·결제 핵심 지표 카드. */
-function DashboardPanel() {
+function DashboardPanel({ showAdmin }: { showAdmin: boolean }) {
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.adminStats()
+    setLoading(true)
+    api.adminStats(!showAdmin)
       .then(setStats)
       .catch((e: unknown) => setError(e instanceof ApiError ? e.message : '조회 실패'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [showAdmin])
 
   if (loading) return <div className="card"><p className="hint">불러오는 중…</p></div>
   if (error) return <div className="card"><p className="error">{error}</p></div>
@@ -110,35 +143,27 @@ function DashboardPanel() {
           {Object.keys(stats.runs.byTool).length === 0 ? (
             <p className="hint">아직 분석 실행이 없습니다.</p>
           ) : (
-            <table className="admin-table">
-              <tbody>
-                {Object.entries(stats.runs.byTool).map(([tool, n]) => (
-                  <tr key={tool}><td>{runToolLabel(tool)}</td><td className="num"><b>{n}</b></td></tr>
-                ))}
-              </tbody>
-            </table>
+            <HBars
+              accent
+              data={Object.entries(stats.runs.byTool)
+                .sort((a, b) => b[1] - a[1])
+                .map(([tool, n]) => ({ label: runToolLabel(tool), value: n }))}
+            />
           )}
         </div>
 
         <div className="card">
-          <div className="section-title">행동 퍼널 (오늘 · 7일)</div>
+          <div className="section-title">행동 퍼널 (7일 · 오늘)</div>
           {FUNNEL_STEPS.every(([k]) => !(stats.events.last7d[k])) ? (
             <p className="hint">아직 행동 이벤트가 없습니다.</p>
           ) : (
-            <table className="admin-table">
-              <thead>
-                <tr><th>단계</th><th className="num">오늘</th><th className="num">7일</th></tr>
-              </thead>
-              <tbody>
-                {FUNNEL_STEPS.map(([k, label]) => (
-                  <tr key={k}>
-                    <td>{label}</td>
-                    <td className="num">{stats.events.today[k] ?? 0}</td>
-                    <td className="num"><b>{stats.events.last7d[k] ?? 0}</b></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <HBars
+              data={FUNNEL_STEPS.map(([k, label]) => ({
+                label,
+                value: stats.events.last7d[k] ?? 0,
+                sub: `오늘 ${stats.events.today[k] ?? 0}`,
+              }))}
+            />
           )}
         </div>
       </div>
@@ -155,6 +180,24 @@ const FUNNEL_STEPS: ReadonlyArray<readonly [string, string]> = [
   ['checkout_view', '크레딧 화면'],
   ['credit_request', '크레딧 요청'],
 ]
+
+/** 대시보드 수평 막대 차트 - 값 비례 폭. 외부 라이브러리 없이 디자인 토큰으로 렌더. */
+function HBars({ data, accent }: { data: ReadonlyArray<{ label: string; value: number; sub?: string }>; accent?: boolean }) {
+  const max = Math.max(1, ...data.map((d) => d.value))
+  return (
+    <ul className="hbars">
+      {data.map((d, i) => (
+        <li key={i} className="hbar-row">
+          <span className="hbar-label" title={d.label}>{d.label}</span>
+          <span className="hbar-track">
+            <span className={`hbar-fill${accent ? ' accent' : ''}`} style={{ width: `${Math.round((d.value / max) * 100)}%` }} />
+          </span>
+          <span className="hbar-val num">{d.value}{d.sub && <em>{d.sub}</em>}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 function StatCard({ k, v, sub, accent }: { k: string; v: string; sub?: string; accent?: boolean }) {
   return (
@@ -181,12 +224,31 @@ const EVENT_LABEL: Record<string, string> = {
 const kstDay = (s: string | null): string | null =>
   s ? new Date(s).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : null
 
+/** 이벤트 → 배지 톤(색). 행동 유형을 색으로 구분해 스캔성을 높인다. */
+const EVENT_TONE: Record<string, string> = {
+  page_view: 'neutral',
+  free_calc: 'info',
+  analysis_start: 'accent',
+  analysis_done: 'good',
+  checkout_view: 'warn',
+  credit_request: 'warn',
+  login: 'muted',
+}
+
+/** KST 월.일 시:분:초 - 활동 로그 페이징 행에 날짜+시각을 함께 표시. */
+const fmtLogTime = (s: string | null): string =>
+  s ? new Date(s).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Seoul' }) : '-'
+
+/** 활동 로그 페이지 크기(페이징 네비게이션). */
+const LOG_PAGE_SIZE = 25
+
 /** 접속 현황 - 오늘 누가 언제 접속했는지 + 마지막 접속 최신순 + 최근 활동 로그. */
-function AccessPanel() {
+function AccessPanel({ showAdmin }: { showAdmin: boolean }) {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [events, setEvents] = useState<AdminEvent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [logPage, setLogPage] = useState(0)
 
   useEffect(() => {
     setLoading(true)
@@ -196,23 +258,34 @@ function AccessPanel() {
       .finally(() => setLoading(false))
   }, [])
 
+  // 관리자 표시 토글로 목록이 바뀌면 첫 페이지로.
+  useEffect(() => { setLogPage(0) }, [showAdmin])
+
   const todayKst = new Date().toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })
+  const adminIds = new Set(users.filter((u) => u.role === 'ADMIN').map((u) => u.id))
+  // 전역 '관리자 계정 표시' 반영: 끄면 접속 목록·카운트도 일반 사용자만. 방문자(userId 없음)는 항상 표시.
+  const baseUsers = showAdmin ? users : users.filter((u) => u.role !== 'ADMIN')
   // 접속 이력 있는 사용자만, 마지막 접속(로그인) 최신순. ISO 문자열이라 사전식 비교 = 시간순.
-  const accessed = users
+  const accessed = baseUsers
     .filter((u) => u.lastLoginAt)
     .slice()
     .sort((a, b) => (b.lastLoginAt ?? '').localeCompare(a.lastLoginAt ?? ''))
   const todayCount = accessed.filter((u) => kstDay(u.lastLoginAt) === todayKst).length
-  const neverCount = users.length - accessed.length
+  const neverCount = baseUsers.length - accessed.length
+  const shownEvents = showAdmin ? events : events.filter((e) => e.userId == null || !adminIds.has(e.userId))
+  const visitorCount = events.filter((e) => e.userId == null).length
+  const pageCount = Math.max(1, Math.ceil(shownEvents.length / LOG_PAGE_SIZE))
+  const page = Math.min(logPage, pageCount - 1)
+  const pageEvents = shownEvents.slice(page * LOG_PAGE_SIZE, page * LOG_PAGE_SIZE + LOG_PAGE_SIZE)
 
   return (
     <>
       {error && <p className="error">{error}</p>}
 
       <div className="stat-cards">
-        <StatCard k="오늘 접속" v={String(todayCount)} sub={`전체 ${users.length}명 중`} accent />
+        <StatCard k="오늘 접속" v={String(todayCount)} sub={`전체 ${baseUsers.length}명 중`} accent />
         <StatCard k="접속 이력" v={String(accessed.length)} sub={`미접속 ${neverCount}명`} />
-        <StatCard k="최근 활동 이벤트" v={String(events.length)} sub="최근 200건 기준" />
+        <StatCard k="방문자 활동" v={String(visitorCount)} sub={`로그인 전 · 전체 이벤트 ${events.length}건 중`} />
       </div>
 
       <div className="card">
@@ -245,36 +318,45 @@ function AccessPanel() {
       </div>
 
       <div className="card">
-        <div className="section-title">최근 활동 로그 - 무엇을 언제 ({events.length})</div>
-        {loading ? <p className="hint">불러오는 중…</p> : events.length === 0 ? (
-          <p className="hint">아직 활동 이벤트가 없습니다.</p>
+        <div className="section-title">최근 활동 로그 - 무엇을 언제 ({shownEvents.length})</div>
+        {loading ? <p className="hint">불러오는 중…</p> : shownEvents.length === 0 ? (
+          <p className="hint">표시할 활동 이벤트가 없습니다.</p>
         ) : (
-          <div className="table-scroll">
-            <table className="admin-table">
-              <thead>
-                <tr><th>일시</th><th>사용자</th><th>행동</th><th>경로</th></tr>
-              </thead>
-              <tbody>
-                {events.map((e) => (
-                  <tr key={e.id}>
-                    <td className="num admin-date">{fmtDate(e.createdAt)}</td>
-                    <td className="admin-email">{e.ownerEmail ?? <span className="muted-x">익명</span>}</td>
-                    <td>{EVENT_LABEL[e.event] ?? e.event}</td>
-                    <td className="admin-date">{e.path ?? '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="table-scroll">
+              <table className="admin-table log-table">
+                <thead>
+                  <tr><th className="log-time-col">일시</th><th>사용자</th><th>행동</th><th>경로</th></tr>
+                </thead>
+                <tbody>
+                  {pageEvents.map((e) => (
+                    <tr key={e.id}>
+                      <td className="num log-time">{fmtLogTime(e.createdAt)}</td>
+                      <td className="admin-email">{e.ownerEmail ?? <span className="log-visitor">방문자</span>}</td>
+                      <td><span className={`ev-badge ${EVENT_TONE[e.event] ?? 'neutral'}`}>{EVENT_LABEL[e.event] ?? e.event}</span></td>
+                      <td>{e.path ? <code className="log-path">{e.path}</code> : <span className="muted-x">-</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="log-pager">
+              <button type="button" className="btn-ghost btn-xs" disabled={page <= 0} onClick={() => setLogPage(page - 1)}>← 이전</button>
+              <span className="log-pager-info">
+                {page * LOG_PAGE_SIZE + 1}–{Math.min(shownEvents.length, (page + 1) * LOG_PAGE_SIZE)} / {shownEvents.length}건 · {page + 1}/{pageCount}쪽
+              </span>
+              <button type="button" className="btn-ghost btn-xs" disabled={page >= pageCount - 1} onClick={() => setLogPage(page + 1)}>다음 →</button>
+            </div>
+          </>
         )}
-        <p className="hint">방문·계산·분석 등 얕은 행동 신호(익명 포함, PII 없음). 최근 200건 · KST.</p>
+        <p className="hint">방문·계산·분석 등 얕은 행동 신호. ‘방문자’ = 로그인 전 익명(그중 {visitorCount}건). 관리자 활동은 상단 ‘관리자 계정 표시’ 토글로 숨김. 최근 200건 · KST.</p>
       </div>
     </>
   )
 }
 
 /** 관리자 - 전 사용자 크레딧 원장(충전 경로·사유·증감). 누가 어떻게 충전/소비했는지 감독용. */
-function CreditsPanel() {
+function CreditsPanel({ showAdmin, adminIds }: { showAdmin: boolean; adminIds: Set<number> }) {
   const [entries, setEntries] = useState<AdminCreditEntry[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -286,16 +368,17 @@ function CreditsPanel() {
       .finally(() => setLoading(false))
   }, [])
 
-  const charged = entries.filter((e) => e.delta > 0).reduce((s, e) => s + e.delta, 0)
-  const spent = -entries.filter((e) => e.delta < 0).reduce((s, e) => s + e.delta, 0)
+  const shown = showAdmin ? entries : entries.filter((e) => !adminIds.has(e.userId))
+  const charged = shown.filter((e) => e.delta > 0).reduce((s, e) => s + e.delta, 0)
+  const spent = -shown.filter((e) => e.delta < 0).reduce((s, e) => s + e.delta, 0)
 
   return (
     <div className="card">
-      <div className="section-title">크레딧 내역 - 전체 ({entries.length})</div>
+      <div className="section-title">크레딧 내역 - 전체 ({shown.length})</div>
       {error && <p className="error">{error}</p>}
       {loading ? (
         <p className="hint">불러오는 중…</p>
-      ) : entries.length === 0 ? (
+      ) : shown.length === 0 ? (
         <p className="hint">크레딧 변동 내역이 없습니다.</p>
       ) : (
         <>
@@ -309,7 +392,7 @@ function CreditsPanel() {
                 <tr><th>#</th><th>사용자</th><th>증감</th><th>사유</th><th>출처 / 경로</th><th>일시</th></tr>
               </thead>
               <tbody>
-                {entries.map((e) => (
+                {shown.map((e) => (
                   <tr key={e.id}>
                     <td className="num">{e.id}</td>
                     <td className="admin-email">{e.ownerEmail ?? `user#${e.userId}`}</td>
@@ -329,11 +412,12 @@ function CreditsPanel() {
   )
 }
 
-function UsersPanel({ currentEmail }: { currentEmail: string }) {
+function UsersPanel({ currentEmail, showAdmin }: { currentEmail: string; showAdmin: boolean }) {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [deltas, setDeltas] = useState<Record<number, string>>({})
+  const shown = showAdmin ? users : users.filter((u) => u.role !== 'ADMIN')
 
   function load() {
     api.adminUsers().then(setUsers).catch((e: unknown) => setError(e instanceof ApiError ? e.message : '조회 실패'))
@@ -380,7 +464,7 @@ function UsersPanel({ currentEmail }: { currentEmail: string }) {
 
   return (
     <div className="card">
-      <div className="section-title">사용자 ({users.length})</div>
+      <div className="section-title">사용자 ({shown.length})</div>
       {error && <p className="error">{error}</p>}
       <div className="table-scroll">
         <table className="admin-table">
@@ -391,7 +475,7 @@ function UsersPanel({ currentEmail }: { currentEmail: string }) {
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => {
+            {shown.map((u) => {
               const isSelf = u.email === currentEmail
               const busy = busyId === u.id
               return (
@@ -447,7 +531,7 @@ function UsersPanel({ currentEmail }: { currentEmail: string }) {
   )
 }
 
-function RunsPanel() {
+function RunsPanel({ showAdmin, adminIds }: { showAdmin: boolean; adminIds: Set<number> }) {
   const [runs, setRuns] = useState<AdminRun[]>([])
   const [error, setError] = useState<string | null>(null)
   const [detail, setDetail] = useState<AdminRunDetail | null>(null)
@@ -464,10 +548,12 @@ function RunsPanel() {
     catch (e: unknown) { setError(e instanceof ApiError ? e.message : '상세 조회 실패') }
   }
 
+  const shown = showAdmin ? runs : runs.filter((r) => !adminIds.has(r.ownerUserId))
+
   // 도구별 그룹 - 건수 많은 순. 각 그룹 안은 최신순 유지(runs 가 이미 최신순).
   const groups = (() => {
     const map = new Map<string, AdminRun[]>()
-    for (const r of runs) {
+    for (const r of shown) {
       const list = map.get(r.tool) ?? []
       list.push(r)
       map.set(r.tool, list)
@@ -496,8 +582,8 @@ function RunsPanel() {
   return (
     <div className="card">
       <div className="section-title-row">
-        <div className="section-title">분석 데이터 - 전체 ({runs.length})</div>
-        <div className="seg" role="group" aria-label="보기 방식">
+        <div className="section-title">분석 데이터 - 전체 ({shown.length})</div>
+        <div className="seg seg-sm" role="group" aria-label="보기 방식">
           <button type="button" aria-pressed={mode === 'list'} onClick={() => setMode('list')}>목록</button>
           <button type="button" aria-pressed={mode === 'group'} onClick={() => setMode('group')}>도구별 묶음</button>
         </div>
@@ -508,7 +594,7 @@ function RunsPanel() {
         <div className="table-scroll">
           <table className="admin-table">
             <thead>{headRow}</thead>
-            <tbody>{rows(runs)}</tbody>
+            <tbody>{rows(shown)}</tbody>
           </table>
         </div>
       ) : (
@@ -538,7 +624,7 @@ function RunsPanel() {
 
       {detail && (
         <ResultModal
-          run={{ id: detail.id, dealName: detail.dealName, tool: detail.tool, status: detail.status, createdAt: detail.createdAt }}
+          run={{ id: detail.id, dealId: null, dealName: detail.dealName, tool: detail.tool, status: detail.status, createdAt: detail.createdAt }}
           result={parse(detail.resultJson)}
           request={parse(detail.requestJson)}
           subtitle={detail.ownerEmail ?? `user#${detail.ownerUserId}`}

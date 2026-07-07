@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.time.Instant
 import com.aixnative.admin.service.AdminUserService
@@ -124,24 +125,35 @@ class AdminController(
 ) {
 
     /** 운영 대시보드 지표 — 사용자·분석·크레딧·결제 집계(전 테넌트). */
+    /**
+     * 운영 지표. excludeAdmin=true 면 관리자 계정의 데이터(가입·분석·행동·크레딧)를 집계에서 제외한다.
+     * 관리자 자신의 테스트 활동이 지표를 오염시키지 않게 하는 용도. 결제는 관리자가 구조적으로 발생시키지 않아 그대로 둔다.
+     */
     @GetMapping("/stats")
     @Transactional(readOnly = true)
-    fun stats(): ApiResponse<AdminStats> {
+    fun stats(
+        @RequestParam(required = false, defaultValue = "false") excludeAdmin: Boolean,
+    ): ApiResponse<AdminStats> {
         val zone = ZoneId.of("Asia/Seoul")
         val startToday = LocalDate.now(zone).atStartOfDay(zone).toInstant()
         val since7d = Instant.now().minus(Duration.ofDays(7))
 
         val allUsers = users.findAll()
+        val adminIds = allUsers.filter { it.role == UserRole.ADMIN }.mapNotNull { it.id }.toSet()
+        val exclude = excludeAdmin && adminIds.isNotEmpty()
+
+        val statUsers = if (exclude) allUsers.filter { it.id !in adminIds } else allUsers
         val userStat = UserStat(
-            total = allUsers.size,
-            verified = allUsers.count { it.emailVerified },
-            admin = allUsers.count { it.role == UserRole.ADMIN },
-            paid = allUsers.count { it.plan == Plan.PAID },
-            newToday = allUsers.count { it.createdAt?.isAfter(startToday) == true },
-            new7d = allUsers.count { it.createdAt?.isAfter(since7d) == true },
+            total = statUsers.size,
+            verified = statUsers.count { it.emailVerified },
+            admin = adminIds.size,
+            paid = statUsers.count { it.plan == Plan.PAID },
+            newToday = statUsers.count { it.createdAt?.isAfter(startToday) == true },
+            new7d = statUsers.count { it.createdAt?.isAfter(since7d) == true },
         )
 
         val allRuns = runs.listAllAdmin()
+            .let { if (exclude) it.filter { r -> r.ownerUserId !in adminIds } else it }
         val runStat = RunStat(
             total = allRuns.size,
             success = allRuns.count { it.status == RunStatus.SUCCESS },
@@ -150,11 +162,13 @@ class AdminController(
             byTool = allRuns.groupingBy { it.tool }.eachCount().toList().sortedByDescending { it.second }.toMap(),
         )
 
+        fun sumReason(reason: CreditReason): Int =
+            if (exclude) ledger.sumDeltaByReasonExcludingUsers(reason, adminIds) else ledger.sumDeltaByReason(reason)
         val creditStat = CreditStat(
-            granted = ledger.sumDeltaByReason(CreditReason.SIGNUP_GRANT),
-            purchased = ledger.sumDeltaByReason(CreditReason.PURCHASE),
-            adminAdjust = ledger.sumDeltaByReason(CreditReason.ADMIN_ADJUST),
-            spent = -ledger.sumDeltaByReason(CreditReason.AI_ANALYSIS),
+            granted = sumReason(CreditReason.SIGNUP_GRANT),
+            purchased = sumReason(CreditReason.PURCHASE),
+            adminAdjust = sumReason(CreditReason.ADMIN_ADJUST),
+            spent = -sumReason(CreditReason.AI_ANALYSIS),
         )
 
         val paymentStat = PaymentStat(
@@ -162,10 +176,14 @@ class AdminController(
             totalKrw = payments.sumAmountByStatus(PaymentStatus.CONFIRMED),
         )
 
+        val funnelToday = if (exclude) events.funnelSinceExcludingUsers(startToday, adminIds) else events.funnelSince(startToday)
+        val funnel7d = if (exclude) events.funnelSinceExcludingUsers(since7d, adminIds) else events.funnelSince(since7d)
+        val active7d = if (exclude) events.distinctUsersSinceExcludingUsers("page_view", since7d, adminIds)
+        else events.distinctUsersSince("page_view", since7d)
         val eventStat = EventStat(
-            today = events.funnelSince(startToday).associate { it.event to it.cnt.toInt() },
-            last7d = events.funnelSince(since7d).associate { it.event to it.cnt.toInt() },
-            activeUsers7d = events.distinctUsersSince("page_view", since7d),
+            today = funnelToday.associate { it.event to it.cnt.toInt() },
+            last7d = funnel7d.associate { it.event to it.cnt.toInt() },
+            activeUsers7d = active7d,
         )
 
         return ApiResponse.ok(AdminStats(userStat, runStat, creditStat, paymentStat, eventStat))
