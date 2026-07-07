@@ -330,7 +330,7 @@ export function MarketFeedView({ isAdmin, onCreditBalance, onNeedCredits, toolCo
             createdAt: openId != null ? (history.find((h) => h.id === openId)?.generatedAt ?? null) : null,
           }}
           result={deep}
-          subtitle={`${deep.provider}${openId != null ? ' · 저장된 이력' : ' · 유료 하우스 뷰'}`}
+          subtitle={openId != null ? '저장된 이력' : '유료 하우스 뷰'}
           onClose={() => { setDeep(null); setOpenId(null) }}
         />
       )}

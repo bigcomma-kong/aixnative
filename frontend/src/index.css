@@ -1418,6 +1418,21 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
   vertical-align: middle;
 }
 .field-hint { display: block; margin-top: 0.3rem; font-size: 0.72rem; color: var(--ink-faint); line-height: 1.4; }
+/* 입력가이드 예상 지표(권장 가정으로 코드 계산) */
+.guide-pf { margin-top: 1.1rem; padding-top: 0.9rem; border-top: 1px dashed var(--line); }
+.guide-pf .gpf-tag { margin-left: 0.5rem; font-size: 0.66rem; font-weight: 700; color: var(--go);
+  background: var(--go-tint); border-radius: 999px; padding: 0.1rem 0.5rem; vertical-align: middle; letter-spacing: -0.01em; }
+.gpf-metrics .metric.hi { border-color: var(--accent-ring); background: var(--accent-tint); }
+.gpf-metrics .metric.hi .v { color: var(--accent); }
+.gpf-sub { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; margin: 0.6rem 0 0.2rem;
+  font-size: 0.78rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.guide-pf .md-table-wrap { margin-top: 0.7rem; }
+/* 마크다운 소제목(### )·불릿 - 근거/예비IM 등 구조화 본문 가독성 */
+.md-h3 { font-size: 0.86rem; font-weight: 700; color: var(--ink); margin: 0.9rem 0 0.35rem; letter-spacing: -0.01em; }
+.md-h3:first-child { margin-top: 0; }
+.md-list { margin: 0.35rem 0 0.6rem; padding-left: 1.15rem; }
+.md-list li { margin: 0.28rem 0; line-height: 1.6; }
+.md-list li strong { color: var(--ink); font-weight: 700; }
 .mkt-note { font-size: 0.74rem; color: var(--ink-faint); margin: 0.6rem 0 0; line-height: 1.5; }
 
 .result-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
@@ -1480,6 +1495,29 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 }
 .analyze-modal-title { font-size: 1.05rem; color: var(--ink); }
 .analyze-modal-sub { font-size: 0.9rem; color: var(--ink-soft); margin: 0; line-height: 1.5; }
+
+/* 확인 모달 - window.confirm 대체(이름 변경 등). 좌측 정렬 · 하단 액션 버튼. */
+.confirm-modal {
+  width: min(92vw, 400px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 1.5rem 1.5rem 1.25rem;
+  display: flex; flex-direction: column; gap: 0.6rem;
+  text-align: left;
+  animation: modal-in var(--dur) var(--ease);
+}
+.cm-title { font-size: 1.02rem; font-weight: 700; color: var(--ink); }
+.cm-body { font-size: 0.9rem; color: var(--ink-soft); margin: 0; line-height: 1.55; }
+.cm-body strong { color: var(--ink); font-weight: 700; }
+.cm-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.6rem; }
+.cm-actions .btn-primary { padding: 0.5rem 1.1rem; font-size: 0.85rem; }
+.cm-cancel {
+  font-size: 0.85rem; font-weight: 600; color: var(--ink-soft); cursor: pointer;
+  background: var(--surface-sunken); border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 0.5rem 1rem; transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+.cm-cancel:hover { background: var(--surface); border-color: var(--line-strong); }
 
 /* 크레딧 소진 안내 모달 - 어느 분석 버튼이든 402 시 중앙 노출 */
 .paywall-modal {

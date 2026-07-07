@@ -54,7 +54,7 @@ function houseViewClass(v: string): string {
  * 단계별 AI 결과 인라인 렌더. 라이브 분석(UnderwriteView)·이력/관리자 모달(ResultModal) 공용.
  * 프롬프트가 생성하는 표·플래그·매크로를 그대로 화면에 그린다(생성됐는데 버려지던 데이터 복구).
  */
-export function StageAnalysis({ type, analysis, provider }: { type?: string; analysis: Analysis; provider?: string }) {
+export function StageAnalysis({ type, analysis }: { type?: string; analysis: Analysis }) {
   const a = analysis as unknown as Record<string, unknown>
   const str = (k: string): string | null => (typeof a[k] === 'string' && a[k] ? (a[k] as string) : null)
   const list = (k: string): unknown[] => (Array.isArray(a[k]) ? (a[k] as unknown[]) : [])
@@ -335,7 +335,7 @@ export function StageAnalysis({ type, analysis, provider }: { type?: string; ana
     const risks = list('key_risks')
     // 신규 스캔형 스키마(thesis·strengths·downside) 유무. 없으면 구버전(summary 블록) 폴백.
     const hasStructured = str('thesis') != null || strengths.length > 0 || str('downside') != null
-    if (!hasStructured) return <AiNarrative analysis={analysis} provider={provider} />
+    if (!hasStructured) return <AiNarrative analysis={analysis} />
     return (
       <section className="ai-block">
         <div className="section-title">언더라이팅 결론 <ConfBadge c={val('confidence')} /></div>
@@ -381,7 +381,7 @@ export function StageAnalysis({ type, analysis, provider }: { type?: string; ana
   }
 
   // 기타/레거시
-  return <AiNarrative analysis={analysis} provider={provider} />
+  return <AiNarrative analysis={analysis} />
 }
 
 interface VerdictStyle { cls: 'go' | 'cond' | 'no'; mark: string; label: string }
@@ -405,10 +405,10 @@ export function Verdict({ analysis }: { analysis: Analysis }) {
   )
 }
 
-function AiNarrative({ analysis, provider }: { analysis: Analysis; provider?: string }) {
+function AiNarrative({ analysis }: { analysis: Analysis }) {
   return (
     <section className="ai-block">
-      <div className="section-title">AI 언더라이팅 {provider ? `· ${provider}` : ''}</div>
+      <div className="section-title">AI 언더라이팅</div>
       {analysis.summary && <p className="narrative">{analysis.summary}</p>}
       {analysis.guideline_check && <p className="guideline">{analysis.guideline_check}</p>}
       {analysis.key_drivers && analysis.key_drivers.length > 0 && (

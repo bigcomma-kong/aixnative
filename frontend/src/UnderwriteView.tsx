@@ -770,7 +770,7 @@ function ResultPanel({ results, stageMap, activeTab, onSelectTab, onReport, repo
       ) : results.analysis ? (
         <>
           <Verdict analysis={results.analysis} />
-          <StageAnalysis type={results.analysisType} analysis={results.analysis} provider={results.provider} />
+          <StageAnalysis type={results.analysisType} analysis={results.analysis} />
           {results.marketFacts && results.marketFacts.length > 0 && <MarketFactsCard facts={results.marketFacts} />}
         </>
       ) : results.analysisRaw ? (

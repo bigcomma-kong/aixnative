@@ -119,6 +119,11 @@ data class DocAnalyzeResponse(
     val analysis: JsonNode? = null,
     val analysisRaw: String? = null,
     val calc: JsonNode? = null,
+    /**
+     * 언더라이팅 입력가이드 전용 — AI 가 제안한 권장 가정(recommend)으로 결정론 ProForma 를 돌린 예상 지표.
+     * IRR·Equity Multiple·최소 DSCR·Exit Cap 민감도·시나리오. 코드 계산(AI 아님). 그 외 단계는 null.
+     */
+    val guideProForma: JsonNode? = null,
     /** 분석에 주입된 실측 시장데이터(공공 API). 프론트에서 "실측·확정" 카드로 노출. 없으면 빈 리스트. */
     val marketFacts: List<MarketFact> = emptyList(),
     val provider: String,

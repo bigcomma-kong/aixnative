@@ -3,7 +3,7 @@ import { TrustBadge } from './TrustBadge'
 import {
   api, ApiError, track, isBovCalc, isBizHealthCalc, isPriceForecastCalc,
   type AnalysisFlag, type BizHealthCalc, type BovInput, type DealSummary, type DevFeasibilityInput, type DocAnalysisType, type DocAnalyzeInput,
-  type DocAnalyzeResponse, type DocCalc, type DocSection, type MarketFact, type PriceForecastCalc, type PriceForecastInput,
+  type DocAnalyzeResponse, type DocCalc, type DocSection, type GuideProForma, type MarketFact, type PriceForecastCalc, type PriceForecastInput,
   type RunSummary, type TaxGuide, type UnderwriteInput,
 } from './api'
 
@@ -267,6 +267,8 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts, cre
   const [currentDealId, setCurrentDealId] = useState<number | null>(null)
   // 현재 딜의 '커밋된' 이름(딜 단위 라벨). 이름칸을 바꿔 blur 하면 이 값과 비교해 딜 전체 이름 변경을 묻는다.
   const [loadedDealName, setLoadedDealName] = useState('')
+  // 이름 변경 확인 모달 - blur 시 바꾼 이름을 담아 열고, 확인/취소로 일괄 반영 또는 되돌림(window.confirm 대체).
+  const [renamePending, setRenamePending] = useState<string | null>(null)
   const [historyVersion, setHistoryVersion] = useState(0)
   // 언더라이팅 딜 가져오기 - 내 딜(파이프라인 입력 보유분)에서 딜명·자산·위치·재무요약을 프리필.
   const [importDeals, setImportDeals] = useState<DealSummary[]>([])
@@ -560,13 +562,19 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts, cre
    * 이름은 run별 스냅샷이 아니라 딜 단위 라벨이어야 하므로(안 그러면 옛 분석을 열 때 이름이 되돌아감) 전 분석에 반영한다.
    * 취소하면 원래 이름으로 되돌린다.
    */
-  async function commitDealNameChange() {
+  function commitDealNameChange() {
     const next = dealName.trim()
     if (currentDealId == null) return // 새 딜: 아직 저장 전이라 라벨일 뿐, 첫 분석 때 확정.
     if (next === loadedDealName) return
     if (!next) { setDealName(loadedDealName); return } // 빈 이름 금지 - 되돌림.
-    const ok = window.confirm(`이 딜의 이름을 '${next}'(으)로 바꿀까요?\n이 딜의 모든 분석에 함께 반영됩니다.`)
-    if (!ok) { setDealName(loadedDealName); return }
+    setRenamePending(next) // 확인 모달 오픈(확인 시 doRename, 취소 시 되돌림).
+  }
+
+  /** 이름 변경 모달 '확인' - 딜(PK) 전체 분석 이름 일괄 반영. */
+  async function doRename() {
+    const next = renamePending
+    if (next == null || currentDealId == null) { setRenamePending(null); return }
+    setRenamePending(null)
     try {
       await api.renameDeal(currentDealId, next)
       setLoadedDealName(next)
@@ -575,6 +583,12 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts, cre
       setError(err instanceof ApiError ? err.message : '딜 이름 변경에 실패했습니다.')
       setDealName(loadedDealName)
     }
+  }
+
+  /** 이름 변경 모달 '취소' - 원래 이름으로 되돌림. */
+  function cancelRename() {
+    setRenamePending(null)
+    setDealName(loadedDealName)
   }
 
   /** 새 딜로 시작 - 딜 컨텍스트·입력·결과를 비운다(다음 분석은 별도 딜로 self-anchor). */
@@ -788,6 +802,19 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts, cre
           </div>
         </div>
       )}
+
+      {renamePending != null && (
+        <div className="analyze-overlay" role="dialog" aria-modal="true" aria-label="딜 이름 변경" onClick={cancelRename}>
+          <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <strong className="cm-title">딜 이름을 바꿀까요?</strong>
+            <p className="cm-body">이 딜의 이름을 <strong>{renamePending}</strong>(으)로 변경합니다.<br />이 딜의 모든 분석에 함께 반영됩니다.</p>
+            <div className="cm-actions">
+              <button type="button" className="cm-cancel" onClick={cancelRename}>취소</button>
+              <button type="button" className="btn-primary" onClick={() => void doRename()}>이름 변경</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -872,7 +899,6 @@ function DocResult({ res, label, onReport, reportBusy }: {
     <div className="ai-block">
       <div className="result-head">
         <span className="stage-pill">{label}</span>
-        {res.provider && <span className="muted">· {res.provider}</span>}
         <span className="result-head-actions">
           <button type="button" className="btn-ghost btn-report" onClick={onReport} disabled={reportBusy}
             title="이 딜의 심화분석 전체를 합본 보고서로 보기 (PDF 저장은 보고서에서)">
@@ -900,6 +926,7 @@ function DocResult({ res, label, onReport, reportBusy }: {
 
           {a.flags && a.flags.length > 0 && <FlagList flags={a.flags} />}
           {a.recommend && <RecommendGrid recommend={a.recommend} rationale={a.rationale} />}
+          {res.guideProForma && <GuideProFormaCard pf={res.guideProForma} />}
           {a.guides && a.guides.length > 0 && <TaxGuides guides={a.guides} priceVerdict={a.priceVerdict} />}
           {a.im_markdown && <Markdown md={a.im_markdown} />}
           {a.sections && a.sections.length > 0 && <Sections sections={a.sections} />}
@@ -1085,7 +1112,55 @@ function RecommendGrid({ recommend, rationale }: { recommend: Record<string, num
           <div key={k} className="metric"><span className="k">{RECOMMEND_LABELS[k]}</span><span className="v">{recommend[k]}</span></div>
         ))}
       </div>
-      {rationale && <p className="guideline">{rationale}</p>}
+      {rationale && <div className="guideline"><Markdown md={rationale} /></div>}
+    </section>
+  )
+}
+
+/**
+ * 입력가이드 예상 지표 - 권장 가정으로 결정론 ProForma 를 돌린 결과(IRR·EM·DSCR·시나리오·Exit Cap 민감도).
+ * 수치는 AI 아닌 코드 계산이라 신뢰 가능. "권장 가정 넣으면 뭐가 나오나"를 즉시 보여줘 가이드의 가치를 높인다.
+ */
+function GuideProFormaCard({ pf }: { pf: GuideProForma }) {
+  const pct = (n: number) => `${n.toFixed(1)}%`
+  const mult = (n: number) => `${n.toFixed(2)}x`
+  const eok = (n: number) => `${Math.round(n).toLocaleString()}억`
+  return (
+    <section className="guide-pf">
+      <div className="section-title">권장 가정 기준 예상 지표 <span className="gpf-tag">코드 계산 · AI 아님</span></div>
+      <div className="metrics gpf-metrics">
+        <div className="metric hi"><span className="k">Levered IRR</span><span className="v">{pct(pf.leveredIrrPct)}</span></div>
+        <div className="metric hi"><span className="k">Equity Multiple</span><span className="v">{mult(pf.equityMultiple)}</span></div>
+        <div className="metric"><span className="k">최소 DSCR</span><span className="v">{pf.minDscr != null ? pf.minDscr.toFixed(2) : '-'}</span></div>
+        <div className="metric"><span className="k">Going-in Cap</span><span className="v">{pct(pf.goingInCapPct)}</span></div>
+      </div>
+      <div className="gpf-sub">
+        <span>총투자비 {eok(pf.totalInvestEok)}</span>
+        <span>Equity {eok(pf.equityEok)}</span>
+        <span>대출 {eok(pf.debtEok)}</span>
+        <span>Exit 가치 {eok(pf.exitValueEok)}</span>
+      </div>
+      <div className="md-table-wrap">
+        <table className="md-table">
+          <thead><tr><th>시나리오</th><th className="md-num">Levered IRR</th><th className="md-num">Equity Multiple</th><th className="md-num">최소 DSCR</th></tr></thead>
+          <tbody>
+            {pf.scenarios.map((s) => (
+              <tr key={s.name}><td>{s.name}</td><td className="md-num">{pct(s.leveredIrrPct)}</td><td className="md-num">{mult(s.equityMultiple)}</td><td className="md-num">{s.minDscr.toFixed(2)}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="md-table-wrap">
+        <table className="md-table">
+          <thead><tr><th>Exit Cap 민감도</th><th className="md-num">Levered IRR</th><th className="md-num">Equity Multiple</th></tr></thead>
+          <tbody>
+            {pf.sensitivity.map((s) => (
+              <tr key={s.exitCapPct}><td>{pct(s.exitCapPct)}</td><td className="md-num">{pct(s.leveredIrrPct)}</td><td className="md-num">{mult(s.em)}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="guideline">위 권장 가정을 넣었을 때의 결정론 계산 결과입니다(AI 아님). 가정을 조정해 정밀 심사하려면 언더라이팅에서 실행하세요.</p>
     </section>
   )
 }
@@ -1153,6 +1228,15 @@ function Sections({ sections }: { sections: DocSection[] }) {
 }
 
 /** 최소 마크다운 렌더 - ## 제목 / - 불릿 / | 표 | / 문단. (외부 의존성 없이) */
+/** 인라인 마크다운(굵게 **…**) → ReactNode. 별표가 그대로 노출되지 않게 파싱. */
+function mdInline(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+  return parts.map((p, i) => {
+    const m = /^\*\*([^*]+)\*\*$/.exec(p)
+    return m ? <strong key={i}>{m[1]}</strong> : <span key={i}>{p}</span>
+  })
+}
+
 function Markdown({ md }: { md: string }) {
   const lines = md.split('\n')
   const nodes: React.ReactNode[] = []
@@ -1161,7 +1245,7 @@ function Markdown({ md }: { md: string }) {
   let key = 0
 
   const flushBullets = () => {
-    if (bullets.length) { nodes.push(<ul key={key++}>{bullets.map((b, i) => <li key={i}>{b}</li>)}</ul>); bullets = [] }
+    if (bullets.length) { nodes.push(<ul className="md-list" key={key++}>{bullets.map((b, i) => <li key={i}>{mdInline(b)}</li>)}</ul>); bullets = [] }
   }
   const flushTable = () => {
     if (tableRows.length) {
@@ -1180,11 +1264,13 @@ function Markdown({ md }: { md: string }) {
       continue
     }
     flushTable()
-    if (line.startsWith('## ')) { flushBullets(); nodes.push(<div className="section-title" key={key++}>{line.slice(3)}</div>) }
-    else if (line.startsWith('# ')) { flushBullets(); nodes.push(<div className="section-title" key={key++}>{line.slice(2)}</div>) }
-    else if (line.startsWith('- ')) { bullets.push(line.slice(2)) }
+    // 헤딩: ###/##/# 모두 지원. h3 는 소제목(md-h3)로, 나머지는 섹션 타이틀.
+    if (line.startsWith('### ')) { flushBullets(); nodes.push(<div className="md-h3" key={key++}>{mdInline(line.slice(4))}</div>) }
+    else if (line.startsWith('## ')) { flushBullets(); nodes.push(<div className="section-title" key={key++}>{mdInline(line.slice(3))}</div>) }
+    else if (line.startsWith('# ')) { flushBullets(); nodes.push(<div className="section-title" key={key++}>{mdInline(line.slice(2))}</div>) }
+    else if (line.startsWith('- ') || line.startsWith('* ')) { bullets.push(line.slice(2)) }
     else if (line.trim() === '') { flushBullets() }
-    else { flushBullets(); nodes.push(<p className="narrative" key={key++}>{line}</p>) }
+    else { flushBullets(); nodes.push(<p className="narrative" key={key++}>{mdInline(line)}</p>) }
   }
   flushBullets(); flushTable()
   return <section>{nodes}</section>

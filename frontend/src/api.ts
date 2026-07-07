@@ -766,11 +766,30 @@ export interface DocAnalyzeResponse {
   analysis?: DocAnalysis | null
   analysisRaw?: string | null
   calc?: DocCalc | null
+  /** 입력가이드 전용 - 권장 가정으로 코드 계산한 예상 지표(IRR·EM·DSCR·민감도·시나리오). */
+  guideProForma?: GuideProForma | null
   /** 실측 시장데이터(없으면 빈 배열). "실측·확정" 카드로 노출. */
   marketFacts?: MarketFact[]
   provider: string
   creditBalance: number
   disclaimer: string
+}
+
+/** 입력가이드 예상 지표(결정론 ProForma 계산). 수치는 AI 아닌 코드 산출. */
+export interface GuideProForma {
+  leveredIrrPct: number
+  equityMultiple: number
+  unleveredIrrPct: number
+  minDscr: number | null
+  goingInCapPct: number
+  yieldOnCostPct: number
+  exitCapPct: number
+  totalInvestEok: number
+  equityEok: number
+  debtEok: number
+  exitValueEok: number
+  sensitivity: { exitCapPct: number; leveredIrrPct: number; em: number }[]
+  scenarios: { name: string; leveredIrrPct: number; equityMultiple: number; minDscr: number }[]
 }
 
 // ── 자산관리(PM) - 임대차 관리 ────────────────────────────────────────────

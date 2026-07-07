@@ -309,12 +309,15 @@ class UnderwritingService(
         }
 
         val parsed = tryParseJson(ai.text)
+        // 입력가이드: AI 가 낸 권장 가정으로 결정론 ProForma 를 돌려 예상 지표(IRR·EM·DSCR·민감도)를 붙인다.
+        val guidePf = if (type == DocAnalysisType.UNDERWRITING_GUIDE) guideProFormaPreview(parsed?.get("recommend")) else null
         val marketFacts = parseMarketFacts(marketFactsBuf.toString())
         val resultPayload = linkedMapOf<String, Any?>(
             "analysisType" to type.name,
             "analysis" to parsed,
             "analysisRaw" to if (parsed == null) ai.text else null,
             "calc" to calc,
+            "guideProForma" to guidePf,
             "marketFacts" to marketFacts,
             "provider" to ai.provider,
             "disclaimer" to Disclaimer.TEXT,
@@ -336,11 +339,60 @@ class UnderwritingService(
             analysis = parsed,
             analysisRaw = if (parsed == null) ai.text else null,
             calc = calc?.let { objectMapper.valueToTree(it) },
+            guideProForma = guidePf,
             marketFacts = marketFacts,
             provider = ai.provider,
             creditBalance = creditService.balance(current.tenantId, current.userId),
             disclaimer = Disclaimer.TEXT,
         )
+    }
+
+    /**
+     * 입력가이드 전용 — AI 가 낸 recommend 가정으로 결정론 ProForma 를 돌려 예상 지표를 만든다(AI 아님).
+     * 필수값(매입가·NOI·Exit Cap) 이 없거나 0 이면 null(예상지표 생략).
+     */
+    private fun guideProFormaPreview(recommend: JsonNode?): JsonNode? {
+        if (recommend == null || !recommend.isObject) return null
+        fun d(key: String): Double? = recommend.get(key)?.takeIf { it.isNumber }?.asDouble()
+        val asking = d("askingPriceEok") ?: return null
+        val noi = d("noiEok") ?: return null
+        val exitCap = d("exitCapPct") ?: return null
+        if (asking <= 0 || noi <= 0 || exitCap <= 0) return null
+        val inputs = ProFormaCalculator.Inputs(
+            askingPriceEok = asking,
+            noiEok = noi,
+            ltvPct = d("ltvPct") ?: 55.0,
+            loanRatePct = d("loanRatePct") ?: 4.3,
+            holdYears = (d("holdYears") ?: 5.0).toInt().coerceIn(1, 30),
+            rentGrowthPct = d("rentGrowthPct") ?: 3.0,
+            exitCapPct = exitCap,
+        )
+        val r = ProFormaCalculator.compute(inputs)
+        val minDscr = r.proForma.mapNotNull { row -> row.dscr.takeIf { it > 0 } }.minOrNull()
+        val scenarios = ProFormaCalculator.scenarios(inputs)
+        val preview = linkedMapOf<String, Any?>(
+            "leveredIrrPct" to r.leveredIrrPct,
+            "equityMultiple" to r.equityMultiple,
+            "unleveredIrrPct" to r.unleveredIrrPct,
+            "minDscr" to minDscr,
+            "goingInCapPct" to r.goingInCapPct,
+            "yieldOnCostPct" to r.yieldOnCostPct,
+            "exitCapPct" to r.exitCapPct,
+            "totalInvestEok" to r.totalInvestEok,
+            "equityEok" to r.equityEok,
+            "debtEok" to r.debtEok,
+            "exitValueEok" to r.exitValueEok,
+            "sensitivity" to r.exitCapSensitivity.map {
+                mapOf("exitCapPct" to it.exitCapPct, "leveredIrrPct" to it.leveredIrrPct, "em" to it.em)
+            },
+            "scenarios" to scenarios.map {
+                mapOf(
+                    "name" to it.name, "leveredIrrPct" to it.leveredIrrPct,
+                    "equityMultiple" to it.equityMultiple, "minDscr" to it.minDscr,
+                )
+            },
+        )
+        return objectMapper.valueToTree(preview)
     }
 
     /**

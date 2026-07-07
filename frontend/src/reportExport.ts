@@ -183,7 +183,7 @@ export function deepReportHtml(r: MarketDeepReport): string {
   @media print { body { margin:0; } }
 </style></head><body>
   <h1>${esc(r.headline) || 'AI 심층 시장 리포트'}</h1>
-  <div class="meta">AI 심층 시장 리포트 · ${esc(r.provider)} · aixnative</div>
+  <div class="meta">AI 심층 시장 리포트 · aixnative</div>
   ${(r.marketTempScore != null || r.marketTempLabel)
     ? `<p class="gauge"><b>시장 온도</b> · ${esc(r.marketTempLabel)}${r.marketTempScore != null ? ` (${r.marketTempScore}/100)` : ''}</p>` : ''}
   ${r.summary ? `<div class="summary">${esc(r.summary)}</div>` : ''}
@@ -247,7 +247,7 @@ export function docAnalysisHtml(res: DocAnalyzeResponse, label: string): string 
   @media print{body{margin:0}}
 </style></head><body>
   <h1>${esc(a?.headline) || esc(label)}</h1>
-  <div class="meta">${esc(label)} · ${esc(res.provider)} · aixnative · 생성 ${new Date().toLocaleString('ko-KR')}</div>
+  <div class="meta">${esc(label)} · aixnative · 생성 ${new Date().toLocaleString('ko-KR')}</div>
   ${a?.verdict ? `<div class="verdict">${esc(a.verdict)}${a.confidence ? ` · 신뢰도 ${esc(a.confidence)}` : ''}</div>` : ''}
   ${a?.priceComment ? `<p>${esc(a.priceComment)}</p>` : ''}
   ${flags ? `<h2>주요 플래그</h2><ul>${flags}</ul>` : ''}
@@ -368,7 +368,7 @@ export function leaseReportHtml(rr: PmRentRoll, events: PmCalendarEvent[], am?: 
   @media print{body{margin:0}}
 </style></head><body>
   <h1>${esc(rr.buildingName)} · 임대 관리 보고서</h1>
-  <div class="meta">AM 제출용 · aixnative 자산관리(PM) · 생성 ${new Date().toLocaleString('ko-KR')}${am?.provider ? ` · ${esc(am.provider)}` : ''}</div>
+  <div class="meta">AM 제출용 · aixnative 자산관리(PM) · 생성 ${new Date().toLocaleString('ko-KR')}</div>
   ${a?.verdict ? `<div class="verdict">${esc(a.verdict)}${a.confidence ? ` · 신뢰도 ${esc(a.confidence)}` : ''}</div>` : ''}
   ${a?.headline ? `<p><b>${esc(a.headline)}</b></p>` : ''}
   <h2>임대 현황 요약</h2><table>${summaryRows}</table>
