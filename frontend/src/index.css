@@ -1433,6 +1433,11 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 .md-list { margin: 0.35rem 0 0.6rem; padding-left: 1.15rem; }
 .md-list li { margin: 0.28rem 0; line-height: 1.6; }
 .md-list li strong { color: var(--ink); font-weight: 700; }
+/* '데이터 보기' 모달 안의 마크다운 - 모달 톤에 맞춰 크기·간격 조정 */
+.rm-md { margin: 0.3rem 0; }
+.rm-md .section-title { font-size: 0.86rem; margin: 0.7rem 0 0.3rem; }
+.rm-md > section > .md-h3:first-child, .rm-md > section > .section-title:first-child { margin-top: 0; }
+.rm-md .narrative { font-size: 0.86rem; color: var(--ink-soft); }
 .mkt-note { font-size: 0.74rem; color: var(--ink-faint); margin: 0.6rem 0 0; line-height: 1.5; }
 
 .result-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }

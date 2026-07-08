@@ -2,6 +2,7 @@
 import type { ReactNode } from 'react'
 import type { Analysis, MarketDeepReport, RunSummary } from './api'
 import { StageAnalysis, Verdict } from './StageAnalysis'
+import { Markdown } from './Markdown'
 import { DeepReportContent } from './DeepReportPanel'
 import { downloadDeepReportDoc, printDeepReport } from './reportExport'
 
@@ -35,6 +36,12 @@ const INPUT_LABEL: Record<string, string> = {
   exitCapPct: 'Exit Cap(%)', holdYears: '보유(년)', rentGrowthPct: '임대성장(%)',
   focus: '분석 초점', bizNo: '사업자번호', counterpartyName: '상대방', parcelAddress: '지번주소',
   documentText: '문서/딜 텍스트',
+}
+
+/** 입력가이드 권장 가정(recommend) 라벨 - 화면(DocResult)과 동일. */
+const RECOMMEND_LABEL: Record<string, string> = {
+  askingPriceEok: '매입가(억)', noiEok: 'NOI(억)', goingInCapPct: 'Going-in Cap(%)', ltvPct: 'LTV(%)',
+  loanRatePct: '대출금리(%)', holdYears: '보유(년)', exitCapPct: 'Exit Cap(%)', rentGrowthPct: '임대성장(%)',
 }
 
 /** 사용 내역·관리자 → 분석 결과 모달. 도구 무관하게 결과 JSON 을 읽기 좋게 렌더(개발 지식 불필요). */
@@ -103,6 +110,28 @@ export function ResultModal({ run, result, request, subtitle, onClose }: {
               {a.verdict ?? a.priceVerdict ?? a.recommendation}{str(a.confidence) ? ` · 신뢰도 ${a.confidence}` : ''}
             </div>
           )}
+
+          {a.recommend && typeof a.recommend === 'object' && (
+            <Block title="권장 입력 가정">
+              <div className="rm-metrics">
+                {Object.keys(RECOMMEND_LABEL).filter((k) => a.recommend[k] != null).map((k) => (
+                  <div key={k} className="rm-metric"><span>{RECOMMEND_LABEL[k]}</span><b>{a.recommend[k]}</b></div>
+                ))}
+              </div>
+            </Block>
+          )}
+          {result?.guideProForma && (
+            <Block title="권장 가정 기준 예상 지표 · 코드 계산">
+              <div className="rm-metrics">
+                {pfMetrics(result.guideProForma).map((m) => (
+                  <div key={m.label} className="rm-metric"><span>{m.label}</span><b>{m.value}</b></div>
+                ))}
+                {result.guideProForma.minDscr != null && (
+                  <div className="rm-metric"><span>최소 DSCR</span><b>{num(result.guideProForma.minDscr, 2, '')}</b></div>
+                )}
+              </div>
+            </Block>
+          )}
           {arr(a.flags).length > 0 && (
             <Block title="주요 플래그">
               {a.flags.map((f: any, i: number) => (
@@ -114,7 +143,8 @@ export function ResultModal({ run, result, request, subtitle, onClose }: {
           {str(a.summary) && <p className="rm-p">{a.summary}</p>}
           {str(a.outlook) && <p className="rm-p">{a.outlook}</p>}
           {str(a.priceComment) && <p className="rm-p">{a.priceComment}</p>}
-          {str(a.rationale) && <p className="rm-p">{a.rationale}</p>}
+          {str(a.rationale) && <div className="rm-md"><Markdown md={a.rationale} /></div>}
+          {str(a.im_markdown) && <div className="rm-md"><Markdown md={a.im_markdown} /></div>}
 
           {(a.marketTempLabel || a.marketTempScore != null) && (
             <p className="rm-gauge"><b>시장 온도</b> · {a.marketTempLabel ?? ''}{a.marketTempScore != null ? ` (${a.marketTempScore}/100)` : ''}</p>
