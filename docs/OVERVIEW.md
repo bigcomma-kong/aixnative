@@ -7,7 +7,7 @@
 
 ## 1. 메뉴별 기능
 
-상단 네비게이션은 5개(관리자는 ADMIN 계정만 노출).
+상단 네비게이션: 일반 사용자 4개(시장·언더라이팅·심화분석·마이페이지), 관리자는 자산관리(BETA)·관리자 탭이 추가로 노출.
 
 ### 🟦 시장 (Market Intelligence) — `MarketFeedView`
 시장을 한눈에 보고 관심 딜로 바로 진입하는 **허브**. 데이터는 스케줄러가 자동 수집(무료).
@@ -38,8 +38,11 @@ hero 기능. 입력(매입가·NOI·Cap·자본구조) → **ProForma 결정론 
 
 진입점 보조: **딜/기사 텍스트 → 구조화 추출**(무료, 폼 프리필).
 
-### 🟦 사용 내역 (Credits) — `CreditHistoryView`
-크레딧 잔액·적립/차감 원장(`credit_ledger`). 가입 무료 크레딧 → 소진 시 구매(freemium, 결제는 훅만).
+### 🟦 자산관리 (Property Management) — `PropertyView` *(BETA · 현재 ADMIN 노출)*
+보유 자산 운영 도구. 건물·임대차 등록 → 임대료 캘린더·수익 분석·임대차 만기 리마인더(`LeaseReminderService`). 도메인 `com.aixnative.property`.
+
+### 🟦 마이페이지 (My Deals / Credits) — `MyView` · `MyDealsView` · `CreditHistoryView`
+내 딜 대시보드(딜 단위 집계 카드, 이어서 분석) + 크레딧 잔액·적립/차감 원장(`credit_ledger`). 가입 무료 크레딧 → 소진 시 구매(freemium, 토스 결제 연동).
 
 ### 🟦 관리자 (Admin) — `AdminView` *(ADMIN 전용)*
 전체 사용자·분석 실행 모니터링 + 시장 피드 관리. `admin@aixnative.com` 가입 시 자동 ADMIN.

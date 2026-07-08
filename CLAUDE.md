@@ -7,7 +7,9 @@
 
 **hero 기능 = AI 딜 언더라이팅** (프로젝트명 그대로). 입력(매입가·NOI·Cap·자본구조) → **ProForma 계산**(IRR·Equity Multiple·DSCR·민감도, Kotlin 순수 로직) + **AI 언더라이팅 내러티브·스크리닝 판정·리스크 플래그**(Claude). 이 "AI 분석 1클릭" 이 과금 단위.
 
-**비즈니스 모델**: 개인 가입 → **무료 N회 AI 분석** → 소진 시 **구매**(freemium). 결제는 나중(설계 훅만).
+**비즈니스 모델**: 개인 가입 → **무료 N회 AI 분석** → 소진 시 **구매**(freemium). 결제(토스페이먼츠 크레딧 충전)는 **구현·라이브(테스트 모드)** — 라이브 전환은 키만 교체.
+
+> **현재 상태**: 기획을 넘어 **라이브 운영 중**(<https://www.aixnative.com>, GCP Cloud Run). 새 세션은 `NEXT-SESSION-START-HERE.md` → `docs/OVERVIEW.md` 로 현재 그림을 잡으세요.
 
 **핵심 전략**: 셸·멀티테넌시·상업 배관은 **새로**, 검증된 도메인·AI 로직은 **PORT(이식)**. CRE 수식·프롬프트는 다시 만들지 않는다. → `docs/PORT-MAP.md`
 
@@ -19,7 +21,7 @@
 - **인증**: **JWT**, 이메일 + 소셜(구글/카카오) 가입
 - **멀티테넌시**: 모든 테이블 **`tenant_id` day-1**. v1 = 1유저=1테넌트, 추후 팀/회사 플랜 확장 대비
 - **면책**: "투자자문 아님" 하단/출력 표기
-- **결제**: 나중에. 지금은 `credit_ledger` + `plan`(FREE/PAID) 필드만
+- **결제**: `credit_ledger` + `plan`(FREE/PAID) 기반 크레딧 충전. 토스페이먼츠 연동 구현(테스트 모드 라이브), 라이브 전환 = 키 교체
 - **배포**: 클라우드, 모바일 고려(REST API + 반응형/SPA)
 
 ## 네이밍 원칙 (엄수)
@@ -39,11 +41,9 @@
 - 작업은 오직 이 디렉터리 안에서.
 
 ## 다음 할 일
-1. 빌드툴/베이스 패키지 확정(`com.aixnative` 제안) → Phase 1 스캐폴딩.
-2. Phase 1: Kotlin SB3 + JPA/Flyway(PG) + 멀티테넌트 계정/인증(JWT+소셜) + 크레딧 원장 + AI 라우터 이식.
-3. Phase 2: 언더라이팅 도메인 이식(ProForma·CreGuidelines·AiPromptBuilder) + 크레딧 게이트 end-to-end.
+Phase 0~4 완료·라이브. 남은 과제(결제 라이브키 전환, 모니터링/백업 하드닝 등)와 단계별 현황은 `docs/ROADMAP.md` 참조.
 
-상세: `docs/ROADMAP.md` · `docs/ARCHITECTURE.md` · `docs/PORT-MAP.md` · `docs/API-KEYS.md`
+상세: `docs/OVERVIEW.md`(제품 그림) · `docs/ROADMAP.md` · `docs/ARCHITECTURE.md` · `docs/ENV.md` · `docs/PORT-MAP.md` · `docs/API-KEYS.md`
 
 ## 컨벤션
 - 응답은 **존댓말**.

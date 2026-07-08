@@ -1,28 +1,29 @@
 # 여기서 시작하세요 (다음 세션)
 
-이 디렉터리는 **aixnative** — MASTERN 투자 기능의 상업판(AI 딜 언더라이팅 SaaS) 신규 프로젝트입니다.
-아직 **코드는 없고 기획/핸드오프 문서만** 있습니다. 이전 세션에서 설계를 확정하고 기록만 남긴 상태입니다.
+이 디렉터리는 **aixnative** - AI 딜 언더라이팅 SaaS(상업판)입니다.
+**이미 구축되어 라이브 운영 중**입니다: <https://www.aixnative.com> (GCP Cloud Run · 서울).
+가입·인증(이메일+소셜)·크레딧 원장·결제 충전(토스)·언더라이팅·심화분석·시장 자동수집·자산관리(BETA)까지 end-to-end 가동합니다.
 
 ## 읽는 순서
-1. `CLAUDE.md` — 프로젝트 정체성·확정 결정·보안/격리 원칙
-2. `docs/ROADMAP.md` — Phase 0~6 단계
-3. `docs/ARCHITECTURE.md` — 패키지·멀티테넌시·크레딧 게이트·인증 설계
-4. `docs/PORT-MAP.md` — MASTERN 에서 이식할 코드 vs 새로 짤 코드
-5. `docs/API-KEYS.md` — 발급할 외부 API 키
+1. [`CLAUDE.md`](CLAUDE.md) - 프로젝트 정체성·확정 결정·보안/격리 원칙
+2. [`docs/OVERVIEW.md`](docs/OVERVIEW.md) - 메뉴별 기능·스택·외부 API·과금 모델 (제품 전체 그림)
+3. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - 패키지·멀티테넌시·크레딧 게이트·AI 라우터
+4. [`docs/ENV.md`](docs/ENV.md) - 환경변수·시크릿·백업/복구
+5. [`docs/COMMANDS.md`](docs/COMMANDS.md) - 빌드·재배포 명령어
+6. [`docs/ROADMAP.md`](docs/ROADMAP.md) - 진행 현황과 다음 과제
 
-## 확정된 핵심
-- **hero = AI 딜 언더라이팅** (입력→ProForma 지표 + AI 내러티브/스크리닝/리스크). "AI 분석 1클릭 = 1크레딧".
-- 스택: **Kotlin + Spring Boot 3 + JPA/Flyway(PostgreSQL)**, JWT+소셜 인증, 멀티테넌트(`tenant_id`), 개인 격리, freemium(무료 N회→구매), 결제는 나중.
+## 현재 상태 (한눈에)
+- **백엔드**: Kotlin + Spring Boot 3.5, JPA/Flyway(V1~V21), 도메인 패키지 = `account`·`billing`·`ai`·`underwriting`·`marketfeed`·`headline`·`payment`·`lead`·`property`·`analytics`·`admin`·`integration.*`·`common`.
+- **프론트**: React 19 + Vite SPA (`frontend/`), 상단 메뉴 = 시장·언더라이팅·심화분석·자산관리(BETA)·마이페이지·관리자.
+- **인프라**: Cloud Run 단일 컨테이너 + Cloud SQL(PostgreSQL) + Secret Manager. 이미지는 Cloud Build.
+- **결제**: 토스페이먼츠 크레딧 충전(테스트 모드 라이브). 라이브 전환 = 키만 교체.
 
-## 시작 전 남은 결정 2가지
-1. **빌드툴/베이스 패키지** — Gradle Kotlin DSL + `com.aixnative` 제안 → 확정?
-2. **프론트 형태** — REST API + SPA(React/Vue) vs 서버템플릿, 모바일 반응형 범위
+## 작업 규칙 (엄수)
+- **배포**: 사용자가 "배포"/"해" 라고 명시할 때만. `deploy/deploy.sh` 통짜 실행은 **금지**(시크릿 회전 -> 전체 로그아웃 위험). 코드만 바뀐 재배포는 **이미지 빌드 + `gcloud run deploy` 이미지 교체**로 env·시크릿 보존 -> [`docs/COMMANDS.md`](docs/COMMANDS.md) §5.
+- **검증**: 배포 전 `./gradlew compileKotlin`(백엔드) + `cd frontend && npm run build`(프론트) 둘 다 그린 확인.
+- **보안/격리**: MASTERN 레거시 레포는 읽기 전용 참조만. API 키 신규 발급. 테넌트 스코프 유지.
 
-## 결정되면 → Phase 1 스캐폴딩 착수
-Gradle Kotlin SB3 + Spring Data JPA + Flyway(PostgreSQL) + 멀티테넌트 계정·JWT 인증(+소셜) + `credit_ledger` + AI 라우터 이식(`AiServiceManager` + provider 클라이언트, **신규 키**). 이어서 언더라이팅 도메인 이식.
-
-## hero 언더라이팅은 외부 데이터 의존이 거의 없다 (장점)
-ProForma 계산은 **순수 로직**(외부 API 0), AI 내러티브는 **Claude 1개**면 충분 → **v1 최소 키 = Claude + 이메일(가입)**.
-실거래가(comps)·금리(ECOS)는 **나중에 더하는 enrich** 라 초기 약관 리스크/연동 부담이 작다.
+## 다음 과제 후보
+자세한 현황·우선순위는 [`docs/ROADMAP.md`](docs/ROADMAP.md) 참조.
 
 > ⚠ MASTERN 운영 레포·`C:\eclipse_MASTERN\` 보호구역은 **읽기 참조만**. 수정 금지.

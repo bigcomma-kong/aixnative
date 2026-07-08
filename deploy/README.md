@@ -1,4 +1,6 @@
-v# aixnative — GCP 배포 가이드
+# aixnative — GCP 배포 가이드
+
+> ⚠️ **일상 재배포는 `deploy.sh` 통짜 실행을 피한다**(빈 시크릿이면 JWT/DB 비번 자동 재생성 → 전체 로그아웃·DB 비번 리셋). 코드만 바뀐 안전 재배포는 **이미지 빌드 + `gcloud run deploy` 이미지 교체**로 env·시크릿을 보존한다 → [`docs/COMMANDS.md`](../docs/COMMANDS.md) §5. 아래 §1 은 **최초 프로비저닝** 절차다.
 
 **구조:** Cloud Run(단일 컨테이너: Spring + Vite SPA) + Cloud SQL(PostgreSQL) + Secret Manager + Artifact Registry.
 이미지는 **Cloud Build** 가 빌드하므로 **로컬 Docker 불필요**.
@@ -44,7 +46,7 @@ Cloud Run → Cloud SQL 은 **소켓 팩토리**(`build.gradle.kts` 의 `postgre
 ```
 DB_URL=jdbc:postgresql:///aixnative?cloudSqlInstance=PROJECT:REGION:INSTANCE&socketFactory=com.google.cloud.sql.postgres.SocketFactory
 ```
-스키마는 앱 기동 시 **Flyway** 가 자동 생성(첫 배포 시 V1·V2 적용).
+스키마는 앱 기동 시 **Flyway** 가 자동 적용(첫 배포 시 V1~최신까지 순차 적용, 이후 새 마이그레이션만).
 
 ## 프로필/시크릿 요약
 | 항목 | 값/출처 |
