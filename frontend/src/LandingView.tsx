@@ -220,6 +220,24 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
         ))}
       </section>
 
+      <section className="sample reveal" id="sample" aria-labelledby="sample-h">
+        <div className="feat-head">
+          <span className="eyebrow">로그인 없이 미리보기</span>
+          <h2 id="sample-h" className="feat-h">실제 분석 결과를 먼저 보세요</h2>
+          <p className="modes-sub">
+            가입 전에 실제 AI 분석을 같은 화면 그대로 렌더한 <strong>축약 미리보기</strong>입니다.
+            탭을 눌러 스크리닝·시장조사·투심 메모·AI 심층 시장 리포트까지 둘러보세요.
+          </p>
+        </div>
+        <SampleShowcase />
+        <div className="sample-cta">
+          <p className="sample-cta-copy">
+            가입하면 4단계 분석(스크리닝·시장조사·언더라이팅·투심)에 심화 9종까지 - 더 세분화된 전체 결과를 받습니다.
+          </p>
+          <button className="btn-primary" onClick={() => focusAuth('signup')}>무료로 내 딜 심사하기 →</button>
+        </div>
+      </section>
+
       <section className="feat reveal" id="features" aria-labelledby="feat-h">
         <div className="feat-head">
           <span className="eyebrow">무엇을 해주나</span>
@@ -304,21 +322,6 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
           전문가 한 건 비용으로 수십 건을 돌려봅니다.
           <span className="vc-disc"> * 비용·소요 시간은 예시이며 실제는 사례마다 다르며, 단계 별 비용은 추후 변경될 수 있습니다.</span>
         </p>
-      </section>
-
-      <section className="sample reveal" id="sample" aria-labelledby="sample-h">
-        <div className="feat-head">
-          <span className="eyebrow">로그인 없이 미리보기</span>
-          <h2 id="sample-h" className="feat-h">실제 분석 결과를 먼저 보세요</h2>
-          <p className="modes-sub">
-            아래는 실제 AI 분석을 같은 화면 그대로 렌더한 <strong>축약 미리보기</strong>입니다.
-          </p>
-          <p className="modes-sub">
-            가입 후엔 4단계 분석(스크리닝·시장조사·언더라이팅·투심)에 심화 9종까지 -
-            더 세분화된 전체 결과를 받습니다.
-          </p>
-        </div>
-        <SampleShowcase />
       </section>
 
       <section className="auth-section reveal" aria-labelledby="auth-h">
