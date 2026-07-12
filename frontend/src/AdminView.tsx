@@ -265,11 +265,15 @@ function AccessPanel({ showAdmin }: { showAdmin: boolean }) {
   const adminIds = new Set(users.filter((u) => u.role === 'ADMIN').map((u) => u.id))
   // 전역 '관리자 계정 표시' 반영: 끄면 접속 목록·카운트도 일반 사용자만. 방문자(userId 없음)는 항상 표시.
   const baseUsers = showAdmin ? users : users.filter((u) => u.role !== 'ADMIN')
-  // 접속 이력 있는 사용자만, 마지막 접속(로그인) 최신순. ISO 문자열이라 사전식 비교 = 시간순.
-  const accessed = baseUsers
-    .filter((u) => u.lastLoginAt)
+  // 전체 사용자(미접속 포함). 마지막 접속(로그인) 최신순, 미접속은 최근 가입순으로 뒤에. ISO 문자열 사전식 비교 = 시간순.
+  const roster = baseUsers
     .slice()
-    .sort((a, b) => (b.lastLoginAt ?? '').localeCompare(a.lastLoginAt ?? ''))
+    .sort((a, b) => {
+      const byLogin = (b.lastLoginAt ?? '').localeCompare(a.lastLoginAt ?? '')
+      return byLogin !== 0 ? byLogin : (b.createdAt ?? '').localeCompare(a.createdAt ?? '')
+    })
+  // 카드 요약용 파생 카운트.
+  const accessed = baseUsers.filter((u) => u.lastLoginAt)
   const todayCount = accessed.filter((u) => kstDay(u.lastLoginAt) === todayKst).length
   const neverCount = baseUsers.length - accessed.length
   const shownEvents = showAdmin ? events : events.filter((e) => e.userId == null || !adminIds.has(e.userId))
@@ -289,23 +293,24 @@ function AccessPanel({ showAdmin }: { showAdmin: boolean }) {
       </div>
 
       <div className="card">
-        <div className="section-title">접속 현황 - 마지막 접속 최신순 ({accessed.length})</div>
-        {loading ? <p className="hint">불러오는 중…</p> : accessed.length === 0 ? (
-          <p className="hint">아직 접속 이력이 없습니다.</p>
+        <div className="section-title">접속 현황 - 전체 사용자 · 마지막 접속 최신순 ({roster.length})</div>
+        {loading ? <p className="hint">불러오는 중…</p> : roster.length === 0 ? (
+          <p className="hint">아직 가입한 사용자가 없습니다.</p>
         ) : (
           <div className="table-scroll">
             <table className="admin-table">
               <thead>
-                <tr><th>이메일</th><th>권한</th><th>마지막 접속</th><th className="num">누적 접속</th></tr>
+                <tr><th>이메일</th><th>권한</th><th>인증</th><th>마지막 접속</th><th className="num">누적 접속</th></tr>
               </thead>
               <tbody>
-                {accessed.map((u) => {
+                {roster.map((u) => {
                   const isToday = kstDay(u.lastLoginAt) === todayKst
                   return (
                     <tr key={u.id}>
                       <td className="admin-email">{u.email}</td>
                       <td><span className={`plan-pill ${u.role === 'ADMIN' ? 'admin' : 'free'}`}>{u.role}</span></td>
-                      <td className="num admin-date">{fmtDate(u.lastLoginAt)}{isToday && <span className="self-tag">오늘</span>}</td>
+                      <td><span className={`plan-pill ${u.emailVerified ? 'verified' : 'unverified'}`}>{u.emailVerified ? '인증' : '미인증'}</span></td>
+                      <td className="num admin-date">{u.lastLoginAt ? <>{fmtDate(u.lastLoginAt)}{isToday && <span className="self-tag">오늘</span>}</> : <span className="muted-x">미접속</span>}</td>
                       <td className="num"><b>{u.loginCount}</b></td>
                     </tr>
                   )
@@ -314,7 +319,7 @@ function AccessPanel({ showAdmin }: { showAdmin: boolean }) {
             </table>
           </div>
         )}
-        <p className="hint">‘마지막 접속’ = 최근 로그인 시각, ‘누적 접속’ = 로그인 횟수. 시각은 KST 기준.</p>
+        <p className="hint">‘인증’ = 이메일 인증 완료 여부, ‘마지막 접속’ = 최근 로그인 시각, ‘누적 접속’ = 로그인 횟수. 시각은 KST 기준.</p>
       </div>
 
       <div className="card">

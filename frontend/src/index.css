@@ -894,6 +894,8 @@ td.warn { color: var(--no); font-weight: 600; }
 .plan-pill.free { background: var(--accent); color: oklch(99% 0 0); }
 .plan-pill.paid { background: var(--go); color: oklch(99% 0 0); }
 .plan-pill.admin { background: oklch(55% 0.18 290); color: oklch(99% 0 0); }
+.plan-pill.verified { background: var(--go); color: oklch(99% 0 0); }
+.plan-pill.unverified { background: transparent; color: var(--ink-soft); box-shadow: inset 0 0 0 1px var(--ink-faint); }
 
 /* ============================================================
    Paywall (Phase 3 stub - 결제 도입 전)
