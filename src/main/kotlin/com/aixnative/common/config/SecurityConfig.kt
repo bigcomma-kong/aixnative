@@ -54,6 +54,8 @@ class SecurityConfig(private val jwtAuthFilter: JwtAuthFilter) {
                     "/*.svg", "/*.ico", "/*.png", "/*.json", "/*.txt", "/*.xml", "/*.webmanifest",
                     // SEO 유입 — 무인증 서버렌더 시장 인텔리전스(크롤 대상).
                     "/insights", "/insights/**",
+                    // 공감랭킹 카드 이미지 - 인스타 Content Publishing 이 공개 URL 로 fetch(무인증).
+                    "/cardnews/**",
                 ).permitAll()
                 it.requestMatchers("/api/admin/**").hasRole("ADMIN")
                 it.anyRequest().authenticated()

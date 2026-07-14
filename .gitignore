@@ -47,3 +47,10 @@ Thumbs.db
 
 # Claude Code local config / hooks
 .claude/
+
+# 카드 렌더러(satori) - node_modules 는 컨테이너에서 재설치, 로컬 테스트 아티팩트 제외
+/render/node_modules/
+/render/out.png
+/render/out.b64
+/render/sample.json
+/render/render-err.txt

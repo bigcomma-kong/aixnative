@@ -31,12 +31,26 @@ COPY src ./src
 COPY --from=frontend /fe/dist ./src/main/resources/static
 RUN ./gradlew bootJar --no-daemon -x test
 
-# ── Stage 3: 런타임(JRE only, 비루트) ─────────────────────────────────────────
+# ── Stage 3: 런타임(JRE + Node, 비루트) ───────────────────────────────────────
 FROM eclipse-temurin:21-jre AS runtime
 WORKDIR /app
+# 공감랭킹 카드 이미지 렌더러(satori) 실행용 Node 22 설치.
+# resvg 네이티브 바이너리는 glibc 를 요구 → temurin(Ubuntu/glibc) 런타임과 동일 환경에서
+# npm install 해야 올바른 리눅스 바이너리(@resvg/resvg-js-linux-x64-gnu)가 깔린다.
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 # 비루트 사용자로 실행(보안)
 RUN groupadd -r app && useradd -r -g app app
 COPY --from=backend /app/build/libs/*.jar app.jar
+# 렌더러 의존성 먼저 설치(레이어 캐시). lock 은 Windows 생성이라 npm install 로 리눅스 바이너리 치유.
+COPY render/package.json render/package-lock.json ./render/
+RUN cd render && npm install --omit=dev --no-audit --no-fund
+# 렌더 스크립트 + 한글 폰트 복사
+COPY render/render-card.mjs ./render/
+COPY render/fonts ./render/fonts
+RUN chown -R app:app /app/render
 USER app
 EXPOSE 8080
 ENV JAVA_OPTS=""

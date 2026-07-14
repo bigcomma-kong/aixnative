@@ -13,6 +13,13 @@ out
 frontend/node_modules
 frontend/dist
 
+# 카드 렌더러 - node_modules 는 컨테이너(glibc)에서 재설치, 로컬 테스트 아티팩트 제외
+render/node_modules
+render/out.png
+render/out.b64
+render/sample.json
+render/render-err.txt
+
 # Spring 에 동봉되는 SPA 는 빌드 시 복사됨 — 소스 트리의 정적 산출물 제외
 src/main/resources/static
 

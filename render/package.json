@@ -1,0 +1,15 @@
+{
+  "name": "aixnative-cardnews-renderer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "공감랭킹 카드뉴스 이미지 렌더러 (satori + resvg). JVM이 프로세스로 호출.",
+  "scripts": {
+    "render": "node render-card.mjs"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "satori": "^0.12.1",
+    "satori-html": "^0.3.2"
+  }
+}

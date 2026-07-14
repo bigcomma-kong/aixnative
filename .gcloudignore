@@ -9,6 +9,11 @@ build
 out
 frontend/node_modules
 frontend/dist
+render/node_modules
+render/out.png
+render/out.b64
+render/sample.json
+render/render-err.txt
 src/main/resources/static
 data
 *.log

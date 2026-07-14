@@ -1,0 +1,181 @@
+package com.aixnative.social.service
+
+import com.aixnative.social.domain.RankSlide
+import com.aixnative.social.domain.SocialIngestReport
+import com.aixnative.social.domain.SocialMediaType
+import com.aixnative.social.domain.SocialPost
+import com.aixnative.social.domain.SocialPostStatus
+import com.aixnative.social.domain.SourceRef
+import com.aixnative.social.repository.SocialPostRepository
+import com.aixnative.social.web.SocialPostView
+import com.fasterxml.jackson.core.type.TypeReference
+import com.fasterxml.jackson.databind.ObjectMapper
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+
+/**
+ * 공감랭킹 소셜 게시물 오케스트레이터. 한 번의 수집 실행이:
+ *  1) 주제별 소재 수집([SocialSourceCollector], 구글뉴스 RSS),
+ *  2) Claude 로 랭킹 카드 캡션·슬라이드 생성([SocialCaptionGenerator]),
+ *  3) 중복 차단 후 저장(DRAFT),
+ *  4) 미디어 렌더러가 있으면 이미지 렌더 → PENDING(승인 대기).
+ *
+ * 렌더러/퍼블리셔는 인터페이스 목록으로 주입 - 구현체가 없어도(1단계 전) graceful.
+ * 게시는 승인(APPROVED) 후 [publish] 에서 플랫폼 퍼블리셔로 수행.
+ */
+@Service
+class SocialPostService(
+    private val collector: SocialSourceCollector,
+    private val captionGenerator: SocialCaptionGenerator,
+    private val repository: SocialPostRepository,
+    private val renderers: List<MediaRenderer>,
+    private val publishers: List<SocialPublisher>,
+    private val objectMapper: ObjectMapper,
+    private val props: SocialProperties,
+    @Value("\${app.base-url:http://localhost:8080}") private val baseUrl: String,
+) {
+    private val log = LoggerFactory.getLogger(javaClass)
+
+    @Transactional
+    fun ingest(): SocialIngestReport {
+        val errors = ArrayList<String>()
+        var sourcesFetched = 0
+        var created = 0
+        var skipped = 0
+        var rendered = 0
+        val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
+
+        for (topic in props.topics) {
+            runCatching {
+                val sources = collector.collect(topic)
+                sourcesFetched += sources.size
+
+                val dedupKey = "$topic:$today"
+                if (repository.findByDedupKeyIn(listOf(dedupKey)).isNotEmpty()) {
+                    skipped++
+                    return@runCatching
+                }
+
+                val post = captionGenerator.generate(topic, sources) ?: return@runCatching
+                post.origin = "AUTO"
+                post.dedupKey = dedupKey
+                applyCta(post)
+                repository.save(post)
+                created++
+
+                if (renderImage(post)) rendered++
+            }.onFailure { errors += "주제 '$topic' 처리 실패: ${it.message}"; log.warn("[social] 주제 처리 실패", it) }
+        }
+
+        log.info("[social] ingest topics={} sources={} created={} skipped={} rendered={}",
+            props.topics.size, sourcesFetched, created, skipped, rendered)
+        return SocialIngestReport(
+            topicsRequested = props.topics.size,
+            sourcesFetched = sourcesFetched,
+            postsCreated = created,
+            skippedDuplicate = skipped,
+            rendered = rendered,
+            errors = errors,
+        )
+    }
+
+    /** 부동산·재테크 주제에는 aixnative 유입 CTA 를 캡션 끝에 덧붙인다(범용 주제는 미적용). */
+    private fun applyCta(post: SocialPost) {
+        val hit = CTA_KEYWORDS.any { post.topic.contains(it) }
+        if (!hit) return
+        val cta = "\n\n부동산 딜 분석은 aixnative.com"
+        post.captionText = (post.captionText ?: "") + cta
+    }
+
+    /** 미디어 렌더러가 있으면 이미지 렌더 후 PENDING 으로. 없거나 실패면 DRAFT 유지. */
+    private fun renderImage(post: SocialPost): Boolean {
+        val renderer = renderers.firstOrNull { it.mediaType == post.mediaType } ?: return false
+        return runCatching {
+            post.imageBase64 = renderer.renderBase64(post)
+            post.status = SocialPostStatus.PENDING
+            repository.save(post)
+            true
+        }.getOrElse { log.warn("[social] 렌더 실패 id={}: {}", post.id, it.message); false }
+    }
+
+    @Transactional
+    fun approve(id: Long): SocialPostView = transition(id, SocialPostStatus.APPROVED)
+
+    @Transactional
+    fun reject(id: Long): SocialPostView = transition(id, SocialPostStatus.REJECTED)
+
+    private fun transition(id: Long, to: SocialPostStatus): SocialPostView {
+        val post = repository.findById(id).orElseThrow { IllegalArgumentException("게시물을 찾을 수 없습니다: $id") }
+        post.status = to
+        return repository.save(post).toView()
+    }
+
+    /** 승인된 게시물을 플랫폼에 게시. 퍼블리셔 미설정/미승인 시 예외. */
+    @Transactional
+    fun publish(id: Long): SocialPostView {
+        val post = repository.findById(id).orElseThrow { IllegalArgumentException("게시물을 찾을 수 없습니다: $id") }
+        require(post.status == SocialPostStatus.APPROVED) { "승인(APPROVED)된 게시물만 게시할 수 있습니다." }
+        val publisher = publishers.firstOrNull { it.platform == post.platform && it.isConfigured() }
+            ?: throw IllegalStateException("${post.platform} 게시 계정이 연동되지 않았습니다.")
+        return try {
+            val result = publisher.publish(post)
+            post.status = SocialPostStatus.PUBLISHED
+            post.externalPostId = result.externalPostId
+            post.publishedAt = Instant.now()
+            post.error = null
+            repository.save(post).toView()
+        } catch (e: Exception) {
+            post.error = e.message?.take(1000)
+            repository.save(post)
+            throw e
+        }
+    }
+
+    @Transactional
+    fun delete(id: Long) = repository.deleteById(id)
+
+    @Transactional(readOnly = true)
+    fun listAll(): List<SocialPostView> = repository.findTop100ByOrderByCreatedAtDesc().map { it.toView() }
+
+    /** 플랫폼 게시 가능 여부(퍼블리셔 설정됨). */
+    private fun canPublish(post: SocialPost): Boolean =
+        publishers.any { it.platform == post.platform && it.isConfigured() }
+
+    fun SocialPost.toView(): SocialPostView {
+        val slides = slidesJson?.let {
+            runCatching { objectMapper.readValue(it, object : TypeReference<List<RankSlide>>() {}) }.getOrNull()
+        }.orEmpty()
+        val refs = sourceRefsJson?.let {
+            runCatching { objectMapper.readValue(it, object : TypeReference<List<SourceRef>>() {}) }.getOrNull()
+        }.orEmpty()
+        return SocialPostView(
+            id = id ?: 0,
+            topic = topic,
+            title = title,
+            caption = captionText,
+            hashtags = hashtags,
+            mediaType = mediaType.name,
+            platform = platform.name,
+            status = status.name,
+            slides = slides,
+            sourceRefs = refs,
+            imageUrl = if (imageBase64 != null && id != null) "$baseUrl/cardnews/$id.png" else null,
+            hasImage = imageBase64 != null,
+            aiProvider = aiProvider,
+            createdAt = createdAt,
+            publishedAt = publishedAt,
+            externalPostId = externalPostId,
+            error = error,
+            canPublish = canPublish(this),
+        )
+    }
+
+    private companion object {
+        val CTA_KEYWORDS = listOf("부동산", "재테크", "투자", "리츠", "부린이")
+    }
+}

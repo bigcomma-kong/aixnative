@@ -110,6 +110,25 @@ marketfeed:
   google-news-enabled: ${MARKETFEED_GOOGLE_NEWS:true}
   briefing-enabled: ${MARKETFEED_BRIEFING:true}
 
+# 공감랭킹 소셜 자동게시. 소재 수집(구글뉴스 RSS)은 키 0개, 캡션은 Claude(운영 계정) 사용.
+# 트리거: Cloud Scheduler → POST /api/ingest/social-post (헤더 X-Ingest-Token, 마켓피드와 동일 방식).
+# 인스타 게시는 access-token/business-account-id 설정 시에만 활성(graceful) - 미설정 시 승인까지만.
+social:
+  ingest-token: ${SOCIAL_INGEST_TOKEN:}  # 🔑 값 → application-secret.yml (마켓피드 토큰과 별개 가능)
+  topics: ${SOCIAL_TOPICS:부동산 투자,재테크,경제 이슈}
+  max-sources-per-topic: ${SOCIAL_MAX_SOURCES:12}
+  rank-size: ${SOCIAL_RANK_SIZE:5}
+  recent-hours: ${SOCIAL_RECENT_HOURS:168}
+  instagram:
+    access-token: ${IG_ACCESS_TOKEN:}  # 🔑 값 → application-secret.yml
+    business-account-id: ${IG_BUSINESS_ACCOUNT_ID:}
+    graph-api-url: ${IG_GRAPH_API_URL:https://graph.facebook.com/v21.0}
+  # 카드 이미지 렌더(Node satori). node 미설치 시 렌더 실패해도 게시물은 DRAFT 로 남음(graceful).
+  render:
+    node-bin: ${SOCIAL_NODE_BIN:node}
+    script-path: ${SOCIAL_RENDER_SCRIPT:render/render-card.mjs}
+    timeout-ms: ${SOCIAL_RENDER_TIMEOUT_MS:30000}
+
 # 자산관리(PM) 임대차 리마인더. 크론(Cloud Scheduler) → POST /api/ingest/lease-reminders
 # (헤더 X-Ingest-Token, 마켓피드 수집 토큰 재사용). 만기/인상이 lead-days 이내로 다가오면 소유자에게 메일.
 # SMTP(SPRING_MAIL_HOST 등) 미설정 시 graceful - 발송 대신 로그.

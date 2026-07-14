@@ -12,6 +12,7 @@ import {
   type IngestReport,
   type NewsletterSendLogEntry,
   type NewsSubscriber,
+  type SocialPost,
   type UserRole,
   type UserStatus,
 } from './api'
@@ -31,7 +32,7 @@ const CREDIT_REASON_LABEL: Record<CreditReason, string> = {
 }
 
 export function AdminView({ currentEmail }: AdminViewProps) {
-  const [section, setSection] = useState<'dashboard' | 'access' | 'users' | 'credits' | 'runs' | 'market'>('dashboard')
+  const [section, setSection] = useState<'dashboard' | 'access' | 'users' | 'credits' | 'runs' | 'market' | 'social'>('dashboard')
   // 전역 '관리자 계정 표시' - 끄면 모든 패널에서 관리자 계정 데이터 제외(관리자 자신의 테스트 활동이 지표를 오염시키지 않게).
   const [showAdmin, setShowAdmin] = useState(false)
   const [adminIds, setAdminIds] = useState<Set<number>>(new Set())
@@ -79,6 +80,7 @@ export function AdminView({ currentEmail }: AdminViewProps) {
             <button type="button" aria-pressed={section === 'credits'} onClick={() => setSection('credits')}>크레딧 내역</button>
             <button type="button" aria-pressed={section === 'runs'} onClick={() => setSection('runs')}>분석 데이터</button>
             <button type="button" aria-pressed={section === 'market'} onClick={() => setSection('market')}>시장</button>
+            <button type="button" aria-pressed={section === 'social'} onClick={() => setSection('social')}>공감랭킹</button>
           </div>
         </div>
       </div>
@@ -89,6 +91,150 @@ export function AdminView({ currentEmail }: AdminViewProps) {
       {section === 'credits' && <CreditsPanel key={reloadKey} showAdmin={showAdmin} adminIds={adminIds} />}
       {section === 'runs' && <RunsPanel key={reloadKey} showAdmin={showAdmin} adminIds={adminIds} />}
       {section === 'market' && <MarketPanel key={reloadKey} />}
+      {section === 'social' && <SocialPanel key={reloadKey} />}
+    </>
+  )
+}
+
+const SOCIAL_STATUS_LABEL: Record<SocialPost['status'], string> = {
+  DRAFT: '초안',
+  PENDING: '승인 대기',
+  APPROVED: '승인됨',
+  PUBLISHED: '게시됨',
+  REJECTED: '반려',
+}
+
+const SOCIAL_STATUS_PILL: Record<SocialPost['status'], string> = {
+  DRAFT: 'free',
+  PENDING: 'admin',
+  APPROVED: 'paid',
+  PUBLISHED: 'verified',
+  REJECTED: 'unverified',
+}
+
+/** 공감랭킹 - 자동 생성된 랭킹 카드 검토·승인·게시. */
+function SocialPanel() {
+  const [posts, setPosts] = useState<SocialPost[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busyId, setBusyId] = useState<number | null>(null)
+  const [ingesting, setIngesting] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    api.adminSocialPosts()
+      .then(setPosts)
+      .catch((e: unknown) => setError(e instanceof ApiError ? e.message : '조회 실패'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const replace = (p: SocialPost) => setPosts((list) => list.map((x) => (x.id === p.id ? p : x)))
+
+  async function ingest() {
+    setIngesting(true); setError(null); setMsg(null)
+    try {
+      const r = await api.adminSocialIngest()
+      setMsg(`생성 ${r.postsCreated}건 · 중복 ${r.skippedDuplicate}건 · 렌더 ${r.rendered}건 (소재 ${r.sourcesFetched}건)${r.errors.length ? ` · 오류 ${r.errors.length}건` : ''}`)
+      setPosts(await api.adminSocialPosts())
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.message : '수집 실패')
+    } finally {
+      setIngesting(false)
+    }
+  }
+
+  async function act(id: number, fn: () => Promise<SocialPost>, label: string) {
+    setBusyId(id); setError(null); setMsg(null)
+    try { replace(await fn()) }
+    catch (e: unknown) { setError(e instanceof ApiError ? e.message : `${label} 실패`) }
+    finally { setBusyId(null) }
+  }
+
+  async function remove(id: number) {
+    if (!window.confirm('이 게시물을 삭제할까요?')) return
+    setBusyId(id); setError(null)
+    try { await api.adminSocialDelete(id); setPosts((list) => list.filter((x) => x.id !== id)) }
+    catch (e: unknown) { setError(e instanceof ApiError ? e.message : '삭제 실패') }
+    finally { setBusyId(null) }
+  }
+
+  return (
+    <>
+      {error && <p className="error">{error}</p>}
+
+      <div className="card">
+        <div className="section-title-row">
+          <div className="section-title">공감랭킹 소셜 게시물 ({posts.length})</div>
+          <button type="button" className="btn-primary btn-xs" onClick={ingest} disabled={ingesting}>
+            {ingesting ? '수집 중…' : '지금 수집·생성'}
+          </button>
+        </div>
+        <p className="hint">
+          구글뉴스 소재를 Claude가 주제별 랭킹 카드로 큐레이션합니다. 검토 후 승인하면 게시 가능(인스타 계정 연동 시).
+          {msg && <><br /><b>{msg}</b></>}
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="card"><p className="hint">불러오는 중…</p></div>
+      ) : posts.length === 0 ? (
+        <div className="card"><p className="hint">아직 생성된 게시물이 없습니다. ‘지금 수집·생성’을 눌러보세요.</p></div>
+      ) : (
+        <div className="social-grid">
+          {posts.map((p) => {
+            const busy = busyId === p.id
+            return (
+              <article key={p.id} className="social-card">
+                <div className="social-card-head">
+                  <span className={`plan-pill ${SOCIAL_STATUS_PILL[p.status]}`}>{SOCIAL_STATUS_LABEL[p.status]}</span>
+                  <span className="social-topic">{p.topic}</span>
+                  <span className="social-platform">{p.platform}</span>
+                </div>
+                <h3 className="social-title">{p.title}</h3>
+
+                {p.hasImage && p.imageUrl ? (
+                  <img className="social-img" src={p.imageUrl} alt={p.title} loading="lazy" />
+                ) : (
+                  <ol className="social-slides">
+                    {p.slides.map((s) => (
+                      <li key={s.rank}>
+                        <b>{s.title}</b>
+                        <span className="social-slide-sum">{s.summary}</span>
+                        {s.sourceUrl && <a className="social-src" href={s.sourceUrl} target="_blank" rel="noreferrer">{s.sourceName || '출처'} →</a>}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+
+                {p.caption && <p className="social-caption">{p.caption}</p>}
+                {p.hashtags && <p className="social-tags">{p.hashtags}</p>}
+                {p.error && <p className="error">{p.error}</p>}
+
+                <div className="social-actions">
+                  {(p.status === 'PENDING' || p.status === 'DRAFT') && (
+                    <button className="btn-primary btn-xs" disabled={busy} onClick={() => act(p.id, () => api.adminSocialApprove(p.id), '승인')}>승인</button>
+                  )}
+                  {p.status === 'APPROVED' && (
+                    <button
+                      className="btn-primary btn-xs"
+                      disabled={busy || !p.canPublish}
+                      title={p.canPublish ? '' : '플랫폼 계정 미연동'}
+                      onClick={() => act(p.id, () => api.adminSocialPublish(p.id), '게시')}
+                    >
+                      {p.canPublish ? '게시' : '게시(계정 미연동)'}
+                    </button>
+                  )}
+                  {p.status !== 'REJECTED' && p.status !== 'PUBLISHED' && (
+                    <button className="btn-ghost btn-xs" disabled={busy} onClick={() => act(p.id, () => api.adminSocialReject(p.id), '반려')}>반려</button>
+                  )}
+                  <button className="btn-ghost btn-xs btn-danger" disabled={busy} onClick={() => remove(p.id)}>삭제</button>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      )}
     </>
   )
 }

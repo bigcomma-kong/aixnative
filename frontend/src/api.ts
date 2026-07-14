@@ -45,6 +45,52 @@ export interface AdminUser {
   loginCount: number
 }
 
+// ── 공감랭킹 소셜 자동게시 ──
+export type SocialPostStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'PUBLISHED' | 'REJECTED'
+
+export interface RankSlide {
+  rank: number
+  title: string
+  summary: string
+  sourceName: string
+  sourceUrl: string
+}
+
+export interface SourceRef {
+  name: string
+  url: string
+}
+
+export interface SocialPost {
+  id: number
+  topic: string
+  title: string
+  caption: string | null
+  hashtags: string | null
+  mediaType: string
+  platform: string
+  status: SocialPostStatus
+  slides: RankSlide[]
+  sourceRefs: SourceRef[]
+  imageUrl: string | null
+  hasImage: boolean
+  aiProvider: string | null
+  createdAt: string | null
+  publishedAt: string | null
+  externalPostId: string | null
+  error: string | null
+  canPublish: boolean
+}
+
+export interface SocialIngestReport {
+  topicsRequested: number
+  sourcesFetched: number
+  postsCreated: number
+  skippedDuplicate: number
+  rendered: number
+  errors: string[]
+}
+
 export interface AdminRun {
   id: number
   tenantId: number
@@ -1270,6 +1316,30 @@ export const api = {
   /** 관리자 - 지정 주소로 테스트 발송. */
   adminNewsletterTestSend: (email: string): Promise<{ sent: boolean }> =>
     request('/api/admin/newsletter/test-send', { method: 'POST', body: JSON.stringify({ email }) }),
+
+  // ── 공감랭킹 소셜 자동게시(관리자) ──
+  /** 소셜 게시물 목록(최신순). */
+  adminSocialPosts: (): Promise<SocialPost[]> => request('/api/admin/social'),
+
+  /** 수동 수집·생성(즉시 1회) - Claude 랭킹 카드 생성. */
+  adminSocialIngest: (): Promise<SocialIngestReport> =>
+    request('/api/admin/social/ingest', { method: 'POST' }),
+
+  /** 승인(게시 가능 상태로). */
+  adminSocialApprove: (id: number): Promise<SocialPost> =>
+    request(`/api/admin/social/${id}/approve`, { method: 'POST' }),
+
+  /** 반려. */
+  adminSocialReject: (id: number): Promise<SocialPost> =>
+    request(`/api/admin/social/${id}/reject`, { method: 'POST' }),
+
+  /** 게시(플랫폼 연동 시). */
+  adminSocialPublish: (id: number): Promise<SocialPost> =>
+    request(`/api/admin/social/${id}/publish`, { method: 'POST' }),
+
+  /** 삭제. */
+  adminSocialDelete: (id: number): Promise<{ deleted: boolean }> =>
+    request(`/api/admin/social/${id}`, { method: 'DELETE' }),
 
   // ── 결제(크레딧 충전) ──
   /** 결제 SDK 초기화용 - clientKey + 활성 여부. */
