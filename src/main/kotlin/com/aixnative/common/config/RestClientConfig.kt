@@ -26,6 +26,19 @@ class RestClientConfig {
     }
 
     /**
+     * 이미지 생성(Gemini/Imagen) 전용 - base64 이미지 응답이 크고 생성 지연이 길어
+     * read timeout 을 넉넉히(120s) 준다. 배경 작업이라 요청 스레드 파킹 우려 낮음.
+     */
+    @Bean
+    fun imageGenRestClient(builder: RestClient.Builder): RestClient {
+        val factory = SimpleClientHttpRequestFactory().apply {
+            setConnectTimeout(Duration.ofSeconds(10))
+            setReadTimeout(Duration.ofSeconds(120))
+        }
+        return builder.requestFactory(factory).build()
+    }
+
+    /**
      * Short-timeout client for public market-data APIs (ECOS·R-ONE·RTMS·Kakao).
      * These must respond quickly; a slow source is skipped (graceful degrade) rather
      * than parking the analysis request.

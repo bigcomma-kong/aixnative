@@ -18,6 +18,12 @@ data class SocialPostView(
     val sourceType: String,
     /** 게시 리스크 등급(LOW/MEDIUM/HIGH) - HIGH 는 승인 단계 경고. */
     val riskLevel: String,
+    /** 게시물 종류(RANKING/STORY). */
+    val kind: String,
+    /** STORY 참여수 배지("추천 94만 · 댓글 3.7천"). */
+    val engagement: String?,
+    /** STORY 출처 게시판명. */
+    val sourceBoard: String?,
     val slides: List<RankSlide>,
     val sourceRefs: List<SourceRef>,
     /** 표지(첫 슬라이드) 공개 URL(있을 때). 없으면 null. */

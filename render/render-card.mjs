@@ -22,6 +22,9 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 
 // 순위별 악센트(동일 레이아웃 반복 방지 - 능동적 변주).
 const ACCENTS = ['#4f46e5', '#e11d48', '#0891b2', '#d97706', '#7c3aed', '#059669', '#db2777', '#2563eb', '#c026d3', '#0d9488']
+// 스토리 브랜드 팔레트(참고 영상: 네이비 + 골드).
+const NAVY = '#14213d'
+const GOLD = '#f5c518'
 
 function esc(s) {
   return String(s ?? '')
@@ -116,21 +119,114 @@ async function renderPng(markup) {
   return new Resvg(svg, { fitTo: { mode: 'width', value: WIDTH } }).render().asPng().toString('base64')
 }
 
-async function main() {
-  const raw = readFileSync(0, 'utf-8') // fd 0 = stdin
-  const data = JSON.parse(raw)
-  const slides = (data.slides || []).slice(0, 9) // 표지 포함 인스타 캐러셀 10장 상한
+/** base64(프리픽스 없음) → data URI. PNG/JPEG/GIF/WebP 헤더로 mime 감지. */
+function dataUriFromB64(b64) {
+  if (!b64) return null
+  let mime = 'image/png'
+  if (b64.startsWith('/9j/')) mime = 'image/jpeg'
+  else if (b64.startsWith('R0lGOD')) mime = 'image/gif'
+  else if (b64.startsWith('UklGR')) mime = 'image/webp'
+  return `data:${mime};base64,${b64}`
+}
 
-  // 항목 이미지 병렬 프리페치(각각 graceful).
+/** 스토리 표지 - 네이비+골드 "오늘의 베스트" 브랜딩 + 핫글 제목. */
+function storyCoverMarkup(data) {
+  const title = esc(data.coverTitle || data.title || '')
+  const board = esc(data.sourceBoard || '')
+  return html(`
+    <div style="display:flex; flex-direction:column; width:${WIDTH}px; height:${HEIGHT}px; padding:96px 76px; background:${NAVY}; font-family:Pretendard;">
+      <div style="display:flex; width:100%; height:8px; background:${GOLD};"></div>
+      <div style="display:flex; flex-direction:column; flex:1; justify-content:center; align-items:center;">
+        <div style="display:flex; font-size:40px; font-weight:700; color:#ffffff; letter-spacing:0.02em;">오늘의 베스트</div>
+        <div style="display:flex; border:5px solid ${GOLD}; border-radius:14px; padding:14px 46px; margin:34px 0 54px;">
+          <div style="display:flex; font-size:86px; font-weight:700; color:${GOLD};">BEST</div>
+        </div>
+        <div style="display:flex; font-size:52px; font-weight:700; color:#ffffff; line-height:1.28; text-align:center;">${title}</div>
+      </div>
+      <div style="display:flex; flex-direction:column;">
+        <div style="display:flex; justify-content:center; font-size:26px; color:rgba(255,255,255,0.6); margin-bottom:26px;">${board}</div>
+        <div style="display:flex; width:100%; height:8px; background:${GOLD};"></div>
+      </div>
+    </div>`)
+}
+
+/** 스토리 장면 - 풀블리드 이미지 + 참여수 배지 + 자막박스 + 출처. imageB64 없으면 타이포 폴백. */
+function storySceneMarkup(scene, accent, engagement, board, dataUri) {
+  const caption = esc(scene.caption || '')
+  const eng = esc(engagement || '')
+  const src = board ? `출처: ${esc(board)}` : ''
+  const badge = eng
+    ? `<div style="display:flex; position:absolute; top:34px; right:34px; background:${GOLD}; color:${NAVY}; font-size:28px; font-weight:700; padding:8px 20px; border-radius:10px;">${eng}</div>`
+    : ''
+  const srcFoot = src
+    ? `<div style="display:flex; position:absolute; bottom:26px; left:0; width:${WIDTH}px; justify-content:center; font-size:22px; color:rgba(255,255,255,0.85);">${src}</div>`
+    : ''
+  const captionBox = `
+    <div style="display:flex; position:absolute; bottom:96px; left:52px; width:${WIDTH - 104}px; background:rgba(20,33,61,0.82); border-left:8px solid ${GOLD}; border-radius:12px; padding:30px 34px;">
+      <div style="display:flex; font-size:38px; font-weight:700; color:#ffffff; line-height:1.34;">${caption}</div>
+    </div>`
+
+  if (dataUri) {
+    return html(`
+      <div style="display:flex; position:relative; width:${WIDTH}px; height:${HEIGHT}px; font-family:Pretendard;">
+        <img src="${dataUri}" width="${WIDTH}" height="${HEIGHT}" style="object-fit:cover;" />
+        ${badge}
+        ${captionBox}
+        ${srcFoot}
+      </div>`)
+  }
+  // 이미지 없음 - 타이포 폴백(악센트 그라데이션 풀블리드).
+  return html(`
+    <div style="display:flex; position:relative; flex-direction:column; width:${WIDTH}px; height:${HEIGHT}px; padding:88px 76px; justify-content:center; background:linear-gradient(150deg, ${NAVY} 0%, ${accent} 140%); font-family:Pretendard;">
+      <div style="display:flex; font-size:52px; font-weight:700; color:#ffffff; line-height:1.4;">${caption}</div>
+      ${badge}
+      ${srcFoot}
+    </div>`)
+}
+
+/** 스토리 아웃트로 - 요약 + 팔로우 CTA. */
+function outroMarkup(data) {
+  const outro = esc(data.outro || '')
+  return html(`
+    <div style="display:flex; flex-direction:column; width:${WIDTH}px; height:${HEIGHT}px; padding:96px 76px; background:${NAVY}; font-family:Pretendard;">
+      <div style="display:flex; font-size:44px; font-weight:700; color:${GOLD}; border-bottom:5px solid ${GOLD}; padding-bottom:22px;">왜 화제가 됐을까?</div>
+      <div style="display:flex; flex:1; align-items:center;">
+        <div style="display:flex; font-size:40px; color:#ffffff; line-height:1.5;">${outro}</div>
+      </div>
+      <div style="display:flex; justify-content:center; font-size:28px; font-weight:700; color:rgba(255,255,255,0.85);">팔로우하고 다음 베스트도 놓치지 마세요 · @gonggamranking</div>
+    </div>`)
+}
+
+/** 랭킹 캐러셀(표지 + 항목별) - 기존 경로. */
+async function renderRanking(data) {
+  const slides = (data.slides || []).slice(0, 9)
   const dataUris = await Promise.all(slides.map((s) => fetchImageDataUri(s.imageUrl)))
-
   const pages = []
   pages.push(await renderPng(coverMarkup(data, slides.length)))
   for (let i = 0; i < slides.length; i++) {
-    const accent = ACCENTS[i % ACCENTS.length]
-    pages.push(await renderPng(itemMarkup(slides[i], accent, dataUris[i])))
+    pages.push(await renderPng(itemMarkup(slides[i], ACCENTS[i % ACCENTS.length], dataUris[i])))
   }
+  return pages
+}
 
+/** 스토리 캐러셀(표지 + 장면별 + 아웃트로) - 커뮤니티 핫글. 이미지는 base64 인입(프리페치 없음). */
+async function renderStory(data) {
+  const scenes = (data.scenes || []).slice(0, 8) // 표지+장면+아웃트로 = 인스타 10장 상한
+  const pages = []
+  pages.push(await renderPng(storyCoverMarkup(data)))
+  for (let i = 0; i < scenes.length; i++) {
+    const accent = ACCENTS[i % ACCENTS.length]
+    const dataUri = dataUriFromB64(scenes[i].imageB64)
+    pages.push(await renderPng(storySceneMarkup(scenes[i], accent, data.engagement, data.sourceBoard, dataUri)))
+  }
+  if (data.outro) pages.push(await renderPng(outroMarkup(data)))
+  return pages
+}
+
+async function main() {
+  const raw = readFileSync(0, 'utf-8') // fd 0 = stdin
+  const data = JSON.parse(raw)
+  const pages = data.mode === 'story' ? await renderStory(data) : await renderRanking(data)
   process.stdout.write(JSON.stringify(pages))
 }
 

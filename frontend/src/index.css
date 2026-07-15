@@ -903,6 +903,8 @@ td.warn { color: var(--no); font-weight: 600; }
 .social-card-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .social-topic { font-size: 0.78rem; color: var(--ink-soft); font-weight: 600; }
 .social-platform { margin-left: auto; font-size: 0.64rem; color: var(--ink-faint); letter-spacing: 0.05em; }
+.social-kind { font-size: 0.68rem; font-weight: 700; padding: 0.12rem 0.5rem; border-radius: 999px; background: #14213d; color: #f5c518; }
+.social-meta { font-size: 0.72rem; color: var(--ink-soft); margin: 0.1rem 0 0; }
 .social-source { font-size: 0.68rem; font-weight: 700; padding: 0.12rem 0.5rem; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-soft); }
 .social-source.src-youtube { background: #ffe9e9; border-color: #ffc9c9; color: #c92a2a; }
 .social-source.src-trend { background: #fff4e0; border-color: #ffe0a3; color: #b8730b; }

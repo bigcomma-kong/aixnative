@@ -100,6 +100,14 @@ mistral:
     max-tokens: ${MISTRAL_MAX_TOKENS:4096}
   priority: ${MISTRAL_PRIORITY:5}
 
+# Gemini 이미지 생성 - 신규 키만(env). 공감랭킹 스토리 장면 이미지 생성에 직접 사용(배경 운영비).
+# 미설정 시 장면은 타이포형으로 폴백(파이프라인은 정상). 키는 GCP 콘솔 aixnative 에서 신규 발급.
+gemini:
+  api:
+    key: ${GEMINI_API_KEY:}  # 🔑 값 → application-secret.yml
+    url: ${GEMINI_API_URL:https://generativelanguage.googleapis.com/v1beta}
+    model: ${GEMINI_IMAGE_MODEL:gemini-2.0-flash-preview-image-generation}
+
 # 시장 인텔리전스 자동 수집. 수집(RSS·구글뉴스)은 키 0개로 동작, 브리핑만 무료 Mistral 필요(graceful).
 # 트리거: Cloud Scheduler → POST /api/ingest/market-feed (헤더 X-Ingest-Token). 토큰 미설정 시 인입 비활성.
 marketfeed:

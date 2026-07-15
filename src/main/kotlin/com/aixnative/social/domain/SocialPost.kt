@@ -36,6 +36,13 @@ enum class SourceType { YOUTUBE, TREND, NEWS, COMMUNITY }
 enum class RiskLevel { LOW, MEDIUM, HIGH }
 
 /**
+ * 게시물 종류.
+ *  - RANKING: 여러 소재를 TOP N 랭킹 한 세트로(유튜브/트렌드/뉴스). slides_json=RankSlide[].
+ *  - STORY: 커뮤니티 핫글 1건을 장면별 스토리로. slides_json=StoryScene[], 장면별 AI 이미지.
+ */
+enum class SocialPostKind { RANKING, STORY }
+
+/**
  * 공감랭킹 소셜 게시물 - 자동 생성 → 관리자 승인 → 게시 파이프라인의 단위.
  * 글로벌 콘텐츠(비테넌트, [com.aixnative.marketfeed.domain.MarketBriefing] 패턴).
  *
@@ -107,6 +114,18 @@ class SocialPost(
     @Enumerated(EnumType.STRING)
     @Column(name = "risk_level", nullable = false, length = 10)
     var riskLevel: RiskLevel = RiskLevel.LOW,
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    var kind: SocialPostKind = SocialPostKind.RANKING,
+
+    /** STORY 참여수 배지 문구("👍94만 💬3.7천"). RANKING 은 null. */
+    @Column(length = 120)
+    var engagement: String? = null,
+
+    /** STORY 출처 게시판명("에펨코리아 포텐 터짐 게시판"). RANKING 은 null. */
+    @Column(name = "source_board", length = 120)
+    var sourceBoard: String? = null,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

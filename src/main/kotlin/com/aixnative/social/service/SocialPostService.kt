@@ -32,6 +32,9 @@ import java.time.ZoneId
 class SocialPostService(
     private val cardSources: List<CardSource>,
     private val captionGenerator: SocialCaptionGenerator,
+    private val storySources: List<StorySource>,
+    private val storyGenerator: StoryScriptGenerator,
+    private val imageComposer: StoryImageComposer,
     private val repository: SocialPostRepository,
     private val renderers: List<MediaRenderer>,
     private val publishers: List<SocialPublisher>,
@@ -81,8 +84,34 @@ class SocialPostService(
             }.onFailure { errors += "카드 '${draft.title}' 처리 실패: ${it.message}"; log.warn("[social] 카드 처리 실패", it) }
         }
 
-        log.info("[social] ingest drafts={} sources={} created={} skipped={} rendered={} published={} auto={}",
-            drafts.size, sourcesFetched, created, skipped, rendered, published, autoPublish)
+        // 스토리 루프 - 커뮤니티 핫글 각각을 별도 STORY 게시물로(본문 딥페치 → Claude 각색 → AI 이미지).
+        val storyDrafts = storySources.flatMap { src ->
+            runCatching { src.produce() }
+                .getOrElse { errors += "${src.javaClass.simpleName} 스토리 수집 실패: ${it.message}"; emptyList() }
+        }
+        for (sd in storyDrafts) {
+            runCatching {
+                val dedupKey = "${sd.dedupSuffix}:$today"
+                if (repository.findByDedupKeyIn(listOf(dedupKey)).isNotEmpty()) {
+                    skipped++
+                    return@runCatching
+                }
+                val post = storyGenerator.generate(sd) ?: return@runCatching
+                post.origin = "AUTO"
+                post.dedupKey = dedupKey
+                repository.save(post)
+                created++
+
+                imageComposer.compose(post) // 장면별 AI 이미지 채움(엔진 없으면 폴백)
+                repository.save(post)
+
+                if (renderImage(post)) rendered++
+                if (post.status == SocialPostStatus.PENDING && autoPublish && autoPublishPost(post, errors)) published++
+            }.onFailure { errors += "스토리 '${sd.title}' 처리 실패: ${it.message}"; log.warn("[social] 스토리 처리 실패", it) }
+        }
+
+        log.info("[social] ingest cards={} stories={} sources={} created={} skipped={} rendered={} published={} auto={}",
+            drafts.size, storyDrafts.size, sourcesFetched, created, skipped, rendered, published, autoPublish)
         return SocialIngestReport(
             topicsRequested = drafts.size,
             sourcesFetched = sourcesFetched,
@@ -207,6 +236,9 @@ class SocialPostService(
             status = status.name,
             sourceType = sourceType.name,
             riskLevel = riskLevel.name,
+            kind = kind.name,
+            engagement = engagement,
+            sourceBoard = sourceBoard,
             slides = slides,
             sourceRefs = refs,
             imageUrl = if (imageBase64 != null && id != null) "$baseUrl/cardnews/$id.png" else null,

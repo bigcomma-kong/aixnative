@@ -3,6 +3,8 @@ package com.aixnative.social.service
 import com.aixnative.social.domain.RankSlide
 import com.aixnative.social.domain.SocialMediaType
 import com.aixnative.social.domain.SocialPost
+import com.aixnative.social.domain.SocialPostKind
+import com.aixnative.social.domain.StoryScript
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
@@ -26,21 +28,7 @@ class ImageCardRenderer(
     override val mediaType = SocialMediaType.IMAGE
 
     override fun renderSlides(post: SocialPost): List<String> {
-        val slides = post.slidesJson
-            ?.let { runCatching { objectMapper.readValue(it, object : TypeReference<List<RankSlide>>() {}) }.getOrNull() }
-            .orEmpty()
-        require(slides.isNotEmpty()) { "렌더할 슬라이드가 없습니다." }
-
-        val payload = mapOf(
-            "topic" to post.topic,
-            "title" to post.title,
-            "slides" to slides.map {
-                mapOf(
-                    "rank" to it.rank, "title" to it.title, "summary" to it.summary,
-                    "sourceName" to it.sourceName, "imageUrl" to it.imageUrl,
-                )
-            },
-        )
+        val payload = if (post.kind == SocialPostKind.STORY) storyPayload(post) else rankingPayload(post)
         val jsonBytes = objectMapper.writeValueAsBytes(payload)
 
         val script = File(props.render.scriptPath)
@@ -67,7 +55,41 @@ class ImageCardRenderer(
             objectMapper.readValue(out, object : TypeReference<List<String>>() {})
         }.getOrElse { throw RuntimeException("카드 렌더 출력 파싱 실패: ${out.take(200)}") }
         require(pages.isNotEmpty()) { "렌더 결과가 비었습니다." }
-        log.info("[social] 카드 렌더 완료 id={} slides={}", post.id, pages.size)
+        log.info("[social] 카드 렌더 완료 id={} kind={} slides={}", post.id, post.kind, pages.size)
         return pages
+    }
+
+    /** RANKING - slides_json=RankSlide[]. mode=ranking. */
+    private fun rankingPayload(post: SocialPost): Map<String, Any?> {
+        val slides = post.slidesJson
+            ?.let { runCatching { objectMapper.readValue(it, object : TypeReference<List<RankSlide>>() {}) }.getOrNull() }
+            .orEmpty()
+        require(slides.isNotEmpty()) { "렌더할 슬라이드가 없습니다." }
+        return mapOf(
+            "mode" to "ranking",
+            "topic" to post.topic,
+            "title" to post.title,
+            "slides" to slides.map {
+                mapOf(
+                    "rank" to it.rank, "title" to it.title, "summary" to it.summary,
+                    "sourceName" to it.sourceName, "imageUrl" to it.imageUrl,
+                )
+            },
+        )
+    }
+
+    /** STORY - slides_json=StoryScript. mode=story(표지+장면+아웃트로). */
+    private fun storyPayload(post: SocialPost): Map<String, Any?> {
+        val script = post.slidesJson
+            ?.let { runCatching { objectMapper.readValue(it, StoryScript::class.java) }.getOrNull() }
+        require(script != null && script.scenes.isNotEmpty()) { "렌더할 스토리 장면이 없습니다." }
+        return mapOf(
+            "mode" to "story",
+            "coverTitle" to post.title,
+            "engagement" to post.engagement,
+            "sourceBoard" to post.sourceBoard,
+            "scenes" to script.scenes.map { mapOf("caption" to it.caption, "imageB64" to it.imageB64) },
+            "outro" to script.outro,
+        )
     }
 }

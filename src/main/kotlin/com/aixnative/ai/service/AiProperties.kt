@@ -44,6 +44,22 @@ data class MistralProperties(
     )
 }
 
+/**
+ * Gemini 이미지 생성 config — 신규 키만(env). 배경 스토리 이미지 생성에 직접 호출되며(라우터 격리),
+ * 키 미설정 시 [com.aixnative.social.service.ImageEngine.isConfigured] 가 false → 타이포 폴백.
+ */
+@ConfigurationProperties(prefix = "gemini")
+data class GeminiProperties(
+    val api: Api = Api(),
+) {
+    data class Api(
+        val key: String = "",
+        val url: String = "https://generativelanguage.googleapis.com/v1beta",
+        /** 이미지 생성 지원 모델. 필요 시 env(GEMINI_IMAGE_MODEL)로 교체. */
+        val model: String = "gemini-2.0-flash-preview-image-generation",
+    )
+}
+
 /** AI router behaviour (priority/fallback/timeout). */
 @ConfigurationProperties(prefix = "ai.service")
 data class AiServiceProperties(

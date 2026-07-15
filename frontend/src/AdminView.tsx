@@ -221,8 +221,8 @@ function SocialPanel() {
           </button>
         </div>
         <p className="hint">
-          유튜브 인기영상·급상승 검색어·언론사 RSS·커뮤니티 소재를 Claude가 랭킹 카드로 큐레이션합니다.
-          카드마다 출처 배지와 리스크 등급을 표기하니, 리스크가 있는 소스는 원문 확인 후 승인하세요(게시는 인스타 계정 연동 시).
+          랭킹(유튜브·트렌드·뉴스) + 스토리(커뮤니티 핫글을 장면별 AI 이미지로 각색)를 Claude가 생성합니다.
+          카드마다 출처 배지·리스크 등급을 표기하니, 리스크가 있는 소스는 원문 확인 후 승인하세요(게시는 인스타 계정 연동 시).
           {msg && <><br /><b>{msg}</b></>}
         </p>
       </div>
@@ -239,10 +239,14 @@ function SocialPanel() {
               <article key={p.id} className="social-card">
                 <div className="social-card-head">
                   <span className={`plan-pill ${SOCIAL_STATUS_PILL[p.status]}`}>{SOCIAL_STATUS_LABEL[p.status]}</span>
+                  {p.kind === 'STORY' && <span className="social-kind">스토리</span>}
                   <span className={`social-source src-${p.sourceType.toLowerCase()}`}>{SOCIAL_SOURCE_LABEL[p.sourceType]}</span>
                   <span className="social-platform">{p.platform}</span>
                 </div>
                 <h3 className="social-title">{p.title}</h3>
+                {p.kind === 'STORY' && (p.sourceBoard || p.engagement) && (
+                  <p className="social-meta">{[p.sourceBoard, p.engagement].filter(Boolean).join(' · ')}</p>
+                )}
                 {SOCIAL_RISK[p.riskLevel] && (
                   <p className={`social-risk ${SOCIAL_RISK[p.riskLevel]!.cls}`}>
                     ⚠ {SOCIAL_RISK[p.riskLevel]!.label} · 출처: {SOCIAL_SOURCE_LABEL[p.sourceType]} — 승인 전 원문 확인

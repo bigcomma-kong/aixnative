@@ -52,6 +52,15 @@ data class SocialProperties(
      */
     val useCommunityImages: Boolean = false,
     /**
+     * 스토리 모드 커뮤니티 대상(핫글 리스트 페이지: label=게시판명, url=인기/베스트 게시판).
+     * 각 대상에서 상위 핫글 각각을 별도 스토리 게시물로. 기본 빈 목록(명시적 on). 리스크 HIGH 강제.
+     */
+    val communityStoryTargets: List<CommunityTarget> = emptyList(),
+    /** 대상당 스토리로 만들 상위 핫글 수. */
+    val storyPostsPerTarget: Int = 3,
+    /** 스토리 1건당 장면 수 상한(표지·아웃트로 제외). */
+    val storyMaxScenes: Int = 6,
+    /**
      * 완전 자동 게시. true 면 스케줄러 트리거(POST /api/ingest/social-post) 수집분을
      * 승인 없이 렌더 후 바로 게시한다(계정 연동 시). 기본 false(반자동 - 관리자 승인 필요).
      * 관리자 수동 트리거는 이 값과 무관하게 항상 승인 대기(검토용).

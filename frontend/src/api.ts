@@ -49,6 +49,7 @@ export interface AdminUser {
 export type SocialPostStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'PUBLISHED' | 'REJECTED'
 export type SocialSourceType = 'YOUTUBE' | 'TREND' | 'NEWS' | 'COMMUNITY'
 export type SocialRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH'
+export type SocialPostKind = 'RANKING' | 'STORY'
 
 export interface RankSlide {
   rank: number
@@ -75,6 +76,9 @@ export interface SocialPost {
   status: SocialPostStatus
   sourceType: SocialSourceType
   riskLevel: SocialRiskLevel
+  kind: SocialPostKind
+  engagement: string | null
+  sourceBoard: string | null
   slides: RankSlide[]
   sourceRefs: SourceRef[]
   imageUrl: string | null
