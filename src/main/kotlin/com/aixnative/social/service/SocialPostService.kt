@@ -20,17 +20,17 @@ import java.time.ZoneId
 
 /**
  * 공감랭킹 소셜 게시물 오케스트레이터. 한 번의 수집 실행이:
- *  1) 주제별 소재 수집([SocialSourceCollector], 구글뉴스 RSS),
+ *  1) 다중 소스([CardSource] 목록: 유튜브 인기·구글 트렌드·언론사 RSS·커뮤니티)에서 카드 초안 취합,
  *  2) Claude 로 랭킹 카드 캡션·슬라이드 생성([SocialCaptionGenerator]),
- *  3) 중복 차단 후 저장(DRAFT),
+ *  3) 중복 차단 후 저장(DRAFT, 출처유형·리스크 등급 포함),
  *  4) 미디어 렌더러가 있으면 이미지 렌더 → PENDING(승인 대기).
  *
- * 렌더러/퍼블리셔는 인터페이스 목록으로 주입 - 구현체가 없어도(1단계 전) graceful.
- * 게시는 승인(APPROVED) 후 [publish] 에서 플랫폼 퍼블리셔로 수행.
+ * 소스/렌더러/퍼블리셔는 모두 인터페이스 목록으로 주입 - 구현체가 없거나 개별 실패해도 graceful.
+ * 게시는 승인(APPROVED) 후 [publish] 에서 플랫폼 퍼블리셔로 수행. 리스크 등급은 관리자 승인 단계에서 판단.
  */
 @Service
 class SocialPostService(
-    private val collector: SocialSourceCollector,
+    private val cardSources: List<CardSource>,
     private val captionGenerator: SocialCaptionGenerator,
     private val repository: SocialPostRepository,
     private val renderers: List<MediaRenderer>,
@@ -48,39 +48,43 @@ class SocialPostService(
     @Transactional
     fun ingest(autoPublish: Boolean = false): SocialIngestReport {
         val errors = ArrayList<String>()
-        var sourcesFetched = 0
         var created = 0
         var skipped = 0
         var rendered = 0
         var published = 0
         val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
 
-        for (topic in props.topics) {
-            runCatching {
-                val sources = collector.collect(topic)
-                sourcesFetched += sources.size
+        // 각 소스는 내부 graceful 하지만 오케스트레이터에서도 방어(한 소스 예외가 전체를 막지 않게).
+        val drafts = cardSources.flatMap { src ->
+            runCatching { src.produce() }
+                .getOrElse { errors += "${src.javaClass.simpleName} 수집 실패: ${it.message}"; emptyList() }
+        }
+        val sourcesFetched = drafts.sumOf { it.articles.size }
 
-                val dedupKey = "$topic:$today"
+        for (draft in drafts) {
+            runCatching {
+                val dedupKey = "${draft.dedupSuffix}:$today"
                 if (repository.findByDedupKeyIn(listOf(dedupKey)).isNotEmpty()) {
                     skipped++
                     return@runCatching
                 }
 
-                val post = captionGenerator.generate(topic, sources) ?: return@runCatching
+                val post = captionGenerator.generate(draft) ?: return@runCatching
                 post.origin = "AUTO"
                 post.dedupKey = dedupKey
                 applyCta(post)
                 repository.save(post)
                 created++
 
-                if (renderImage(post) && autoPublish && autoPublishPost(post, errors)) published++
-            }.onFailure { errors += "주제 '$topic' 처리 실패: ${it.message}"; log.warn("[social] 주제 처리 실패", it) }
+                if (renderImage(post)) rendered++
+                if (post.status == SocialPostStatus.PENDING && autoPublish && autoPublishPost(post, errors)) published++
+            }.onFailure { errors += "카드 '${draft.title}' 처리 실패: ${it.message}"; log.warn("[social] 카드 처리 실패", it) }
         }
 
-        log.info("[social] ingest topics={} sources={} created={} skipped={} rendered={} published={} auto={}",
-            props.topics.size, sourcesFetched, created, skipped, rendered, published, autoPublish)
+        log.info("[social] ingest drafts={} sources={} created={} skipped={} rendered={} published={} auto={}",
+            drafts.size, sourcesFetched, created, skipped, rendered, published, autoPublish)
         return SocialIngestReport(
-            topicsRequested = props.topics.size,
+            topicsRequested = drafts.size,
             sourcesFetched = sourcesFetched,
             postsCreated = created,
             skippedDuplicate = skipped,
@@ -192,6 +196,8 @@ class SocialPostService(
             mediaType = mediaType.name,
             platform = platform.name,
             status = status.name,
+            sourceType = sourceType.name,
+            riskLevel = riskLevel.name,
             slides = slides,
             sourceRefs = refs,
             imageUrl = if (imageBase64 != null && id != null) "$baseUrl/cardnews/$id.png" else null,

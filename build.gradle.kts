@@ -35,6 +35,8 @@ dependencies {
 	implementation("org.flywaydb:flyway-core")
 	implementation("org.flywaydb:flyway-database-postgresql")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
+	// 커뮤니티 정적 HTML 파싱(공식 RSS 부재 소스). JS 렌더 사이트는 막히면 graceful.
+	implementation("org.jsoup:jsoup:1.18.3")
 	// JWT (stateless auth) — jjwt 0.12.x
 	implementation("io.jsonwebtoken:jjwt-api:0.12.6")
 	runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")

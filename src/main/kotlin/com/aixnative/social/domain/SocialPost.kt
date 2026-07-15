@@ -29,6 +29,12 @@ enum class SocialPlatform { INSTAGRAM, YOUTUBE }
  */
 enum class SocialPostStatus { DRAFT, PENDING, APPROVED, PUBLISHED, REJECTED }
 
+/** 소재 출처 유형 - 관리자 콘솔에 배지로 표기. */
+enum class SourceType { YOUTUBE, TREND, NEWS, COMMUNITY }
+
+/** 게시 리스크 등급 - HIGH(커뮤니티 등)는 관리자에게 경고 표기. */
+enum class RiskLevel { LOW, MEDIUM, HIGH }
+
 /**
  * 공감랭킹 소셜 게시물 - 자동 생성 → 관리자 승인 → 게시 파이프라인의 단위.
  * 글로벌 콘텐츠(비테넌트, [com.aixnative.marketfeed.domain.MarketBriefing] 패턴).
@@ -89,6 +95,14 @@ class SocialPost(
 
     @Column(length = 1000)
     var error: String? = null,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_type", nullable = false, length = 20)
+    var sourceType: SourceType = SourceType.NEWS,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "risk_level", nullable = false, length = 10)
+    var riskLevel: RiskLevel = RiskLevel.LOW,
 ) {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

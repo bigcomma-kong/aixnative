@@ -903,6 +903,14 @@ td.warn { color: var(--no); font-weight: 600; }
 .social-card-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .social-topic { font-size: 0.78rem; color: var(--ink-soft); font-weight: 600; }
 .social-platform { margin-left: auto; font-size: 0.64rem; color: var(--ink-faint); letter-spacing: 0.05em; }
+.social-source { font-size: 0.68rem; font-weight: 700; padding: 0.12rem 0.5rem; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-soft); }
+.social-source.src-youtube { background: #ffe9e9; border-color: #ffc9c9; color: #c92a2a; }
+.social-source.src-trend { background: #fff4e0; border-color: #ffe0a3; color: #b8730b; }
+.social-source.src-news { background: #e7f0ff; border-color: #c3d9ff; color: #1c5fd0; }
+.social-source.src-community { background: #f0e9ff; border-color: #d9c9ff; color: #7048c4; }
+.social-risk { font-size: 0.72rem; font-weight: 600; margin: 0.15rem 0 0; padding: 0.35rem 0.55rem; border-radius: calc(var(--r) - 8px); line-height: 1.35; }
+.social-risk.risk-medium { background: #fff8e6; border: 1px solid #ffe08a; color: #97650a; }
+.social-risk.risk-high { background: #fff0f0; border: 1px solid #ffb3b3; color: #c0272d; }
 .social-title { font-size: 1.02rem; font-weight: 700; line-height: 1.35; margin: 0; }
 .social-img { width: 100%; border-radius: calc(var(--r) - 4px); border: 1px solid var(--line); }
 .social-slides { margin: 0; padding-left: 1.15rem; display: flex; flex-direction: column; gap: 0.5rem; }

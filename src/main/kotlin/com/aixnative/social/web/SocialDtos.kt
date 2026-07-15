@@ -14,6 +14,10 @@ data class SocialPostView(
     val mediaType: String,
     val platform: String,
     val status: String,
+    /** 소재 출처 유형(YOUTUBE/TREND/NEWS/COMMUNITY) - 관리자 배지. */
+    val sourceType: String,
+    /** 게시 리스크 등급(LOW/MEDIUM/HIGH) - HIGH 는 승인 단계 경고. */
+    val riskLevel: String,
     val slides: List<RankSlide>,
     val sourceRefs: List<SourceRef>,
     /** 렌더 이미지 공개 URL(있을 때). 없으면 null. */

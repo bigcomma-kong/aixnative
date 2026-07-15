@@ -1,11 +1,24 @@
 package com.aixnative.social.domain
 
-/** 수집된 소재 기사 1건(주제 랭킹 후보). */
+/** 수집된 소재 기사 1건(랭킹 후보). */
 data class SourceArticle(
     val title: String,
     val summary: String,
     val link: String,
     val source: String,
+)
+
+/**
+ * 한 장의 카드 초안 - 한 소스가 만든 랭킹 카드 재료(제목·출처·리스크·소재 목록).
+ * [CardSource.produce] 가 반환하고, 오케스트레이터가 Claude 큐레이션 → SocialPost 로 만든다.
+ */
+data class CardDraft(
+    val title: String,           // "오늘 유튜브 엔터 인기 TOP 5"
+    val sourceType: SourceType,
+    val riskLevel: RiskLevel,
+    val dedupSuffix: String,     // 중복 차단 키 접두("youtube:엔터")
+    val topic: String,           // 캡션 프롬프트용 주제 라벨
+    val articles: List<SourceArticle>,
 )
 
 /** 랭킹 카드 슬라이드 1장(Claude 큐레이션 결과). slides_json 으로 직렬화. */

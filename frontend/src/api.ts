@@ -47,6 +47,8 @@ export interface AdminUser {
 
 // ── 공감랭킹 소셜 자동게시 ──
 export type SocialPostStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'PUBLISHED' | 'REJECTED'
+export type SocialSourceType = 'YOUTUBE' | 'TREND' | 'NEWS' | 'COMMUNITY'
+export type SocialRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH'
 
 export interface RankSlide {
   rank: number
@@ -70,6 +72,8 @@ export interface SocialPost {
   mediaType: string
   platform: string
   status: SocialPostStatus
+  sourceType: SocialSourceType
+  riskLevel: SocialRiskLevel
   slides: RankSlide[]
   sourceRefs: SourceRef[]
   imageUrl: string | null

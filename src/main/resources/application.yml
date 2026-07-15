@@ -115,11 +115,11 @@ marketfeed:
 # 인스타 게시는 access-token/business-account-id 설정 시에만 활성(graceful) - 미설정 시 승인까지만.
 social:
   ingest-token: ${SOCIAL_INGEST_TOKEN:}  # 🔑 값 → application-secret.yml (마켓피드 토큰과 별개 가능)
-  # 전 분야 커버. 콤마 구분 - 분야를 자유롭게 켜고 끈다(주제당 랭킹 카드 1건).
-  topics: ${SOCIAL_TOPICS:오늘의 화제,연예,스포츠,IT 트렌드,재테크,생활 정보,건강,부동산}
-  max-sources-per-topic: ${SOCIAL_MAX_SOURCES:12}
   rank-size: ${SOCIAL_RANK_SIZE:5}
   recent-hours: ${SOCIAL_RECENT_HOURS:168}
+  # 유튜브 Data API v3 키. 빈 값이면 유튜브 인기영상 소스만 graceful 비활성(다른 소스는 정상).
+  youtube-api-key: ${YOUTUBE_API_KEY:}  # 🔑 GCP 콘솔 aixnative 프로젝트에서 신규 발급
+  # 유튜브 카테고리·언론사 RSS·커뮤니티 대상 기본값은 SocialProperties 코드에 정의(필요 시 오버라이드).
   # 완전 자동 게시. true 면 스케줄러 수집분을 승인 없이 바로 게시(계정 연동 시). 기본 반자동.
   auto-publish: ${SOCIAL_AUTO_PUBLISH:false}
   instagram:
