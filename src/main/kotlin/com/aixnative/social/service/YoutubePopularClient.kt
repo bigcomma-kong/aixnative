@@ -60,7 +60,17 @@ class YoutubePopularClient(
             summary = summary,
             link = "https://www.youtube.com/watch?v=$id",
             source = "YouTube · $channel",
+            imageUrl = bestThumbnail(snippet.path("thumbnails"), id),
         )
+    }
+
+    /** 썸네일 최고 화질 우선(maxres→standard→high). 없으면 유튜브 규칙 URL 폴백. */
+    private fun bestThumbnail(thumbs: JsonNode, videoId: String): String {
+        for (key in listOf("maxres", "standard", "high", "medium")) {
+            val url = thumbs.path(key).path("url").asText("")
+            if (url.isNotBlank()) return url
+        }
+        return "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
     }
 
     /** 조회수 한글 축약(1.2만 / 3.4억). */

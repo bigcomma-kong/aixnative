@@ -47,6 +47,11 @@ data class SocialProperties(
      */
     val communityTargets: List<CommunityTarget> = emptyList(),
     /**
+     * 커뮤니티 유저 업로드 사진을 슬라이드 배경으로 쓸지. 저작권·초상권 리스크 최고라 기본 false.
+     * true 여도 각 슬라이드에 출처 표기. (유튜브 썸네일·뉴스 대표컷은 이 값과 무관하게 항상 사용.)
+     */
+    val useCommunityImages: Boolean = false,
+    /**
      * 완전 자동 게시. true 면 스케줄러 트리거(POST /api/ingest/social-post) 수집분을
      * 승인 없이 렌더 후 바로 게시한다(계정 연동 시). 기본 false(반자동 - 관리자 승인 필요).
      * 관리자 수동 트리거는 이 값과 무관하게 항상 승인 대기(검토용).
@@ -76,7 +81,8 @@ data class SocialProperties(
     data class Render(
         val nodeBin: String = "node",
         val scriptPath: String = "render/render-card.mjs",
-        val timeoutMs: Long = 30_000,
+        // 캐러셀(표지+항목 N장) + 원격 이미지 프리페치라 단일 렌더보다 여유 필요.
+        val timeoutMs: Long = 90_000,
     )
 
     data class Instagram(

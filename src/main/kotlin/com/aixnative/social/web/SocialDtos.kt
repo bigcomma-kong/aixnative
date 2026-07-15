@@ -20,8 +20,10 @@ data class SocialPostView(
     val riskLevel: String,
     val slides: List<RankSlide>,
     val sourceRefs: List<SourceRef>,
-    /** 렌더 이미지 공개 URL(있을 때). 없으면 null. */
+    /** 표지(첫 슬라이드) 공개 URL(있을 때). 없으면 null. */
     val imageUrl: String?,
+    /** 캐러셀 전체 슬라이드 공개 URL 목록(표지 포함). 넘겨보기 미리보기·인스타 캐러셀용. */
+    val imageUrls: List<String>,
     val hasImage: Boolean,
     val aiProvider: String?,
     val createdAt: Instant?,

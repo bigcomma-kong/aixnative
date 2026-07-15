@@ -29,6 +29,7 @@ class GoogleTrendSource(
                 summary = it.description.ifBlank { "지금 화제인 검색어" },
                 link = it.link.ifBlank { "https://trends.google.com/trending?geo=KR" },
                 source = "Google Trends",
+                imageUrl = it.imageUrl,
             )
         }
         return listOf(

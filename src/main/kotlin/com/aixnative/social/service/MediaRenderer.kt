@@ -12,8 +12,9 @@ interface MediaRenderer {
     val mediaType: SocialMediaType
 
     /**
-     * 게시물 콘텐츠(제목/슬라이드)를 렌더링해 base64 PNG(이미지) 문자열을 반환한다.
+     * 게시물 콘텐츠(제목/슬라이드)를 렌더링해 **슬라이드별 base64 PNG 목록**을 반환한다.
+     * index0=표지, 이후 항목별 1장(캐러셀). 단일 이미지 렌더러는 1건 리스트.
      * (영상 렌더러는 공개 URL 을 반환하도록 확장 시 시그니처 조정)
      */
-    fun renderBase64(post: SocialPost): String
+    fun renderSlides(post: SocialPost): List<String>
 }

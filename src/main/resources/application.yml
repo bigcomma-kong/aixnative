@@ -130,7 +130,7 @@ social:
   render:
     node-bin: ${SOCIAL_NODE_BIN:node}
     script-path: ${SOCIAL_RENDER_SCRIPT:render/render-card.mjs}
-    timeout-ms: ${SOCIAL_RENDER_TIMEOUT_MS:30000}
+    timeout-ms: ${SOCIAL_RENDER_TIMEOUT_MS:90000}
 
 # 자산관리(PM) 임대차 리마인더. 크론(Cloud Scheduler) → POST /api/ingest/lease-reminders
 # (헤더 X-Ingest-Token, 마켓피드 수집 토큰 재사용). 만기/인상이 lead-days 이내로 다가오면 소유자에게 메일.

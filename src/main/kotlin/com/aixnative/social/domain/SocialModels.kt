@@ -6,6 +6,8 @@ data class SourceArticle(
     val summary: String,
     val link: String,
     val source: String,
+    /** 소재 대표 이미지(유튜브 썸네일·뉴스 대표컷 등). 슬라이드 배경 합성용. 없으면 null. */
+    val imageUrl: String? = null,
 )
 
 /**
@@ -28,6 +30,8 @@ data class RankSlide(
     val summary: String,
     val sourceName: String,
     val sourceUrl: String,
+    /** 슬라이드 배경 합성용 이미지 URL(소재에서 결정론적으로 주입). 없으면 디자인형 폴백. */
+    val imageUrl: String? = null,
 )
 
 /** 출처 근거(저작권) - source_refs_json 으로 직렬화. */

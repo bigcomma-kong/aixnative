@@ -10,13 +10,15 @@ import javax.xml.XMLConstants
 import javax.xml.parsers.DocumentBuilder
 import javax.xml.parsers.DocumentBuilderFactory
 
-/** RSS 2.0 item 1건(표준 필드). */
+/** RSS 2.0 item 1건(표준 필드 + 대표 이미지). */
 data class RssItem(
     val title: String,
     val link: String,
     val description: String,
     val source: String,
     val publishedAt: Instant?,
+    /** 대표 이미지(media:content/thumbnail·enclosure·ht:picture 등에서 추출). 없으면 null. */
+    val imageUrl: String? = null,
 )
 
 /**
@@ -44,6 +46,7 @@ class RssFetcher(private val marketDataRestClient: RestClient) {
                 description = stripHtml(text(item, "description")).take(400),
                 source = source,
                 publishedAt = parsePubDate(text(item, "pubDate")),
+                imageUrl = extractImage(item),
             )
         }
         return out
@@ -52,6 +55,43 @@ class RssFetcher(private val marketDataRestClient: RestClient) {
     private fun text(item: Element, tag: String): String {
         val nodes = item.getElementsByTagName(tag)
         return if (nodes.length > 0) nodes.item(0).textContent ?: "" else ""
+    }
+
+    /**
+     * item 대표 이미지 추출 - 흔한 확장 태그를 순서대로 시도.
+     * media:content/thumbnail(url 속성), enclosure(type=image, url), ht:picture(트렌드, 텍스트),
+     * 마지막으로 description 내 첫 <img src>. http(s) 만 채택.
+     */
+    private fun extractImage(item: Element): String? {
+        // media:content, media:thumbnail (url 속성)
+        for (tag in listOf("media:content", "media:thumbnail", "thumbnail", "content")) {
+            val nodes = item.getElementsByTagName(tag)
+            for (i in 0 until nodes.length) {
+                val el = nodes.item(i) as? Element ?: continue
+                val url = el.getAttribute("url").trim()
+                if (url.startsWith("http")) return url
+            }
+        }
+        // enclosure type=image
+        val enc = item.getElementsByTagName("enclosure")
+        for (i in 0 until enc.length) {
+            val el = enc.item(i) as? Element ?: continue
+            val type = el.getAttribute("type")
+            val url = el.getAttribute("url").trim()
+            if (url.startsWith("http") && (type.isBlank() || type.startsWith("image"))) return url
+        }
+        // ht:picture (구글 트렌드) - 텍스트 값
+        val pic = item.getElementsByTagName("ht:picture")
+        if (pic.length > 0) {
+            val url = pic.item(0).textContent?.trim().orEmpty()
+            if (url.startsWith("http")) return url
+        }
+        // description 내 첫 <img src="...">
+        val desc = text(item, "description")
+        Regex("<img[^>]+src=[\"']([^\"']+)[\"']").find(desc)?.groupValues?.get(1)?.let {
+            if (it.startsWith("http")) return it
+        }
+        return null
     }
 
     private fun stripHtml(raw: String): String =

@@ -12,8 +12,8 @@ import java.util.concurrent.TimeUnit
 
 /**
  * 카드 이미지 렌더러(IMAGE) - Node satori 스크립트(render/render-card.mjs)를 프로세스로 호출한다.
- * stdin 으로 {topic,title,slides} JSON 을 넘기고 stdout 으로 PNG base64 를 받는다.
- * node 미설치/스크립트 부재/타임아웃 시 예외 → 오케스트레이터가 DRAFT 로 남긴다(graceful).
+ * stdin 으로 {topic,title,slides[imageUrl 포함]} JSON 을 넘기고 stdout 으로 **base64 PNG 배열(JSON)** 을 받는다.
+ * (표지 1장 + 항목별 1장). node 미설치/스크립트 부재/타임아웃 시 예외 → 오케스트레이터가 DRAFT 로 남긴다(graceful).
  */
 @Component
 class ImageCardRenderer(
@@ -25,7 +25,7 @@ class ImageCardRenderer(
 
     override val mediaType = SocialMediaType.IMAGE
 
-    override fun renderBase64(post: SocialPost): String {
+    override fun renderSlides(post: SocialPost): List<String> {
         val slides = post.slidesJson
             ?.let { runCatching { objectMapper.readValue(it, object : TypeReference<List<RankSlide>>() {}) }.getOrNull() }
             .orEmpty()
@@ -35,7 +35,10 @@ class ImageCardRenderer(
             "topic" to post.topic,
             "title" to post.title,
             "slides" to slides.map {
-                mapOf("rank" to it.rank, "title" to it.title, "summary" to it.summary, "sourceName" to it.sourceName)
+                mapOf(
+                    "rank" to it.rank, "title" to it.title, "summary" to it.summary,
+                    "sourceName" to it.sourceName, "imageUrl" to it.imageUrl,
+                )
             },
         )
         val jsonBytes = objectMapper.writeValueAsBytes(payload)
@@ -49,6 +52,7 @@ class ImageCardRenderer(
         proc.outputStream.use { it.write(jsonBytes) }
         val outBytes = proc.inputStream.readBytes()
 
+        // 원격 이미지 프리페치가 있어 단일 렌더보다 여유롭게 - 타임아웃은 props.render.timeoutMs 사용.
         val finished = proc.waitFor(props.render.timeoutMs, TimeUnit.MILLISECONDS)
         if (!finished) {
             proc.destroyForcibly()
@@ -58,8 +62,12 @@ class ImageCardRenderer(
             val err = proc.errorStream.readBytes().toString(Charsets.UTF_8).take(500)
             throw RuntimeException("카드 렌더 실패(exit=${proc.exitValue()}): $err")
         }
-        val b64 = outBytes.toString(Charsets.UTF_8).trim()
-        log.info("[social] 카드 렌더 완료 id={} ({} bytes b64)", post.id, b64.length)
-        return b64
+        val out = outBytes.toString(Charsets.UTF_8).trim()
+        val pages: List<String> = runCatching {
+            objectMapper.readValue(out, object : TypeReference<List<String>>() {})
+        }.getOrElse { throw RuntimeException("카드 렌더 출력 파싱 실패: ${out.take(200)}") }
+        require(pages.isNotEmpty()) { "렌더 결과가 비었습니다." }
+        log.info("[social] 카드 렌더 완료 id={} slides={}", post.id, pages.size)
+        return pages
     }
 }

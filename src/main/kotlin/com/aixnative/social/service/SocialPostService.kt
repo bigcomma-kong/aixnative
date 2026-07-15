@@ -126,11 +126,13 @@ class SocialPostService(
         post.captionText = (post.captionText ?: "") + cta
     }
 
-    /** 미디어 렌더러가 있으면 이미지 렌더 후 PENDING 으로. 없거나 실패면 DRAFT 유지. */
+    /** 미디어 렌더러가 있으면 캐러셀(표지+건별) 렌더 후 PENDING 으로. 없거나 실패면 DRAFT 유지. */
     private fun renderImage(post: SocialPost): Boolean {
         val renderer = renderers.firstOrNull { it.mediaType == post.mediaType } ?: return false
         return runCatching {
-            post.imageBase64 = renderer.renderBase64(post)
+            val pages = renderer.renderSlides(post)
+            post.imagesJson = objectMapper.writeValueAsString(pages)
+            post.imageBase64 = pages.first() // 표지(하위호환·썸네일)
             post.status = SocialPostStatus.PENDING
             repository.save(post)
             true
@@ -187,6 +189,13 @@ class SocialPostService(
         val refs = sourceRefsJson?.let {
             runCatching { objectMapper.readValue(it, object : TypeReference<List<SourceRef>>() {}) }.getOrNull()
         }.orEmpty()
+        // 캐러셀 슬라이드 URL 목록. images_json 이 있으면 그 장수만큼, 없으면 단일(하위호환).
+        val slideCount = imagesJson
+            ?.let { runCatching { objectMapper.readValue(it, object : TypeReference<List<String>>() {}).size }.getOrNull() }
+            ?: (if (imageBase64 != null) 1 else 0)
+        val imageUrls = if (id != null && slideCount > 0) {
+            (0 until slideCount).map { "$baseUrl/cardnews/$id/$it.png" }
+        } else emptyList()
         return SocialPostView(
             id = id ?: 0,
             topic = topic,
@@ -201,6 +210,7 @@ class SocialPostService(
             slides = slides,
             sourceRefs = refs,
             imageUrl = if (imageBase64 != null && id != null) "$baseUrl/cardnews/$id.png" else null,
+            imageUrls = imageUrls,
             hasImage = imageBase64 != null,
             aiProvider = aiProvider,
             createdAt = createdAt,

@@ -75,6 +75,10 @@ class SocialPost(
     @Column(name = "image_base64", columnDefinition = "TEXT")
     var imageBase64: String? = null,
 
+    /** 캐러셀 슬라이드 전체(base64 PNG 배열의 JSON). index0=표지. 단일이면 [imageBase64] 와 동일한 1건. */
+    @Column(name = "images_json", columnDefinition = "TEXT")
+    var imagesJson: String? = null,
+
     @Column(name = "source_refs_json", columnDefinition = "TEXT")
     var sourceRefsJson: String? = null,
 

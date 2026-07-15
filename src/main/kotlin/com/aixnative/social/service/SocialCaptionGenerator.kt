@@ -42,14 +42,21 @@ class SocialCaptionGenerator(
         }
         val node = objectMapper.readTree(json)
 
+        // 소재 링크→이미지 맵(결정론적 주입, Claude 환각 방지). 링크 매칭 실패 시 순서 폴백.
+        val imageByUrl = draft.articles.filter { !it.imageUrl.isNullOrBlank() }.associate { it.link to it.imageUrl }
+        val imagesInOrder = draft.articles.map { it.imageUrl }
+
         val slides = node.path("slides").takeIf { it.isArray }?.mapIndexedNotNull { i, s ->
             val title = s.path("title").asText("").ifBlank { null } ?: return@mapIndexedNotNull null
+            val sourceUrl = s.path("sourceUrl").asText("").take(500)
+            val image = imageByUrl[sourceUrl] ?: imagesInOrder.getOrNull(i)
             RankSlide(
                 rank = s.path("rank").asInt(i + 1),
                 title = title.take(120),
                 summary = s.path("summary").asText("").take(400),
                 sourceName = s.path("sourceName").asText("").take(80),
-                sourceUrl = s.path("sourceUrl").asText("").take(500),
+                sourceUrl = sourceUrl,
+                imageUrl = image,
             )
         }.orEmpty()
         if (slides.isEmpty()) {

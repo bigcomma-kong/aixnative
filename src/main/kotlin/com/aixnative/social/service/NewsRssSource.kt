@@ -36,6 +36,7 @@ class NewsRssSource(
                         summary = it.description,
                         link = it.link,
                         source = it.source.ifBlank { feed.label },
+                        imageUrl = it.imageUrl,
                     )
                 }
             if (articles.isEmpty()) {

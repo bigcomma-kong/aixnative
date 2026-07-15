@@ -52,14 +52,32 @@ class CommunitySource(
             .get()
         return doc.select("a[href]")
             .asSequence()
-            .map { it.text().trim() to it.absUrl("href") }
-            .filter { (text, href) -> text.length in TITLE_MIN..TITLE_MAX && href.startsWith("http") }
-            .distinctBy { it.first }
+            .filter { it.text().trim().let { t -> t.length in TITLE_MIN..TITLE_MAX } && it.absUrl("href").startsWith("http") }
+            .distinctBy { it.text().trim() }
             .take(props.rankSize)
-            .map { (text, href) ->
-                SourceArticle(title = text, summary = "커뮤니티 인기글", link = href, source = label)
+            .map { a ->
+                SourceArticle(
+                    title = a.text().trim(),
+                    summary = "커뮤니티 인기글",
+                    link = a.absUrl("href"),
+                    source = label,
+                    imageUrl = if (props.useCommunityImages) nearbyImage(a) else null,
+                )
             }
             .toList()
+    }
+
+    /** 앵커 주변(자신·조상 행) 첫 이미지 src. 리스트 썸네일이 있으면 채택(useCommunityImages 시에만 호출). */
+    private fun nearbyImage(anchor: org.jsoup.nodes.Element): String? {
+        anchor.selectFirst("img[src]")?.absUrl("src")?.takeIf { it.startsWith("http") }?.let { return it }
+        var parent = anchor.parent()
+        var hops = 0
+        while (parent != null && hops < 3) {
+            parent.selectFirst("img[src]")?.absUrl("src")?.takeIf { it.startsWith("http") }?.let { return it }
+            parent = parent.parent()
+            hops++
+        }
+        return null
     }
 
     private companion object {

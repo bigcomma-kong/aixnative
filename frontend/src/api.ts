@@ -56,6 +56,7 @@ export interface RankSlide {
   summary: string
   sourceName: string
   sourceUrl: string
+  imageUrl?: string | null
 }
 
 export interface SourceRef {
@@ -77,6 +78,7 @@ export interface SocialPost {
   slides: RankSlide[]
   sourceRefs: SourceRef[]
   imageUrl: string | null
+  imageUrls: string[]
   hasImage: boolean
   aiProvider: string | null
   createdAt: string | null

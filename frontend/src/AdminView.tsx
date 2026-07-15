@@ -125,6 +125,43 @@ const SOCIAL_RISK: Record<SocialPost['riskLevel'], { label: string; cls: string 
   HIGH: { label: '리스크 감수 필요', cls: 'risk-high' },
 }
 
+/** 인스타에 올라갈 슬라이드들을 넘겨보는 미리보기(표지 + 항목별). 순수 state 페이저. */
+function SlideCarousel({ imageUrls, title }: { imageUrls: string[]; title: string }) {
+  const [idx, setIdx] = useState(0)
+  const total = imageUrls.length
+  const cur = Math.min(idx, total - 1)
+  const go = (d: number) => setIdx((i) => (i + d + total) % total)
+  return (
+    <div className="social-carousel">
+      <div className="social-carousel-stage">
+        {total > 1 && (
+          <button type="button" className="social-carousel-nav prev" aria-label="이전 슬라이드" onClick={() => go(-1)}>‹</button>
+        )}
+        <img className="social-carousel-img" src={imageUrls[cur]} alt={`${title} 슬라이드 ${cur + 1}`} loading="lazy" />
+        {total > 1 && (
+          <button type="button" className="social-carousel-nav next" aria-label="다음 슬라이드" onClick={() => go(1)}>›</button>
+        )}
+      </div>
+      {total > 1 && (
+        <div className="social-carousel-foot">
+          <div className="social-carousel-dots">
+            {imageUrls.map((u, i) => (
+              <button
+                key={u}
+                type="button"
+                className={`social-carousel-dot${i === cur ? ' on' : ''}`}
+                aria-label={`${i + 1}번째 슬라이드`}
+                onClick={() => setIdx(i)}
+              />
+            ))}
+          </div>
+          <span className="social-carousel-count">{cur + 1} / {total}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** 공감랭킹 - 자동 생성된 랭킹 카드 검토·승인·게시. */
 function SocialPanel() {
   const [posts, setPosts] = useState<SocialPost[]>([])
@@ -212,8 +249,8 @@ function SocialPanel() {
                   </p>
                 )}
 
-                {p.hasImage && p.imageUrl ? (
-                  <img className="social-img" src={p.imageUrl} alt={p.title} loading="lazy" />
+                {p.imageUrls.length > 0 ? (
+                  <SlideCarousel imageUrls={p.imageUrls} title={p.title} />
                 ) : (
                   <ol className="social-slides">
                     {p.slides.map((s) => (
