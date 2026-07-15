@@ -88,6 +88,7 @@ export interface SocialIngestReport {
   postsCreated: number
   skippedDuplicate: number
   rendered: number
+  published: number
   errors: string[]
 }
 

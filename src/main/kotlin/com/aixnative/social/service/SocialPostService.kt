@@ -41,13 +41,18 @@ class SocialPostService(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
+    /**
+     * @param autoPublish true 면 렌더 성공분을 승인 없이 바로 게시(스케줄러 완전 자동 경로).
+     *   계정 미연동/게시 실패 시 승인 대기(PENDING)로 남는다. 관리자 수동 트리거는 false.
+     */
     @Transactional
-    fun ingest(): SocialIngestReport {
+    fun ingest(autoPublish: Boolean = false): SocialIngestReport {
         val errors = ArrayList<String>()
         var sourcesFetched = 0
         var created = 0
         var skipped = 0
         var rendered = 0
+        var published = 0
         val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
 
         for (topic in props.topics) {
@@ -68,20 +73,45 @@ class SocialPostService(
                 repository.save(post)
                 created++
 
-                if (renderImage(post)) rendered++
+                if (renderImage(post) && autoPublish && autoPublishPost(post, errors)) published++
             }.onFailure { errors += "주제 '$topic' 처리 실패: ${it.message}"; log.warn("[social] 주제 처리 실패", it) }
         }
 
-        log.info("[social] ingest topics={} sources={} created={} skipped={} rendered={}",
-            props.topics.size, sourcesFetched, created, skipped, rendered)
+        log.info("[social] ingest topics={} sources={} created={} skipped={} rendered={} published={} auto={}",
+            props.topics.size, sourcesFetched, created, skipped, rendered, published, autoPublish)
         return SocialIngestReport(
             topicsRequested = props.topics.size,
             sourcesFetched = sourcesFetched,
             postsCreated = created,
             skippedDuplicate = skipped,
             rendered = rendered,
+            published = published,
             errors = errors,
         )
+    }
+
+    /** 완전 자동 게시 - 렌더된 게시물을 승인 없이 바로 플랫폼에 올린다. 계정 미연동/실패면 PENDING 유지. */
+    private fun autoPublishPost(post: SocialPost, errors: MutableList<String>): Boolean {
+        val publisher = publishers.firstOrNull { it.platform == post.platform && it.isConfigured() }
+        if (publisher == null) {
+            log.info("[social] 자동게시 스킵(계정 미연동) - 승인 대기로 남김 id={}", post.id)
+            return false
+        }
+        return runCatching {
+            val result = publisher.publish(post)
+            post.status = SocialPostStatus.PUBLISHED
+            post.externalPostId = result.externalPostId
+            post.publishedAt = Instant.now()
+            post.error = null
+            repository.save(post)
+            true
+        }.getOrElse {
+            errors += "자동게시 실패 id=${post.id}: ${it.message}"
+            post.error = it.message?.take(1000)
+            repository.save(post)
+            log.warn("[social] 자동게시 실패 id={}", post.id, it)
+            false
+        }
     }
 
     /** 부동산·재테크 주제에는 aixnative 유입 CTA 를 캡션 끝에 덧붙인다(범용 주제는 미적용). */

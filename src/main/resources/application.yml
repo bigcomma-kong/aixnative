@@ -115,10 +115,13 @@ marketfeed:
 # 인스타 게시는 access-token/business-account-id 설정 시에만 활성(graceful) - 미설정 시 승인까지만.
 social:
   ingest-token: ${SOCIAL_INGEST_TOKEN:}  # 🔑 값 → application-secret.yml (마켓피드 토큰과 별개 가능)
-  topics: ${SOCIAL_TOPICS:부동산 투자,재테크,경제 이슈}
+  # 전 분야 커버. 콤마 구분 - 분야를 자유롭게 켜고 끈다(주제당 랭킹 카드 1건).
+  topics: ${SOCIAL_TOPICS:오늘의 화제,연예,스포츠,IT 트렌드,재테크,생활 정보,건강,부동산}
   max-sources-per-topic: ${SOCIAL_MAX_SOURCES:12}
   rank-size: ${SOCIAL_RANK_SIZE:5}
   recent-hours: ${SOCIAL_RECENT_HOURS:168}
+  # 완전 자동 게시. true 면 스케줄러 수집분을 승인 없이 바로 게시(계정 연동 시). 기본 반자동.
+  auto-publish: ${SOCIAL_AUTO_PUBLISH:false}
   instagram:
     access-token: ${IG_ACCESS_TOKEN:}  # 🔑 값 → application-secret.yml
     business-account-id: ${IG_BUSINESS_ACCOUNT_ID:}

@@ -27,9 +27,9 @@ class SocialAdminController(
     @GetMapping
     fun list(): ApiResponse<List<SocialPostView>> = ApiResponse.ok(service.listAll())
 
-    /** 수동 수집·생성(관리자 즉시 1회). */
+    /** 수동 수집·생성(관리자 즉시 1회). 항상 승인 대기(검토용) - 자동 게시 안 함. */
     @PostMapping("/ingest")
-    fun ingest(): ApiResponse<SocialIngestReport> = ApiResponse.ok(service.ingest())
+    fun ingest(): ApiResponse<SocialIngestReport> = ApiResponse.ok(service.ingest(autoPublish = false))
 
     @PostMapping("/{id}/approve")
     fun approve(@PathVariable id: Long): ApiResponse<SocialPostView> = ApiResponse.ok(service.approve(id))
@@ -65,6 +65,7 @@ class SocialIngestController(
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiResponse.fail("수집 트리거가 비활성이거나 토큰이 올바르지 않습니다."))
         }
-        return ResponseEntity.ok(ApiResponse.ok(service.ingest()))
+        // 스케줄러 경로 - social.auto-publish=true 면 승인 없이 완전 자동 게시.
+        return ResponseEntity.ok(ApiResponse.ok(service.ingest(autoPublish = props.autoPublish)))
     }
 }

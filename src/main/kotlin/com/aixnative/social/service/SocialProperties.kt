@@ -15,14 +15,25 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 data class SocialProperties(
     /** Cloud Scheduler 호출 검증용 공유 시크릿(X-Ingest-Token). 빈 값이면 인입 엔드포인트 비활성. */
     val ingestToken: String = "",
-    /** 콘텐츠 주제 목록(콤마 구분). 각 주제마다 랭킹 카드 1건 생성 시도. */
-    val topics: List<String> = listOf("부동산 투자", "재테크", "경제 이슈"),
+    /**
+     * 콘텐츠 주제 목록(콤마 구분). 각 주제마다 랭킹 카드 1건 생성 시도.
+     * 부동산 한정이 아니라 전 분야 커버 - env(SOCIAL_TOPICS)로 자유롭게 켜고 끈다(옵션 관리).
+     */
+    val topics: List<String> = listOf(
+        "오늘의 화제", "연예", "스포츠", "IT 트렌드", "재테크", "생활 정보", "건강", "부동산",
+    ),
     /** 주제당 소재 수집 상한(구글뉴스 상위 N). */
     val maxSourcesPerTopic: Int = 12,
     /** 랭킹 카드 1장당 슬라이드(항목) 수 상한. */
     val rankSize: Int = 5,
     /** 소재 수집 윈도(시간) - 이 시간 이내 발행분만 후보. */
     val recentHours: Long = 168,
+    /**
+     * 완전 자동 게시. true 면 스케줄러 트리거(POST /api/ingest/social-post) 수집분을
+     * 승인 없이 렌더 후 바로 게시한다(계정 연동 시). 기본 false(반자동 - 관리자 승인 필요).
+     * 관리자 수동 트리거는 이 값과 무관하게 항상 승인 대기(검토용).
+     */
+    val autoPublish: Boolean = false,
     /** 인스타그램 게시 설정. */
     val instagram: Instagram = Instagram(),
     /** 카드 이미지 렌더러(Node satori) 호출 설정. */

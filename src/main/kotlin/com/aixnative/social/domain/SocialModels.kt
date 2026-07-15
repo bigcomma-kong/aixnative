@@ -30,5 +30,7 @@ data class SocialIngestReport(
     val postsCreated: Int,
     val skippedDuplicate: Int,
     val rendered: Int,
+    /** 완전 자동 게시(auto-publish)로 실제 게시된 건수. 반자동이면 0. */
+    val published: Int = 0,
     val errors: List<String> = emptyList(),
 )
