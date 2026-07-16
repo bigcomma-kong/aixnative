@@ -108,6 +108,31 @@ gemini:
     url: ${GEMINI_API_URL:https://generativelanguage.googleapis.com/v1beta}
     model: ${GEMINI_IMAGE_MODEL:gemini-2.0-flash-preview-image-generation}
 
+# Pexels 무료 스톡사진 - 신규 키만(env). Gemini 그림 대안(무료·건당 0원). 장면 키워드로 실사진 검색.
+# 미설정 시 편집형 타이포 폴백. Gemini 가 설정돼 있으면 그쪽 우선(Order). 키는 pexels.com/api 무료 발급.
+pexels:
+  api:
+    key: ${PEXELS_API_KEY:}  # 🔑 값 → application-secret.yml
+    url: ${PEXELS_API_URL:https://api.pexels.com/v1}
+
+# Pixabay 무료 스톡사진 - Pexels 와 동일 역할(무료 대안). 발급이 쉬워 우선 사용. 키는 계정 페이지에 노출.
+# Order: Gemini(그림) > Pixabay > Pexels > 편집형 타이포 폴백.
+pixabay:
+  api:
+    key: ${PIXABAY_API_KEY:}  # 🔑 값 → application-secret.yml
+    url: ${PIXABAY_API_URL:https://pixabay.com/api}
+
+# 스크래핑 프록시(ScraperAPI 등) - 커뮤니티가 Cloud Run 데이터센터 IP 를 차단(430/403/빈페이지)해서
+# 주거용 IP 경유가 필요. 키 미설정 시 직접 fetch(로컬/비차단 환경용) - graceful. 무료 티어 월 ~1000건.
+# render/premium 은 크레딧 배수 소모 → 기본 off(대상 대부분 서버렌더라 IP 우회만으로 충분).
+scraping:
+  api:
+    key: ${SCRAPINGAPI_KEY:}  # 🔑 값 → application-secret.yml (scraperapi.com 무료 발급)
+    url: ${SCRAPINGAPI_URL:https://api.scraperapi.com}
+    render-js: ${SCRAPINGAPI_RENDER:false}
+    premium: ${SCRAPINGAPI_PREMIUM:false}
+    country-code: ${SCRAPINGAPI_COUNTRY:}
+
 # 시장 인텔리전스 자동 수집. 수집(RSS·구글뉴스)은 키 0개로 동작, 브리핑만 무료 Mistral 필요(graceful).
 # 트리거: Cloud Scheduler → POST /api/ingest/market-feed (헤더 X-Ingest-Token). 토큰 미설정 시 인입 비활성.
 marketfeed:
@@ -128,6 +153,20 @@ social:
   # 유튜브 Data API v3 키. 빈 값이면 유튜브 인기영상 소스만 graceful 비활성(다른 소스는 정상).
   youtube-api-key: ${YOUTUBE_API_KEY:}  # 🔑 GCP 콘솔 aixnative 프로젝트에서 신규 발급
   # 유튜브 카테고리·언론사 RSS·커뮤니티 대상 기본값은 SocialProperties 코드에 정의(필요 시 오버라이드).
+  # 스토리 모드 커뮤니티 핫글 대상(인기/베스트 게시판 목록 페이지). 각 핫글 1건 = 스토리 게시물 1건.
+  # 정적 스크랩이라 봇차단/JS 렌더 사이트는 graceful 빈결과. 항상 리스크 HIGH(관리자 승인 단계 판단).
+  # 프록시(scraping.api.key) 설정 시 주거IP 경유로 접근. 미설정이면 대부분 Cloud Run IP 차단으로 빈결과.
+  community-story-targets:
+    - label: "에펨코리아 포텐"
+      url: "https://www.fmkorea.com/best"
+    - label: "디시인사이드 힛갤"
+      url: "https://gall.dcinside.com/board/lists/?id=hit"
+    - label: "더쿠 핫게시판"
+      url: "https://theqoo.net/hot"
+    - label: "클리앙 모두의공원"
+      url: "https://www.clien.net/service/board/park"
+    - label: "뽐뿌 HOT게시판"
+      url: "https://www.ppomppu.co.kr/hot.php"
   # 완전 자동 게시. true 면 스케줄러 수집분을 승인 없이 바로 게시(계정 연동 시). 기본 반자동.
   auto-publish: ${SOCIAL_AUTO_PUBLISH:false}
   instagram:

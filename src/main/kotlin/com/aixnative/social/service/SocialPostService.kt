@@ -47,8 +47,10 @@ class SocialPostService(
     /**
      * @param autoPublish true 면 렌더 성공분을 승인 없이 바로 게시(스케줄러 완전 자동 경로).
      *   계정 미연동/게시 실패 시 승인 대기(PENDING)로 남는다. 관리자 수동 트리거는 false.
+     *
+     * ⚠ 의도적으로 **비트랜잭션** - 각 [repository] 저장이 개별 커밋되어 카드가 만들어지는 즉시 목록에 보이고,
+     * 분 단위 실행에서 DB 커넥션을 오래 잡지 않으며, 중간 중단 시에도 이미 만든 카드는 살아남는다.
      */
-    @Transactional
     fun ingest(autoPublish: Boolean = false): SocialIngestReport {
         val errors = ArrayList<String>()
         var created = 0
@@ -57,10 +59,15 @@ class SocialPostService(
         var published = 0
         val today = LocalDate.now(ZoneId.of("Asia/Seoul"))
 
-        // 각 소스는 내부 graceful 하지만 오케스트레이터에서도 방어(한 소스 예외가 전체를 막지 않게).
-        val drafts = cardSources.flatMap { src ->
-            runCatching { src.produce() }
-                .getOrElse { errors += "${src.javaClass.simpleName} 수집 실패: ${it.message}"; emptyList() }
+        // 랭킹 카드(TOP N 묶음)는 기본 비활성 - 커뮤니티 스토리만 만든다. 각 소스는 내부 graceful 하지만
+        // 오케스트레이터에서도 방어(한 소스 예외가 전체를 막지 않게).
+        val drafts = if (props.rankingEnabled) {
+            cardSources.flatMap { src ->
+                runCatching { src.produce() }
+                    .getOrElse { errors += "${src.javaClass.simpleName} 수집 실패: ${it.message}"; emptyList() }
+            }
+        } else {
+            emptyList()
         }
         val sourcesFetched = drafts.sumOf { it.articles.size }
 
@@ -84,11 +91,17 @@ class SocialPostService(
             }.onFailure { errors += "카드 '${draft.title}' 처리 실패: ${it.message}"; log.warn("[social] 카드 처리 실패", it) }
         }
 
-        // 스토리 루프 - 커뮤니티 핫글 각각을 별도 STORY 게시물로(본문 딥페치 → Claude 각색 → AI 이미지).
-        val storyDrafts = storySources.flatMap { src ->
+        // 스토리 루프 - 커뮤니티 핫글·트렌드 검색어·랭킹뉴스 각각을 별도 STORY 게시물로
+        // (본문 딥페치 → Claude 각색 → AI 이미지). 1회 총량은 storyMaxPerRun 으로 캡.
+        // 소스별 라운드로빈(각 소스 1건씩 번갈아) - 한 소스가 캡을 독식해 다른 출처를 굶기지 않게.
+        val perSource = storySources.map { src ->
             runCatching { src.produce() }
                 .getOrElse { errors += "${src.javaClass.simpleName} 스토리 수집 실패: ${it.message}"; emptyList() }
         }
+        val maxLen = perSource.maxOfOrNull { it.size } ?: 0
+        val storyDrafts = (0 until maxLen)
+            .flatMap { i -> perSource.mapNotNull { it.getOrNull(i) } }
+            .take(props.storyMaxPerRun)
         for (sd in storyDrafts) {
             runCatching {
                 val dedupKey = "${sd.dedupSuffix}:$today"

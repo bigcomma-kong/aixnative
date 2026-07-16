@@ -56,10 +56,33 @@ data class SocialProperties(
      * 각 대상에서 상위 핫글 각각을 별도 스토리 게시물로. 기본 빈 목록(명시적 on). 리스크 HIGH 강제.
      */
     val communityStoryTargets: List<CommunityTarget> = emptyList(),
+    /**
+     * 랭킹 카드(유튜브·트렌드·뉴스 TOP N 묶음) 생성 여부. 기본 off - 「지금 수집·생성」은 커뮤니티
+     * 이미지 스토리만 만든다(사용자 요구). env(SOCIAL_RANKING_ENABLED=true)로 재활성 가능.
+     */
+    val rankingEnabled: Boolean = false,
     /** 대상당 스토리로 만들 상위 핫글 수. */
-    val storyPostsPerTarget: Int = 3,
-    /** 스토리 1건당 장면 수 상한(표지·아웃트로 제외). */
-    val storyMaxScenes: Int = 6,
+    val storyPostsPerTarget: Int = 1,
+    /** 1회 수집에서 만들 스토리 총량 상한(실행시간·스크래핑 크레딧·Claude 비용 통제). 1건당 수 분 소요. */
+    val storyMaxPerRun: Int = 6,
+    /**
+     * 구글 트렌드 급상승 검색어 스토리 소스 on/off. 각 검색어의 대표 관련 기사(ht:news_item_url)를
+     * 딥페치해 스토리로. 커뮤니티가 당일 소진돼도 새 소재 공급. env(SOCIAL_TREND_STORY_ENABLED).
+     */
+    val trendStoryEnabled: Boolean = true,
+    /** 1회당 트렌드 검색어 스토리 상한. */
+    val trendStoryMax: Int = 2,
+    /**
+     * 네이버 랭킹뉴스(많이 본 뉴스) 스토리 소스 on/off. 네이버 실시간 검색어는 2021 폐지되어
+     * 대체 신호로 랭킹뉴스 상위 기사를 스토리로. env(SOCIAL_NAVER_RANKING_ENABLED).
+     */
+    val naverRankingEnabled: Boolean = true,
+    /** 1회당 네이버 랭킹뉴스 스토리 상한. */
+    val naverRankingMax: Int = 2,
+    /** 네이버 랭킹뉴스 페이지 URL(많이 본 뉴스). */
+    val naverRankingUrl: String = "https://news.naver.com/main/ranking/popularDay.naver",
+    /** 스토리 1건당 장면 수 상한(표지·아웃트로 제외). 장면 수가 곧 이미지·렌더 시간. */
+    val storyMaxScenes: Int = 4,
     /**
      * 완전 자동 게시. true 면 스케줄러 트리거(POST /api/ingest/social-post) 수집분을
      * 승인 없이 렌더 후 바로 게시한다(계정 연동 시). 기본 false(반자동 - 관리자 승인 필요).

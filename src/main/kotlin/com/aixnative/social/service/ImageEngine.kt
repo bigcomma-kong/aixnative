@@ -19,4 +19,10 @@ interface ImageEngine {
      * @return 프리픽스 없는 base64 이미지(PNG/JPEG) 또는 null(미설정/실패, graceful).
      */
     fun generate(prompt: String, aspectRatio: String = "4:5"): String?
+
+    /**
+     * 스톡 엔진용 - 다운로드 없이 **이미지 URL** 만 반환(렌더러가 렌더 시점에 fetch → 큰 base64 미저장·빠른 렌더).
+     * 생성형 엔진(Gemini 등)은 URL 이 없으므로 기본 null → 호출부가 [generate] base64 경로로 폴백.
+     */
+    fun imageUrl(prompt: String, aspectRatio: String = "4:5"): String? = null
 }

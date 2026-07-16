@@ -60,6 +60,57 @@ data class GeminiProperties(
     )
 }
 
+/**
+ * Pexels 무료 스톡사진 config — 신규 키만(env PEXELS_API_KEY). 생성형 그림(Gemini) 대안으로
+ * 장면 키워드에 맞는 실사진을 검색해 배경으로. 무료 티어(200/시간·20000/월), 건당 0원.
+ * 키 미설정 시 [com.aixnative.social.service.ImageEngine.isConfigured] false → 편집형 타이포 폴백.
+ */
+@ConfigurationProperties(prefix = "pexels")
+data class PexelsProperties(
+    val api: Api = Api(),
+) {
+    data class Api(
+        val key: String = "",
+        val url: String = "https://api.pexels.com/v1",
+    )
+}
+
+/**
+ * Pixabay 무료 스톡사진 config — 신규 키만(application-secret.yml). Pexels 와 함께 스톡 대안,
+ * 키는 계정 페이지에 바로 노출돼 발급이 수월. 키 미설정 시 isConfigured false → 편집형 타이포 폴백.
+ */
+@ConfigurationProperties(prefix = "pixabay")
+data class PixabayProperties(
+    val api: Api = Api(),
+) {
+    data class Api(
+        val key: String = "",
+        val url: String = "https://pixabay.com/api",
+    )
+}
+
+/**
+ * 스크래핑 프록시(ScraperAPI 등) config — 주거용 IP + (필요 시) JS 렌더로 Cloud Run 데이터센터 IP 차단을 우회.
+ * 커뮤니티 핫글 리스트 수집·본문 딥페치에 사용([com.aixnative.social.service.ScrapingProxy]).
+ * 키 미설정 시 직접 fetch(현행) - graceful. render/premium 은 크레딧 소모가 커 기본 off
+ * (대상 대부분이 서버렌더 HTML이라 IP 차단만 우회하면 됨). 무료 티어(월 ~1000건)로 하루 1~2회 수집 커버.
+ */
+@ConfigurationProperties(prefix = "scraping")
+data class ScrapingProxyProperties(
+    val api: Api = Api(),
+) {
+    data class Api(
+        val key: String = "",
+        val url: String = "https://api.scraperapi.com",
+        /** JS 렌더(SPA/JS 챌린지 사이트용). 크레딧 배수 소모 → 기본 off. */
+        val renderJs: Boolean = false,
+        /** 프리미엄 주거 IP(강한 안티봇용). 크레딧 소모 큼 → 기본 off. */
+        val premium: Boolean = false,
+        /** 지오타겟 국가코드(예: kr). 유료 플랜 기능일 수 있어 기본 빈값. */
+        val countryCode: String = "",
+    )
+}
+
 /** AI router behaviour (priority/fallback/timeout). */
 @ConfigurationProperties(prefix = "ai.service")
 data class AiServiceProperties(

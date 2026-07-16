@@ -185,8 +185,12 @@ function SocialPanel() {
     setIngesting(true); setError(null); setMsg(null)
     try {
       const r = await api.adminSocialIngest()
-      setMsg(`생성 ${r.postsCreated}건 · 중복 ${r.skippedDuplicate}건 · 렌더 ${r.rendered}건 (소재 ${r.sourcesFetched}건)${r.errors.length ? ` · 오류 ${r.errors.length}건` : ''}`)
-      setPosts(await api.adminSocialPosts())
+      setMsg(r.message)
+      // 백그라운드로 생성되므로 목록을 주기적으로 갱신(최대 ~3분, 15초 간격).
+      for (let i = 0; i < 12; i++) {
+        await new Promise((res) => setTimeout(res, 15_000))
+        try { setPosts(await api.adminSocialPosts()) } catch { /* 갱신 실패는 무시하고 계속 폴링 */ }
+      }
     } catch (e: unknown) {
       setError(e instanceof ApiError ? e.message : '수집 실패')
     } finally {

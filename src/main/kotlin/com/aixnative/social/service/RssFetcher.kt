@@ -10,7 +10,7 @@ import javax.xml.XMLConstants
 import javax.xml.parsers.DocumentBuilder
 import javax.xml.parsers.DocumentBuilderFactory
 
-/** RSS 2.0 item 1건(표준 필드 + 대표 이미지). */
+/** RSS 2.0 item 1건(표준 필드 + 대표 이미지 + 구글 트렌드 확장). */
 data class RssItem(
     val title: String,
     val link: String,
@@ -19,6 +19,12 @@ data class RssItem(
     val publishedAt: Instant?,
     /** 대표 이미지(media:content/thumbnail·enclosure·ht:picture 등에서 추출). 없으면 null. */
     val imageUrl: String? = null,
+    /** 구글 트렌드 전용 - 대표 관련 기사 URL(ht:news_item_url 첫 건). 스토리 딥페치 소스. */
+    val newsUrl: String? = null,
+    /** 구글 트렌드 전용 - 대표 관련 기사 제목(ht:news_item_title 첫 건). */
+    val newsTitle: String? = null,
+    /** 구글 트렌드 전용 - 근사 검색량(ht:approx_traffic, 예 "20000+"). 없으면 null. */
+    val approxTraffic: String? = null,
 )
 
 /**
@@ -47,6 +53,9 @@ class RssFetcher(private val marketDataRestClient: RestClient) {
                 source = source,
                 publishedAt = parsePubDate(text(item, "pubDate")),
                 imageUrl = extractImage(item),
+                newsUrl = text(item, "ht:news_item_url").trim().takeIf { it.startsWith("http") },
+                newsTitle = stripHtml(text(item, "ht:news_item_title")).ifBlank { null },
+                approxTraffic = text(item, "ht:approx_traffic").trim().ifBlank { null },
             )
         }
         return out

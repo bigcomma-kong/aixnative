@@ -102,6 +102,12 @@ export interface SocialIngestReport {
   errors: string[]
 }
 
+/** 비동기 수집 트리거 응답(즉시 반환 - 실제 생성은 백그라운드). */
+export interface SocialIngestTrigger {
+  started: boolean
+  message: string
+}
+
 export interface AdminRun {
   id: number
   tenantId: number
@@ -1332,8 +1338,8 @@ export const api = {
   /** 소셜 게시물 목록(최신순). */
   adminSocialPosts: (): Promise<SocialPost[]> => request('/api/admin/social'),
 
-  /** 수동 수집·생성(즉시 1회) - Claude 랭킹 카드 생성. */
-  adminSocialIngest: (): Promise<SocialIngestReport> =>
+  /** 수동 수집·생성 트리거 - 비동기 시작(즉시 반환), 실제 생성은 백그라운드. */
+  adminSocialIngest: (): Promise<SocialIngestTrigger> =>
     request('/api/admin/social/ingest', { method: 'POST' }),
 
   /** 승인(게시 가능 상태로). */

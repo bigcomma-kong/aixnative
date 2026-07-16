@@ -4,7 +4,6 @@ import com.aixnative.ai.service.ClaudeClient
 import com.aixnative.social.domain.SocialPost
 import com.aixnative.social.domain.SocialPostKind
 import com.aixnative.social.domain.SourceRef
-import com.aixnative.social.domain.SourceType
 import com.aixnative.social.domain.StoryDraft
 import com.aixnative.social.domain.StoryScene
 import com.aixnative.social.domain.StoryScript
@@ -67,7 +66,7 @@ class StoryScriptGenerator(
             hashtags = node.path("hashtags").asText("").ifBlank { null }?.take(500),
             sourceRefsJson = objectMapper.writeValueAsString(refs),
             aiProvider = "Claude",
-            sourceType = SourceType.COMMUNITY,
+            sourceType = draft.sourceType,
             riskLevel = draft.riskLevel,
             kind = SocialPostKind.STORY,
             engagement = draft.engagement?.take(120),

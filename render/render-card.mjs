@@ -150,23 +150,24 @@ function storyCoverMarkup(data) {
     </div>`)
 }
 
-/** 스토리 장면 - 풀블리드 이미지 + 참여수 배지 + 자막박스 + 출처. imageB64 없으면 타이포 폴백. */
-function storySceneMarkup(scene, accent, engagement, board, dataUri) {
+/** 스토리 장면 - 이미지 있으면 풀블리드 사진+자막박스, 없으면 편집형 타이포(네이비+골드 인용카드). */
+function storySceneMarkup(scene, accent, engagement, board, dataUri, index, total) {
   const caption = esc(scene.caption || '')
   const eng = esc(engagement || '')
   const src = board ? `출처: ${esc(board)}` : ''
+  const num = String((index ?? 0) + 1).padStart(2, '0')
   const badge = eng
     ? `<div style="display:flex; position:absolute; top:34px; right:34px; background:${GOLD}; color:${NAVY}; font-size:28px; font-weight:700; padding:8px 20px; border-radius:10px;">${eng}</div>`
     : ''
   const srcFoot = src
-    ? `<div style="display:flex; position:absolute; bottom:26px; left:0; width:${WIDTH}px; justify-content:center; font-size:22px; color:rgba(255,255,255,0.85);">${src}</div>`
+    ? `<div style="display:flex; position:absolute; bottom:26px; left:0; width:${WIDTH}px; justify-content:center; font-size:22px; color:rgba(255,255,255,0.78);">${src}</div>`
     : ''
-  const captionBox = `
-    <div style="display:flex; position:absolute; bottom:96px; left:52px; width:${WIDTH - 104}px; background:rgba(20,33,61,0.82); border-left:8px solid ${GOLD}; border-radius:12px; padding:30px 34px;">
-      <div style="display:flex; font-size:38px; font-weight:700; color:#ffffff; line-height:1.34;">${caption}</div>
-    </div>`
 
   if (dataUri) {
+    const captionBox = `
+      <div style="display:flex; position:absolute; bottom:96px; left:52px; width:${WIDTH - 104}px; background:rgba(20,33,61,0.82); border-left:8px solid ${GOLD}; border-radius:12px; padding:30px 34px;">
+        <div style="display:flex; font-size:38px; font-weight:700; color:#ffffff; line-height:1.34;">${caption}</div>
+      </div>`
     return html(`
       <div style="display:flex; position:relative; width:${WIDTH}px; height:${HEIGHT}px; font-family:Pretendard;">
         <img src="${dataUri}" width="${WIDTH}" height="${HEIGHT}" style="object-fit:cover;" />
@@ -175,10 +176,24 @@ function storySceneMarkup(scene, accent, engagement, board, dataUri) {
         ${srcFoot}
       </div>`)
   }
-  // 이미지 없음 - 타이포 폴백(악센트 그라데이션 풀블리드).
+
+  // 이미지 없음 - 편집형 타이포 폴백(네이비 그라데이션 + 골드 번호/바 + 대형 인용구 + 좌측 악센트 리본).
+  const totalTag = total
+    ? `<div style="display:flex; font-size:24px; font-weight:700; color:rgba(255,255,255,0.45); letter-spacing:0.06em;">SCENE ${num} / ${String(total).padStart(2, '0')}</div>`
+    : ''
   return html(`
-    <div style="display:flex; position:relative; flex-direction:column; width:${WIDTH}px; height:${HEIGHT}px; padding:88px 76px; justify-content:center; background:linear-gradient(150deg, ${NAVY} 0%, ${accent} 140%); font-family:Pretendard;">
-      <div style="display:flex; font-size:52px; font-weight:700; color:#ffffff; line-height:1.4;">${caption}</div>
+    <div style="display:flex; position:relative; flex-direction:column; width:${WIDTH}px; height:${HEIGHT}px; background:linear-gradient(157deg, ${NAVY} 0%, #0b1526 62%, ${accent} 168%); font-family:Pretendard;">
+      <div style="display:flex; position:absolute; top:0; left:0; width:14px; height:${HEIGHT}px; background:${accent};"></div>
+      <div style="display:flex; flex-direction:column; flex:1; padding:104px 84px 132px;">
+        <div style="display:flex; align-items:flex-end;">
+          <div style="display:flex; font-size:132px; font-weight:700; color:${GOLD}; line-height:0.84;">${num}</div>
+          <div style="display:flex; width:104px; height:9px; background:${GOLD}; margin:0 0 32px 28px;"></div>
+        </div>
+        <div style="display:flex; flex:1; align-items:center;">
+          <div style="display:flex; font-size:54px; font-weight:700; color:#ffffff; line-height:1.44;">${caption}</div>
+        </div>
+        ${totalTag}
+      </div>
       ${badge}
       ${srcFoot}
     </div>`)
@@ -216,8 +231,11 @@ async function renderStory(data) {
   pages.push(await renderPng(storyCoverMarkup(data)))
   for (let i = 0; i < scenes.length; i++) {
     const accent = ACCENTS[i % ACCENTS.length]
-    const dataUri = dataUriFromB64(scenes[i].imageB64)
-    pages.push(await renderPng(storySceneMarkup(scenes[i], accent, data.engagement, data.sourceBoard, dataUri)))
+    // imageUrl 우선(렌더 시점 fetch, 랭킹과 동일 경로) → 없으면 base64 임베드 → 없으면 타이포 폴백.
+    const dataUri = scenes[i].imageUrl
+      ? await fetchImageDataUri(scenes[i].imageUrl)
+      : dataUriFromB64(scenes[i].imageB64)
+    pages.push(await renderPng(storySceneMarkup(scenes[i], accent, data.engagement, data.sourceBoard, dataUri, i, scenes.length)))
   }
   if (data.outro) pages.push(await renderPng(outroMarkup(data)))
   return pages

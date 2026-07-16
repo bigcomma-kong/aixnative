@@ -33,7 +33,13 @@ class StoryImageComposer(
 
         var made = 0
         val filled = script.scenes.map { scene ->
-            if (!scene.imageB64.isNullOrBlank()) return@map scene
+            if (!scene.imageUrl.isNullOrBlank() || !scene.imageB64.isNullOrBlank()) return@map scene
+            // 스톡 엔진: URL 우선(다운로드/base64 없음 → 렌더 시점 fetch, 빠름·경량). 생성형: base64 폴백.
+            val url = runCatching { engine.imageUrl(scene.imagePrompt) }.getOrNull()
+            if (url != null) {
+                made++
+                return@map scene.copy(imageUrl = url)
+            }
             val b64 = runCatching { engine.generate(scene.imagePrompt) }.getOrNull()
             if (b64 != null) made++
             scene.copy(imageB64 = b64)

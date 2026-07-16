@@ -88,7 +88,9 @@ class ImageCardRenderer(
             "coverTitle" to post.title,
             "engagement" to post.engagement,
             "sourceBoard" to post.sourceBoard,
-            "scenes" to script.scenes.map { mapOf("caption" to it.caption, "imageB64" to it.imageB64) },
+            "scenes" to script.scenes.map {
+                mapOf("caption" to it.caption, "imageUrl" to it.imageUrl, "imageB64" to it.imageB64)
+            },
             "outro" to script.outro,
         )
     }
