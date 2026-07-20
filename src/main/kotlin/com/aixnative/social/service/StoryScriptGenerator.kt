@@ -33,8 +33,10 @@ class StoryScriptGenerator(
             log.info("[social][story] Claude 미설정 - 각색 생략")
             return null
         }
-        val article = fetcher.fetch(draft.url) ?: run {
-            log.info("[social][story] '{}' 본문 딥페치 실패 - 생략", draft.title)
+        // 기본 URL → 실패 시 폴백 URL 순서대로(트렌드: 같은 검색어의 다른 관련기사). 첫 성공분 사용.
+        val candidateUrls = (listOf(draft.url) + draft.fetchFallbackUrls).distinct()
+        val article = candidateUrls.firstNotNullOfOrNull { url -> fetcher.fetch(url) } ?: run {
+            log.info("[social][story] '{}' 본문 딥페치 실패({}개 후보) - 생략", draft.title, candidateUrls.size)
             return null
         }
 

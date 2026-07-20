@@ -59,6 +59,8 @@ data class StoryDraft(
     val riskLevel: RiskLevel,   // 커뮤니티 HIGH, 트렌드/뉴스 MEDIUM
     val dedupSuffix: String,    // "story:{board}:{urlHash}" 등
     val sourceType: SourceType = SourceType.COMMUNITY,
+    /** url 딥페치 실패 시 순서대로 시도할 대체 기사 URL(트렌드: 같은 검색어의 다른 관련기사). */
+    val fetchFallbackUrls: List<String> = emptyList(),
 )
 
 /** 랭킹 카드 슬라이드 1장(Claude 큐레이션 결과). slides_json 으로 직렬화. */

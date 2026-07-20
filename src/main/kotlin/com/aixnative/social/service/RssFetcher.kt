@@ -19,13 +19,16 @@ data class RssItem(
     val publishedAt: Instant?,
     /** 대표 이미지(media:content/thumbnail·enclosure·ht:picture 등에서 추출). 없으면 null. */
     val imageUrl: String? = null,
-    /** 구글 트렌드 전용 - 대표 관련 기사 URL(ht:news_item_url 첫 건). 스토리 딥페치 소스. */
-    val newsUrl: String? = null,
+    /** 구글 트렌드 전용 - 관련 기사 URL 목록(ht:news_item_url 전체, 순서대로). 딥페치 폴백에 사용. */
+    val newsUrls: List<String> = emptyList(),
     /** 구글 트렌드 전용 - 대표 관련 기사 제목(ht:news_item_title 첫 건). */
     val newsTitle: String? = null,
     /** 구글 트렌드 전용 - 근사 검색량(ht:approx_traffic, 예 "20000+"). 없으면 null. */
     val approxTraffic: String? = null,
-)
+) {
+    /** 대표 관련 기사 URL(첫 건). 없으면 null. */
+    val newsUrl: String? get() = newsUrls.firstOrNull()
+}
 
 /**
  * 직접 RSS fetch·파싱 공용 유틸([GoogleTrendSource]·[NewsRssSource] 공유).
@@ -53,7 +56,7 @@ class RssFetcher(private val marketDataRestClient: RestClient) {
                 source = source,
                 publishedAt = parsePubDate(text(item, "pubDate")),
                 imageUrl = extractImage(item),
-                newsUrl = text(item, "ht:news_item_url").trim().takeIf { it.startsWith("http") },
+                newsUrls = allText(item, "ht:news_item_url").filter { it.startsWith("http") },
                 newsTitle = stripHtml(text(item, "ht:news_item_title")).ifBlank { null },
                 approxTraffic = text(item, "ht:approx_traffic").trim().ifBlank { null },
             )
@@ -64,6 +67,12 @@ class RssFetcher(private val marketDataRestClient: RestClient) {
     private fun text(item: Element, tag: String): String {
         val nodes = item.getElementsByTagName(tag)
         return if (nodes.length > 0) nodes.item(0).textContent ?: "" else ""
+    }
+
+    /** 해당 태그의 모든 요소 텍스트(트림). 예 ht:news_item_url 여러 건 → 폴백 후보 목록. */
+    private fun allText(item: Element, tag: String): List<String> {
+        val nodes = item.getElementsByTagName(tag)
+        return (0 until nodes.length).mapNotNull { nodes.item(it).textContent?.trim()?.ifBlank { null } }
     }
 
     /**

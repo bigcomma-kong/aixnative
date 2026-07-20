@@ -70,15 +70,15 @@ data class SocialProperties(
      * 딥페치해 스토리로. 커뮤니티가 당일 소진돼도 새 소재 공급. env(SOCIAL_TREND_STORY_ENABLED).
      */
     val trendStoryEnabled: Boolean = true,
-    /** 1회당 트렌드 검색어 스토리 상한. */
-    val trendStoryMax: Int = 2,
+    /** 1회당 트렌드 검색어 스토리 상한(검색량 높은 순). */
+    val trendStoryMax: Int = 3,
     /**
      * 네이버 랭킹뉴스(많이 본 뉴스) 스토리 소스 on/off. 네이버 실시간 검색어는 2021 폐지되어
      * 대체 신호로 랭킹뉴스 상위 기사를 스토리로. env(SOCIAL_NAVER_RANKING_ENABLED).
      */
     val naverRankingEnabled: Boolean = true,
-    /** 1회당 네이버 랭킹뉴스 스토리 상한. */
-    val naverRankingMax: Int = 2,
+    /** 1회당 네이버 랭킹뉴스 스토리 상한(상위 노출 순). */
+    val naverRankingMax: Int = 3,
     /** 네이버 랭킹뉴스 페이지 URL(많이 본 뉴스). */
     val naverRankingUrl: String = "https://news.naver.com/main/ranking/popularDay.naver",
     /** 스토리 1건당 장면 수 상한(표지·아웃트로 제외). 장면 수가 곧 이미지·렌더 시간. */

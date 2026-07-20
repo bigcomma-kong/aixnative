@@ -27,21 +27,29 @@ class TrendStorySource(
             .getOrElse { log.warn("[social][trend] 스토리 수집 실패: {}", it.message); return emptyList() }
 
         return items.asSequence()
-            .filter { !it.newsUrl.isNullOrBlank() } // 딥페치할 기사 URL 이 있어야 스토리화 가능
+            .filter { it.newsUrls.isNotEmpty() } // 딥페치할 기사 URL 이 있어야 스토리화 가능
+            .sortedByDescending { trafficValue(it.approxTraffic) } // 검색량 높은(가장 핫한) 순
             .take(props.trendStoryMax)
             .map { item ->
                 val term = item.title.trim()
                 StoryDraft(
                     board = BOARD,
-                    url = item.newsUrl!!,
+                    url = item.newsUrls.first(),
                     title = term, // 표지 각색 기본값(검색어). Claude 가 본문 기반 제목 생성.
                     engagement = item.approxTraffic?.let { "검색 $it" },
                     riskLevel = RiskLevel.MEDIUM,
                     dedupSuffix = "trendstory:${term.hashCode().absoluteValue}",
                     sourceType = SourceType.TREND,
+                    fetchFallbackUrls = item.newsUrls.drop(1), // 첫 기사 실패 시 나머지 관련기사 시도
                 )
             }
             .toList()
+    }
+
+    /** "20000+"·"2만+" 같은 근사 검색량 문자열 → 정렬용 숫자(파싱 실패 0). */
+    private fun trafficValue(raw: String?): Long {
+        val digits = raw?.filter { it.isDigit() }?.ifBlank { null } ?: return 0
+        return digits.toLongOrNull() ?: 0
     }
 
     private companion object {

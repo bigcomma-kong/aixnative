@@ -52,6 +52,27 @@ class ClaudeClient(
             if (hasOauth()) put("system", OAUTH_SYSTEM)
         }
 
+        // 일시적 서버 오류(5xx)·rate limit(429)는 짧은 백오프로 재시도한다(앤트로픽 API 500 간헐 발생).
+        // 4xx(키·모델·요청 오류)는 재시도해도 동일하므로 즉시 전파. 성공 시 즉시 반환.
+        var lastError: RuntimeException? = null
+        for (attempt in 0..MAX_RETRIES) {
+            try {
+                return extractText(callApi(body))
+            } catch (e: RestClientResponseException) {
+                val status = e.statusCode.value()
+                val snippet = e.responseBodyAsString.take(400)
+                log.error("[Claude] HTTP {} - {} (시도 {}/{})", e.statusCode, snippet, attempt + 1, MAX_RETRIES + 1)
+                lastError = RuntimeException("Claude API $status: $snippet", e)
+                val retryable = status == 429 || status >= 500
+                if (!retryable || attempt == MAX_RETRIES) throw lastError
+                Thread.sleep(RETRY_BACKOFF_MS * (attempt + 1))
+            }
+        }
+        throw lastError ?: RuntimeException("Claude 호출 실패")
+    }
+
+    /** 단일 HTTP 호출(헤더·인증 모드 구성 + 전송). 5xx/429 시 [RestClientResponseException] 전파(호출부 재시도). */
+    private fun callApi(body: Map<String, Any>): String {
         var spec = aiRestClient.post()
             .uri(props.api.url)
             .contentType(MediaType.APPLICATION_JSON)
@@ -66,16 +87,8 @@ class ClaudeClient(
             spec.header("x-api-key", props.api.key)
         }
 
-        val response = try {
-            spec.body(body).retrieve().body(String::class.java)
-                ?: throw RuntimeException("Claude 응답이 비어 있습니다.")
-        } catch (e: RestClientResponseException) {
-            // 4xx/5xx 본문에 실제 사유(잘못된 키·모델·rate limit 등)가 들어있다. 로그에 남기고 사유를 전파.
-            val snippet = e.responseBodyAsString.take(400)
-            log.error("[Claude] HTTP {} - {}", e.statusCode, snippet)
-            throw RuntimeException("Claude API ${e.statusCode.value()}: $snippet", e)
-        }
-        return extractText(response)
+        return spec.body(body).retrieve().body(String::class.java)
+            ?: throw RuntimeException("Claude 응답이 비어 있습니다.")
     }
 
     /** Concatenate every text block from the Anthropic `content` array. */
@@ -94,5 +107,8 @@ class ClaudeClient(
         private const val ANTHROPIC_VERSION = "2023-06-01"
         private const val OAUTH_BETA = "oauth-2025-04-20"
         private const val OAUTH_SYSTEM = "You are Claude Code, Anthropic's official CLI for Claude."
+        // 일시 오류 재시도(5xx/429). 총 시도 = 1 + MAX_RETRIES. 백오프 = BACKOFF * (시도회차).
+        private const val MAX_RETRIES = 2
+        private const val RETRY_BACKOFF_MS = 600L
     }
 }

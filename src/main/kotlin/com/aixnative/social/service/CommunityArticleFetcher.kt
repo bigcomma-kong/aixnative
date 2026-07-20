@@ -48,8 +48,11 @@ class CommunityArticleFetcher(
     private companion object {
         const val MIN_BODY = 40
         const val MAX_BODY = 4_000
-        // 대표 커뮤니티 본문 컨테이너 셀렉터(에펨·클리앙·루리웹·디시·보배드림 등 공통 후보).
+        // 본문 컨테이너 셀렉터 - 뉴스(네이버 기사) 우선 + 커뮤니티(에펨·클리앙·루리웹·디시·보배드림) 공통 후보.
         val BODY_SELECTORS = listOf(
+            // 네이버 뉴스 기사 본문(랭킹뉴스 스토리) - 신/구 레이아웃.
+            "#dic_area", "#newsct_article", "article#dic_area", ".newsct_article", "#articeBody", "#articleBodyContents",
+            // 커뮤니티 공통.
             ".content", ".post_article", ".view_content", ".article-content", ".s_body",
             ".write_div", ".board-content", ".view-content", ".read_body", "#powerbbsContent",
             "article",
