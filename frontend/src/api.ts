@@ -1522,3 +1522,14 @@ export function fetchPresale(region?: string, limit = 6): Promise<PresaleNotice[
   const q = region ? `region=${encodeURIComponent(region)}&limit=${limit}` : `limit=${limit}`
   return request(`/api/public/residential/presale?${q}`)
 }
+
+/** AI 분양 브리핑(크레딧 과금, 인증). 성공 시 남은 크레딧 포함. */
+export interface PresaleBrief {
+  brief: string
+  noticesUsed: number
+  creditBalance: number
+}
+export function fetchPresaleBrief(region?: string): Promise<PresaleBrief> {
+  const q = region ? `?region=${encodeURIComponent(region)}` : ''
+  return request(`/api/residential/presale-brief${q}`, { method: 'POST' })
+}

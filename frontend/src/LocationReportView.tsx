@@ -1,15 +1,24 @@
 import { useState } from 'react'
 import {
-  fetchLocationReport, fetchPriceTrend, fetchPresale, track,
+  fetchLocationReport, fetchPriceTrend, fetchPresale, fetchPresaleBrief, track, ApiError,
   type LocationReport, type MonthlyPrice, type PresaleNotice,
 } from './api'
 import { RentBarChart } from './RentBarChart'
+
+interface LocationReportViewProps {
+  onWantMore?: () => void
+  embedded?: boolean
+  /** 로그인 상태 - AI 분양 브리핑(크레딧) 버튼 노출 조건. */
+  authed?: boolean
+  onCreditBalance?: (balance: number) => void
+  onNeedCredits?: () => void
+}
 
 /**
  * 무료 입지 리포트 뷰(Phase 1) - 주소/지역 입력 → 주변 시설·단지 스펙·최근 실거래 종합.
  * 비인증에서도 동작(top-of-funnel). 심화/딜분석은 로그인·크레딧 경로로 유도.
  */
-export function LocationReportView({ onWantMore, embedded }: { onWantMore?: () => void; embedded?: boolean }) {
+export function LocationReportView({ onWantMore, embedded, authed, onCreditBalance, onNeedCredits }: LocationReportViewProps) {
   const [query, setQuery] = useState('')
   const [report, setReport] = useState<LocationReport | null>(null)
   const [trend, setTrend] = useState<MonthlyPrice[]>([])
@@ -68,17 +77,62 @@ export function LocationReportView({ onWantMore, embedded }: { onWantMore?: () =
 
       {error && <p className="locrep-error" role="alert">{error}</p>}
 
-      {report && <ReportBody report={report} trend={trend} presale={presale} onWantMore={onWantMore} />}
+      {report && (
+        <ReportBody
+          report={report}
+          trend={trend}
+          presale={presale}
+          onWantMore={onWantMore}
+          authed={authed}
+          onCreditBalance={onCreditBalance}
+          onNeedCredits={onNeedCredits}
+        />
+      )}
 
       <style>{LOCREP_CSS}</style>
     </>
   )
 }
 
-function ReportBody({ report, trend, presale, onWantMore }: { report: LocationReport; trend: MonthlyPrice[]; presale: PresaleNotice[]; onWantMore?: () => void }) {
+function ReportBody({
+  report, trend, presale, onWantMore, authed, onCreditBalance, onNeedCredits,
+}: {
+  report: LocationReport
+  trend: MonthlyPrice[]
+  presale: PresaleNotice[]
+  onWantMore?: () => void
+  authed?: boolean
+  onCreditBalance?: (balance: number) => void
+  onNeedCredits?: () => void
+}) {
   const { geo, nearby, complexes, recentDeals, notes } = report
   const hasAny = nearby.length > 0 || complexes.length > 0 || recentDeals.length > 0
   const trendRows = trend.filter((t) => t.avgPricePerPyeong > 0)
+
+  const [brief, setBrief] = useState<string | null>(null)
+  const [briefing, setBriefing] = useState(false)
+  const [briefErr, setBriefErr] = useState<string | null>(null)
+
+  async function runBrief() {
+    if (briefing) return
+    setBriefing(true)
+    setBriefErr(null)
+    track('presale_brief')
+    try {
+      const res = await fetchPresaleBrief()
+      setBrief(res.brief)
+      onCreditBalance?.(res.creditBalance)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 402) {
+        onNeedCredits?.()
+        setBriefErr('크레딧이 부족합니다. 충전 후 다시 시도해 주세요.')
+      } else {
+        setBriefErr(err instanceof Error ? err.message : 'AI 브리핑에 실패했습니다.')
+      }
+    } finally {
+      setBriefing(false)
+    }
+  }
 
   return (
     <div className="locrep-body">
@@ -200,6 +254,29 @@ function ReportBody({ report, trend, presale, onWantMore }: { report: LocationRe
               </div>
             ))}
           </div>
+
+          <div className="locrep-brief">
+            {authed ? (
+              <>
+                {!brief && (
+                  <button type="button" className="btn-primary btn-xs" onClick={runBrief} disabled={briefing}>
+                    {briefing ? 'AI 브리핑 생성 중…' : 'AI 분양 브리핑 (2크레딧)'}
+                  </button>
+                )}
+                {briefErr && <p className="locrep-error" role="alert">{briefErr}</p>}
+                {brief && (
+                  <div className="card locrep-brief-box">
+                    <div className="locrep-brief-title">AI 분양 브리핑</div>
+                    <p className="locrep-brief-text">{brief}</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <button type="button" className="btn-link" onClick={onWantMore}>
+                로그인하고 AI 분양 브리핑 받기 →
+              </button>
+            )}
+          </div>
         </section>
       )}
 
@@ -292,6 +369,10 @@ const LOCREP_CSS = `
 .locrep-presale-name { font-weight: 700; line-height: 1.3; }
 .locrep-presale-addr { font-size: 0.82rem; }
 .locrep-presale-link { align-self: flex-start; margin-top: 0.2rem; font-size: 0.86rem; }
+.locrep-brief { margin-top: 1.1rem; }
+.locrep-brief-box { padding: 1.1rem 1.2rem; margin-top: 0.6rem; border-left: 3px solid var(--accent, #2d3aa8); }
+.locrep-brief-title { font-weight: 700; font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--accent, #2d3aa8); }
+.locrep-brief-text { margin: 0; line-height: 1.65; white-space: pre-line; }
 .locrep-spec { margin: 0; display: grid; gap: 0.35rem; }
 .locrep-spec-row { display: flex; justify-content: space-between; gap: 0.6rem; font-size: 0.9rem; }
 .locrep-spec-row dt { color: var(--ink-soft, #6b7280); margin: 0; }

@@ -20,6 +20,7 @@ object ToolPricing {
         "MARKET_STUDY" to 2,
         "BUILDING_RESEARCH" to 2,
         "TAX_PRICE_DIAGNOSIS" to 2,
+        "PRESALE_BRIEF" to 2,
         "AM_QUARTERLY" to 2,
         "HOLD_SELL_REFI" to 2,
         "COUNTERPARTY_DD" to 2,

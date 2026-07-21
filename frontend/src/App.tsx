@@ -258,7 +258,12 @@ function App() {
           />
         )}
         {tab === 'location' && (
-          <LocationReportView onWantMore={() => setTab('underwrite')} />
+          <LocationReportView
+            authed
+            onWantMore={() => setTab('underwrite')}
+            onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
+            onNeedCredits={handleNeedCredits}
+          />
         )}
         {tab === 'mydeals' && (
           <MyView
