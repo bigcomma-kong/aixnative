@@ -5,7 +5,7 @@ import { fetchLocationReport, track, type LocationReport } from './api'
  * 무료 입지 리포트 뷰(Phase 1) - 주소/지역 입력 → 주변 시설·단지 스펙·최근 실거래 종합.
  * 비인증에서도 동작(top-of-funnel). 심화/딜분석은 로그인·크레딧 경로로 유도.
  */
-export function LocationReportView({ onWantMore }: { onWantMore?: () => void }) {
+export function LocationReportView({ onWantMore, embedded }: { onWantMore?: () => void; embedded?: boolean }) {
   const [query, setQuery] = useState('')
   const [report, setReport] = useState<LocationReport | null>(null)
   const [loading, setLoading] = useState(false)
@@ -30,13 +30,15 @@ export function LocationReportView({ onWantMore }: { onWantMore?: () => void }) 
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <span className="eyebrow">FREE LOCATION REPORT</span>
-          <h1>입지 리포트</h1>
-          <p className="page-sub">주소만 넣으면 주변 교통·학교·편의시설과 단지 스펙, 최근 아파트 실거래를 한눈에. 무료.</p>
+      {!embedded && (
+        <div className="page-head">
+          <div>
+            <span className="eyebrow">FREE NEIGHBORHOOD REPORT</span>
+            <h1>동네 리포트</h1>
+            <p className="page-sub">주소만 넣으면 주변 교통·학교·편의시설과 단지 스펙, 최근 아파트 실거래를 한눈에. 무료.</p>
+          </div>
         </div>
-      </div>
+      )}
 
       <form className="locrep-search" onSubmit={run}>
         <input
@@ -54,6 +56,8 @@ export function LocationReportView({ onWantMore }: { onWantMore?: () => void }) 
       {error && <p className="locrep-error" role="alert">{error}</p>}
 
       {report && <ReportBody report={report} onWantMore={onWantMore} />}
+
+      <style>{LOCREP_CSS}</style>
     </>
   )
 }
@@ -200,6 +204,7 @@ function formatApprovalDate(raw: string | null): string | null {
 }
 
 const LOCREP_CSS = `
+.locrep-landing { max-width: 1080px; margin: 0 auto; padding: 0 1.2rem; }
 .locrep-search { display: flex; gap: 0.6rem; margin: 0 0 1.2rem; flex-wrap: wrap; }
 .locrep-input {
   flex: 1; min-width: 240px; padding: 0.8rem 1rem; font-size: 1rem;

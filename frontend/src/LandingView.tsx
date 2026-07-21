@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AuthView } from './AuthView'
 import { SampleShowcase } from './SampleShowcase'
+import { LocationReportView } from './LocationReportView'
 import { SiteFooter } from './SiteFooter'
 import type { AuthResult } from './api'
 
@@ -236,6 +237,18 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
           </p>
           <button className="btn-primary" onClick={() => focusAuth('signup')}>무료로 내 딜 심사하기 →</button>
         </div>
+      </section>
+
+      <section className="locrep-landing reveal" id="location" aria-labelledby="loc-h">
+        <div className="feat-head">
+          <span className="eyebrow">로그인 없이 지금 체험</span>
+          <h2 id="loc-h" className="feat-h">주소만 넣어보세요 - 무료 동네 리포트</h2>
+          <p className="modes-sub">
+            주변 교통·학교·편의시설, 인근 단지 스펙, 최근 아파트 실거래를 한 번에.
+            가입 없이 바로 확인하고, 상업용 딜이라면 그대로 AI 언더라이팅까지.
+          </p>
+        </div>
+        <LocationReportView embedded onWantMore={() => focusAuth('signup')} />
       </section>
 
       <section className="feat reveal" id="features" aria-labelledby="feat-h">

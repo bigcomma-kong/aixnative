@@ -203,7 +203,7 @@ function App() {
         <div className="brand">Aix<span>Native</span></div>
         <nav className="topnav" aria-label="주요 메뉴">
           <button aria-current={tab === 'feed'} onClick={() => setTab('feed')}>시장</button>
-          <button aria-current={tab === 'location'} onClick={() => setTab('location')}>입지</button>
+          <button aria-current={tab === 'location'} onClick={() => setTab('location')}>동네</button>
           <button aria-current={tab === 'underwrite'} onClick={() => setTab('underwrite')}>언더라이팅</button>
           <button aria-current={tab === 'advanced'} onClick={() => setTab('advanced')}>심화 분석</button>
           {isAdmin && (
