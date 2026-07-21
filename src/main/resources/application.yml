@@ -233,6 +233,13 @@ marketdata:
   # 개별공시지가(ned/data) 사용 여부. 키에 해당 NED API 활용신청 + vworld-domain 일치 시 true 로 켠다.
   vworld-ned-enabled: ${VWORLD_NED_ENABLED:false}
 
+# 주거·입지 모듈(무료 입지 리포트 유입). 단지/실거래는 위 marketdata.data-go-kr-key 재사용
+# (data.go.kr 에서 아파트 매매·공동주택 단지 API 활용신청 필요). 지오코딩·POI 는 카카오 REST 키.
+residential:
+  kakao-rest-key: ${KAKAO_REST_API_KEY:}  # 🔑 값 → application-secret.yml (로그인용 카카오 앱 REST 키 재사용 가능)
+  kapt-enabled: ${RESIDENTIAL_KAPT_ENABLED:true}
+  cheongyak-enabled: ${RESIDENTIAL_CHEONGYAK_ENABLED:true}
+
 # 이 이메일로 가입하면 ADMIN 권한 부여 (어드민 전용 엔드포인트 접근).
 app:
   admin-email: ${ADMIN_EMAIL:admin@aixnative.com}

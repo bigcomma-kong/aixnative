@@ -4,6 +4,7 @@ import { LandingView } from './LandingView'
 import { UnderwriteView } from './UnderwriteView'
 import { DocAnalysisView } from './DocAnalysisView'
 import { MarketView } from './MarketView'
+import { LocationReportView } from './LocationReportView'
 import { MyView } from './MyView'
 import { PropertyView } from './PropertyView'
 import { AdminView } from './AdminView'
@@ -37,7 +38,7 @@ function consumeOAuthHash(): { token?: string; error?: string } {
 }
 
 type Plan = 'FREE' | 'PAID'
-type Tab = 'feed' | 'mydeals' | 'underwrite' | 'advanced' | 'pm' | 'admin'
+type Tab = 'feed' | 'location' | 'mydeals' | 'underwrite' | 'advanced' | 'pm' | 'admin'
 
 interface Session {
   email: string
@@ -202,6 +203,7 @@ function App() {
         <div className="brand">Aix<span>Native</span></div>
         <nav className="topnav" aria-label="주요 메뉴">
           <button aria-current={tab === 'feed'} onClick={() => setTab('feed')}>시장</button>
+          <button aria-current={tab === 'location'} onClick={() => setTab('location')}>입지</button>
           <button aria-current={tab === 'underwrite'} onClick={() => setTab('underwrite')}>언더라이팅</button>
           <button aria-current={tab === 'advanced'} onClick={() => setTab('advanced')}>심화 분석</button>
           {isAdmin && (
@@ -254,6 +256,9 @@ function App() {
             onNeedCredits={handleNeedCredits}
             toolCosts={toolCosts}
           />
+        )}
+        {tab === 'location' && (
+          <LocationReportView onWantMore={() => setTab('underwrite')} />
         )}
         {tab === 'mydeals' && (
           <MyView

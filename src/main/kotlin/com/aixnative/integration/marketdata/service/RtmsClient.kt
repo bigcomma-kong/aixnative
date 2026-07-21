@@ -42,6 +42,33 @@ class RtmsClient(
         val landUse: String,
     )
 
+    /** 한 건의 아파트 매매 거래 — dealYmd(yyyy.MM)·단지명·금액(만원)·전용면적㎡·층·준공연도·법정동. */
+    data class AptTrade(
+        val dealYmd: String,
+        val aptName: String,
+        val amountManwon: String,
+        val areaSqm: String,
+        val floor: String,
+        val buildYear: String,
+        val umdNm: String,
+    )
+
+    /** 최근 [years]년 아파트 매매 거래(최대 10건, 주거 입지 리포트용). 키 미설정 시 빈 리스트. */
+    fun aptTransactions(lawdCd: String, years: Int): List<AptTrade> =
+        fetchMonthly(APT_TRADE, lawdCd, years) { item, ymd ->
+            val year = item.path("dealYear").asText(ymd.substring(0, 4))
+            val mon = item.path("dealMonth").asText(ymd.substring(4))
+            AptTrade(
+                dealYmd = "$year.$mon",
+                aptName = item.path("aptNm").asText(item.path("aptName").asText("-")).trim(),
+                amountManwon = item.path("dealAmount").asText("-").trim(),
+                areaSqm = item.path("excluUseAr").asText("-"),
+                floor = item.path("floor").asText("-"),
+                buildYear = item.path("buildYear").asText("-"),
+                umdNm = item.path("umdNm").asText("-").trim(),
+            )
+        }
+
     /** 최근 [years]년 상업업무용 거래(최대 10건). 키 미설정 시 빈 리스트. */
     fun commercialTransactions(lawdCd: String, years: Int): List<Trade> =
         fetchMonthly(NRG_TRADE, lawdCd, years) { item, ymd ->
@@ -118,6 +145,9 @@ class RtmsClient(
     private companion object {
         const val NRG_TRADE = "https://apis.data.go.kr/1613000/RTMSDataSvcNrgTrade/getRTMSDataSvcNrgTrade"
         const val LAND_TRADE = "https://apis.data.go.kr/1613000/RTMSDataSvcLandTrade/getRTMSDataSvcLandTrade"
+        // 이미 활용신청된 "국토교통부_아파트 매매 실거래가 자료"(일반, 15126469). 필드는 상세(Dev)와 동일 계열
+        // (dealAmount·excluUseAr·floor·buildYear·aptNm·umdNm·dealYear/Month) - 리포트엔 일반으로 충분.
+        const val APT_TRADE = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade"
         val YM: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMM")
     }
 }

@@ -1429,3 +1429,54 @@ export const api = {
 export function oauthAuthorizeUrl(provider: string): string {
   return `${API_BASE}/api/auth/oauth/${provider}/authorize`
 }
+
+// ── 주거·입지 무료 리포트(Phase 1) ────────────────────────────────────────
+export interface GeoPoint {
+  longitude: number
+  latitude: number
+  bCode: string
+  roadAddress: string | null
+  jibunAddress: string | null
+  sigunguCode: string
+}
+export interface NearbyPlace {
+  name: string
+  category: string
+  distanceM: number | null
+  roadAddress: string | null
+}
+export interface NearbyGroup {
+  label: string
+  places: NearbyPlace[]
+}
+export interface ComplexInfo {
+  kaptCode: string
+  name: string
+  householdCount: number | null
+  dongCount: number | null
+  approvalDate: string | null
+  parkingTotal: number | null
+  heatingType: string | null
+}
+export interface AptDeal {
+  dealYmd: string
+  aptName: string
+  amountManwon: string
+  areaSqm: string
+  floor: string
+  buildYear: string
+  dong: string | null
+}
+export interface LocationReport {
+  query: string
+  geo: GeoPoint | null
+  nearby: NearbyGroup[]
+  complexes: ComplexInfo[]
+  recentDeals: AptDeal[]
+  notes: string[]
+}
+
+/** 무료 입지 리포트(비인증 가능). 주소/지역 문자열 → POI·단지·실거래 종합. */
+export function fetchLocationReport(query: string): Promise<LocationReport> {
+  return request(`/api/public/residential/location-report?query=${encodeURIComponent(query)}`)
+}
