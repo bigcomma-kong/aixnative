@@ -1,7 +1,9 @@
 package com.aixnative.residential.service
 
+import com.aixnative.integration.marketdata.service.JusoClient
 import com.aixnative.integration.marketdata.service.RtmsClient
 import com.aixnative.residential.domain.AptDeal
+import com.aixnative.residential.domain.GeoPoint
 import com.aixnative.residential.domain.LocationReport
 import com.aixnative.residential.domain.NearbyGroup
 import org.slf4j.LoggerFactory
@@ -17,6 +19,7 @@ import org.springframework.stereotype.Service
 @Service
 class LocationReportService(
     private val kakao: KakaoLocalClient,
+    private val juso: JusoClient,
     private val kapt: KaptClient,
     private val rtms: RtmsClient,
 ) {
@@ -25,15 +28,22 @@ class LocationReportService(
     /** 주소/지역 문자열 → 입지 리포트. 지오코딩 실패 시에도 notes 로 사유 반환(예외 대신 부분 결과). */
     fun report(query: String): LocationReport {
         val notes = ArrayList<String>()
-        val geo = kakao.geocode(query)
+
+        // 1순위 카카오(좌표+법정동코드 → POI 가능). 실패 시 juso 폴백(법정동코드만 - 비즈앱 불필요, 단지·실거래만).
+        val geo = kakao.geocode(query) ?: jusoFallback(query, notes)
         if (geo == null) {
-            notes += "주소를 좌표로 변환하지 못했습니다(카카오 키 미설정이거나 주소를 더 구체적으로)."
+            notes += "주소를 인식하지 못했습니다. 도로명/동 단위로 더 구체적으로 입력해 주세요."
             return LocationReport(query, null, emptyList(), emptyList(), emptyList(), notes)
         }
 
-        val nearby = POI_GROUPS.mapNotNull { (label, code) ->
-            val places = kakao.nearby(geo.longitude, geo.latitude, code, RADIUS_M, PER_GROUP)
-            if (places.isEmpty()) null else NearbyGroup(label, places)
+        // POI 는 좌표가 있어야(카카오 지오코딩) 검색 가능. juso 폴백이면 생략.
+        val nearby = if (geo.hasCoords) {
+            POI_GROUPS.mapNotNull { (label, code) ->
+                val places = kakao.nearby(geo.longitude!!, geo.latitude!!, code, RADIUS_M, PER_GROUP)
+                if (places.isEmpty()) null else NearbyGroup(label, places)
+            }
+        } else {
+            emptyList()
         }
 
         val complexes = kapt.complexesInDong(geo.bCode, COMPLEX_LIMIT)
@@ -47,6 +57,19 @@ class LocationReportService(
             query, geo.sigunguCode, nearby.size, complexes.size, deals.size,
         )
         return LocationReport(query, geo, nearby, complexes, deals, notes)
+    }
+
+    /** 카카오 지오코딩 불가 시 juso(무료·비즈인증 불필요)로 법정동코드만 확보 → 단지·실거래는 동작, POI 는 생략. */
+    private fun jusoFallback(query: String, notes: MutableList<String>): GeoPoint? {
+        val parcel = juso.resolveParcel(query) ?: return null
+        notes += "주변 시설(지하철·학교 등)은 카카오맵 서비스 활성화 후 표시됩니다. 단지·실거래는 표시됩니다."
+        return GeoPoint(
+            longitude = null,
+            latitude = null,
+            bCode = parcel.admCd,
+            roadAddress = parcel.roadAddr.ifBlank { null },
+            jibunAddress = null,
+        )
     }
 
     private fun RtmsClient.AptTrade.toDomain() = AptDeal(

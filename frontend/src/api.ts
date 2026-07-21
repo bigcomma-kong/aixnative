@@ -1432,12 +1432,13 @@ export function oauthAuthorizeUrl(provider: string): string {
 
 // ── 주거·입지 무료 리포트(Phase 1) ────────────────────────────────────────
 export interface GeoPoint {
-  longitude: number
-  latitude: number
+  longitude: number | null
+  latitude: number | null
   bCode: string
   roadAddress: string | null
   jibunAddress: string | null
   sigunguCode: string
+  hasCoords: boolean
 }
 export interface NearbyPlace {
   name: string

@@ -1,15 +1,21 @@
 package com.aixnative.residential.domain
 
-/** 지오코딩 결과 - 좌표 + 법정동코드(10). RTMS 시군구코드(5)는 bCode 앞 5자리. */
+/**
+ * 지오코딩 결과 - 법정동코드(10) + 좌표(선택). RTMS 시군구코드(5)는 bCode 앞 5자리.
+ * 좌표는 카카오 지오코딩일 때만 채워지고, juso 폴백(비즈앱 불필요)은 코드만 준다 → POI 생략.
+ */
 data class GeoPoint(
-    val longitude: Double,
-    val latitude: Double,
-    val bCode: String,          // 법정동코드 10자리(카카오 b_code)
+    val longitude: Double?,
+    val latitude: Double?,
+    val bCode: String,          // 법정동코드 10자리(카카오 b_code 또는 juso admCd)
     val roadAddress: String?,
     val jibunAddress: String?,
 ) {
     /** RTMS/단지 조회용 시군구코드(5). bCode 앞 5자리. */
     val sigunguCode: String get() = bCode.take(5)
+
+    /** 좌표 보유 여부 - POI(주변시설) 검색 가능 조건. */
+    val hasCoords: Boolean get() = longitude != null && latitude != null
 }
 
 /** 주변 시설 1건(카카오 로컬 POI). */

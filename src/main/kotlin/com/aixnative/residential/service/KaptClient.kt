@@ -44,7 +44,8 @@ class KaptClient(
             .queryParam("_type", "json")
             .build(false).encode().toUri()
         val body = rest.get().uri(uri).retrieve().body(String::class.java) ?: return emptyList()
-        val items = mapper.readTree(body).path("response").path("body").path("items").path("item")
+        // AptListService3 JSON: response.body.items 가 배열 직접. (XML→JSON 변환형은 items.item → 둘 다 지원.)
+        val items = mapper.readTree(body).path("response").path("body").path("items")
         itemsToList(items).mapNotNull { node ->
             val code = node.path("kaptCode").asText("").ifBlank { return@mapNotNull null }
             ComplexRef(code, node.path("kaptName").asText("-"))
@@ -61,30 +62,36 @@ class KaptClient(
         val body = rest.get().uri(uri).retrieve().body(String::class.java) ?: return null
         val item = mapper.readTree(body).path("response").path("body").path("item")
         if (item.isMissingNode || item.isNull) return null
-        val ground = item.path("kaptdPcnt").asText("").toIntOrNull() ?: 0
-        val under = item.path("kaptdPcntu").asText("").toIntOrNull() ?: 0
+        // 필드는 문자열("1")·숫자(0.0) 혼재 → asInt 로 통일 파싱. 주차(kaptdPcnt)는 상세서비스라 bass 엔 보통 없음(null).
+        val ground = item.path("kaptdPcnt").asInt(0)
+        val under = item.path("kaptdPcntu").asInt(0)
         ComplexInfo(
             kaptCode = ref.kaptCode,
             name = item.path("kaptName").asText(ref.name),
-            householdCount = item.path("kaptdaCnt").asText("").toIntOrNull(),
-            dongCount = item.path("kaptDongCnt").asText("").toIntOrNull(),
+            householdCount = item.path("kaptdaCnt").asInt(0).takeIf { it > 0 },
+            dongCount = item.path("kaptDongCnt").asInt(0).takeIf { it > 0 },
             approvalDate = item.path("kaptUsedate").asText("").ifBlank { null },
             parkingTotal = (ground + under).takeIf { it > 0 },
             heatingType = item.path("codeHeatNm").asText("").ifBlank { null },
         )
     }.getOrElse { log.debug("[kapt] 기본정보({}) 실패: {}", ref.kaptCode, it.message); null }
 
-    private fun itemsToList(items: com.fasterxml.jackson.databind.JsonNode): List<com.fasterxml.jackson.databind.JsonNode> =
-        when {
-            items.isArray -> items.toList()
-            items.isObject && !items.isMissingNode -> listOf(items)
+    /** items 노드 → 원소 리스트. 배열 직접([...]) 또는 XML변환형({item:[...]}·{item:{...}}) 모두 처리. */
+    private fun itemsToList(items: com.fasterxml.jackson.databind.JsonNode): List<com.fasterxml.jackson.databind.JsonNode> {
+        if (items.isArray) return items.toList()
+        val inner = items.path("item")
+        return when {
+            inner.isArray -> inner.toList()
+            inner.isObject -> listOf(inner)
             else -> emptyList()
         }
+    }
 
     private companion object {
-        // 공동주택관리정보시스템(K-apt) - 제공기관 국토교통부, 호스트 1611000. 활용신청 후 각 API 명세(Swagger)로
-        // 최종 확정(운영단계 자동승인). 목록=단지 목록제공 서비스(15057332), 기본정보=기본 정보제공 서비스(15058453).
-        const val LEGALDONG_LIST = "https://apis.data.go.kr/1611000/AptListService3/getLegaldongAptList3"
-        const val BASIS_INFO = "https://apis.data.go.kr/1611000/AptBasisInfoService/getAphusBassInfo"
+        // 공동주택관리정보시스템(K-apt) - 라이브 프로빙으로 확정한 실제 경로(호스트 1613000, V3).
+        // 목록=단지 목록제공 서비스(15057332, bjdCode), 기본정보=기본 정보제공 서비스(15058453, kaptCode).
+        // ⚠ 이 서비스들은 DATA_GO_KR 키(계정)에 별도 활용신청(구독)돼 있어야 함(미구독 시 403).
+        const val LEGALDONG_LIST = "https://apis.data.go.kr/1613000/AptListService3/getLegaldongAptList3"
+        const val BASIS_INFO = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV4/getAphusBassInfoV4"
     }
 }

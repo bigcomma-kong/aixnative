@@ -204,7 +204,6 @@ function formatApprovalDate(raw: string | null): string | null {
 }
 
 const LOCREP_CSS = `
-.locrep-landing { max-width: 1080px; margin: 0 auto; padding: 0 1.2rem; }
 .locrep-search { display: flex; gap: 0.6rem; margin: 0 0 1.2rem; flex-wrap: wrap; }
 .locrep-input {
   flex: 1; min-width: 240px; padding: 0.8rem 1rem; font-size: 1rem;

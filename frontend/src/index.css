@@ -2797,6 +2797,13 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4
 /* 세로 간격은 형제 섹션(.feat/.steps/.modes/.vcompare)과 동일한 리듬으로. 위 여백은 margin 으로 통일하고
    아래는 다음 섹션의 margin-top 이 담당(padding 으로 이중 간격 만들지 않음). 폭은 쇼케이스 가독성상 유지. */
 .sample { max-width: 980px; margin: clamp(3.5rem, 9vw, 6.5rem) auto 0; padding: 0 1.25rem; }
+/* 랜딩 '동네 리포트' 체험 섹션 - .sample 과 동일한 폭·상단 여백(section+section 1.6rem 덮어쓰기 방지). */
+.locrep-landing { max-width: 980px; margin: clamp(3.5rem, 9vw, 6.5rem) auto 0; padding: 0 1.25rem; }
+.soon-tag {
+  display: inline-block; margin-left: 0.5em; padding: 0.12em 0.55em; border-radius: 999px;
+  font-size: 0.7em; font-weight: 700; letter-spacing: 0.02em; vertical-align: middle;
+  color: #8a6a00; background: rgba(245, 197, 24, 0.18); border: 1px solid rgba(245, 197, 24, 0.45);
+}
 .sample-showcase { display: grid; gap: 1rem; }
 .sample-cta {
   margin-top: 1.5rem; display: grid; justify-items: center; gap: 0.9rem; text-align: center;
