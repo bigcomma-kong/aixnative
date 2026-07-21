@@ -3,6 +3,7 @@ package com.aixnative.residential.web
 import com.aixnative.common.web.ApiResponse
 import com.aixnative.residential.domain.LocationReport
 import com.aixnative.residential.domain.MonthlyPrice
+import com.aixnative.residential.domain.PresaleNotice
 import com.aixnative.residential.service.LocationReportService
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
@@ -31,4 +32,12 @@ class ResidentialController(
         @RequestParam(defaultValue = "12") months: Int,
     ): ApiResponse<List<MonthlyPrice>> =
         ApiResponse.ok(locationReportService.priceTrend(sigungu.trim(), months))
+
+    /** 분양 동향 - 최근 청약 분양공고(지역 필터 선택). 예: /presale?region=서울&limit=8 */
+    @GetMapping("/presale")
+    fun presale(
+        @RequestParam(required = false) region: String?,
+        @RequestParam(defaultValue = "8") limit: Int,
+    ): ApiResponse<List<PresaleNotice>> =
+        ApiResponse.ok(locationReportService.presaleNotices(region, limit))
 }

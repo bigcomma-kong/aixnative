@@ -1,5 +1,8 @@
 import { useState } from 'react'
-import { fetchLocationReport, fetchPriceTrend, track, type LocationReport, type MonthlyPrice } from './api'
+import {
+  fetchLocationReport, fetchPriceTrend, fetchPresale, track,
+  type LocationReport, type MonthlyPrice, type PresaleNotice,
+} from './api'
 import { RentBarChart } from './RentBarChart'
 
 /**
@@ -10,6 +13,7 @@ export function LocationReportView({ onWantMore, embedded }: { onWantMore?: () =
   const [query, setQuery] = useState('')
   const [report, setReport] = useState<LocationReport | null>(null)
   const [trend, setTrend] = useState<MonthlyPrice[]>([])
+  const [presale, setPresale] = useState<PresaleNotice[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -20,13 +24,15 @@ export function LocationReportView({ onWantMore, embedded }: { onWantMore?: () =
     setLoading(true)
     setError(null)
     setTrend([])
+    setPresale([])
     track('location_report', { meta: q.slice(0, 60) })
     try {
       const rep = await fetchLocationReport(q)
       setReport(rep)
-      // 실거래 트렌드는 별도 지연 로딩(리포트 응답을 막지 않음). 실패해도 리포트는 그대로.
+      // 실거래 트렌드·분양 동향은 별도 지연 로딩(리포트 응답을 막지 않음). 실패해도 리포트는 그대로.
       const sigungu = rep.geo?.sigunguCode
       if (sigungu) fetchPriceTrend(sigungu, 12).then(setTrend).catch(() => setTrend([]))
+      fetchPresale(undefined, 6).then(setPresale).catch(() => setPresale([]))
     } catch (err) {
       setError(err instanceof Error ? err.message : '리포트를 불러오지 못했습니다.')
       setReport(null)
@@ -62,14 +68,14 @@ export function LocationReportView({ onWantMore, embedded }: { onWantMore?: () =
 
       {error && <p className="locrep-error" role="alert">{error}</p>}
 
-      {report && <ReportBody report={report} trend={trend} onWantMore={onWantMore} />}
+      {report && <ReportBody report={report} trend={trend} presale={presale} onWantMore={onWantMore} />}
 
       <style>{LOCREP_CSS}</style>
     </>
   )
 }
 
-function ReportBody({ report, trend, onWantMore }: { report: LocationReport; trend: MonthlyPrice[]; onWantMore?: () => void }) {
+function ReportBody({ report, trend, presale, onWantMore }: { report: LocationReport; trend: MonthlyPrice[]; presale: PresaleNotice[]; onWantMore?: () => void }) {
   const { geo, nearby, complexes, recentDeals, notes } = report
   const hasAny = nearby.length > 0 || complexes.length > 0 || recentDeals.length > 0
   const trendRows = trend.filter((t) => t.avgPricePerPyeong > 0)
@@ -169,6 +175,34 @@ function ReportBody({ report, trend, onWantMore }: { report: LocationReport; tre
         </section>
       )}
 
+      {presale.length > 0 && (
+        <section className="locrep-section">
+          <h2 className="locrep-h2">분양 동향 <span className="muted">(전국 · 최근 청약공고)</span></h2>
+          <div className="locrep-grid">
+            {presale.map((p) => (
+              <div className="card locrep-presale" key={`${p.houseName}-${p.noticeDate}`}>
+                <div className="locrep-presale-top">
+                  {p.region && <span className="chip">{p.region}</span>}
+                  {p.totalSupply != null && <span className="muted">{p.totalSupply.toLocaleString()}세대</span>}
+                </div>
+                <div className="locrep-presale-name">{p.houseName}</div>
+                {p.address && <div className="muted locrep-presale-addr">{p.address}</div>}
+                <dl className="locrep-spec">
+                  <Spec label="공고일" value={p.noticeDate} />
+                  <Spec label="청약접수" value={p.receiptStart ? `${p.receiptStart}${p.receiptEnd ? ` ~ ${p.receiptEnd}` : ''}` : null} />
+                  <Spec label="당첨발표" value={p.winnerDate} />
+                </dl>
+                {p.detailUrl && (
+                  <a className="btn-link locrep-presale-link" href={p.detailUrl} target="_blank" rel="noopener noreferrer">
+                    청약홈 공고 보기 →
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {!hasAny && (
         <p className="muted">표시할 데이터가 아직 없습니다. 주소를 더 구체적으로 입력하거나 잠시 후 다시 시도해 주세요.</p>
       )}
@@ -253,6 +287,11 @@ const LOCREP_CSS = `
 .locrep-dist { flex: none; font-size: 0.72rem; }
 .locrep-complex { padding: 1rem 1.1rem; }
 .locrep-complex-name { font-weight: 700; margin-bottom: 0.6rem; }
+.locrep-presale { padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.locrep-presale-top { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.locrep-presale-name { font-weight: 700; line-height: 1.3; }
+.locrep-presale-addr { font-size: 0.82rem; }
+.locrep-presale-link { align-self: flex-start; margin-top: 0.2rem; font-size: 0.86rem; }
 .locrep-spec { margin: 0; display: grid; gap: 0.35rem; }
 .locrep-spec-row { display: flex; justify-content: space-between; gap: 0.6rem; font-size: 0.9rem; }
 .locrep-spec-row dt { color: var(--ink-soft, #6b7280); margin: 0; }

@@ -9,6 +9,7 @@ import com.aixnative.residential.domain.LocationReport
 import com.aixnative.residential.domain.MacroContext
 import com.aixnative.residential.domain.MonthlyPrice
 import com.aixnative.residential.domain.NearbyGroup
+import com.aixnative.residential.domain.PresaleNotice
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 
@@ -26,6 +27,7 @@ class LocationReportService(
     private val kapt: KaptClient,
     private val rtms: RtmsClient,
     private val ecos: EcosClient,
+    private val cheongyak: CheongyakClient,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -70,6 +72,10 @@ class LocationReportService(
     fun priceTrend(sigunguCode: String, months: Int): List<MonthlyPrice> =
         rtms.aptMonthlyTrend(sigunguCode, months.coerceIn(1, 24))
             .map { MonthlyPrice(it.ym, it.dealCount, it.avgPricePerPyeong) }
+
+    /** 분양 동향 - 최근 청약 분양공고(지역 필터 선택). Phase 3 - 별도 지연 로딩용. */
+    fun presaleNotices(region: String?, limit: Int): List<PresaleNotice> =
+        cheongyak.recentNotices(region?.trim()?.ifBlank { null }, limit.coerceIn(1, 20))
 
     /** 카카오 지오코딩 불가 시 juso(무료·비즈인증 불필요)로 법정동코드만 확보 → 단지·실거래는 동작, POI 는 생략. */
     private fun jusoFallback(query: String, notes: MutableList<String>): GeoPoint? {

@@ -1501,3 +1501,24 @@ export interface MonthlyPrice {
 export function fetchPriceTrend(sigungu: string, months = 12): Promise<MonthlyPrice[]> {
   return request(`/api/public/residential/price-trend?sigungu=${encodeURIComponent(sigungu)}&months=${months}`)
 }
+
+/** 청약 분양공고 1건(청약홈). */
+export interface PresaleNotice {
+  houseName: string
+  kind: string | null
+  region: string | null
+  address: string | null
+  totalSupply: number | null
+  noticeDate: string | null
+  receiptStart: string | null
+  receiptEnd: string | null
+  winnerDate: string | null
+  homepage: string | null
+  detailUrl: string | null
+}
+
+/** 최근 분양 동향(청약홈). region 미지정 시 전국. */
+export function fetchPresale(region?: string, limit = 6): Promise<PresaleNotice[]> {
+  const q = region ? `region=${encodeURIComponent(region)}&limit=${limit}` : `limit=${limit}`
+  return request(`/api/public/residential/presale?${q}`)
+}

@@ -56,6 +56,21 @@ data class AptDeal(
     val dong: String?,          // 법정동명(umdNm)
 )
 
+/** 청약 분양공고 1건(청약홈). 없는 필드는 null. */
+data class PresaleNotice(
+    val houseName: String,          // 주택명
+    val kind: String?,              // 주택구분(APT·오피스텔 등)
+    val region: String?,            // 공급지역(서울·경기 등)
+    val address: String?,           // 공급위치
+    val totalSupply: Int?,          // 총 공급세대수
+    val noticeDate: String?,        // 모집공고일(yyyy-MM-dd)
+    val receiptStart: String?,      // 청약접수 시작일
+    val receiptEnd: String?,        // 청약접수 종료일
+    val winnerDate: String?,        // 당첨자발표일
+    val homepage: String?,          // 분양 홈페이지
+    val detailUrl: String?,         // 청약홈 공고 상세 URL
+)
+
 /** 월별 아파트 매매 트렌드 1포인트(시군구 기준). */
 data class MonthlyPrice(
     val ym: String,                 // yyyy.MM
