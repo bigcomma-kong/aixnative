@@ -1,10 +1,13 @@
 package com.aixnative.residential.service
 
+import com.aixnative.integration.marketdata.service.EcosClient
 import com.aixnative.integration.marketdata.service.JusoClient
 import com.aixnative.integration.marketdata.service.RtmsClient
 import com.aixnative.residential.domain.AptDeal
 import com.aixnative.residential.domain.GeoPoint
 import com.aixnative.residential.domain.LocationReport
+import com.aixnative.residential.domain.MacroContext
+import com.aixnative.residential.domain.MonthlyPrice
 import com.aixnative.residential.domain.NearbyGroup
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -22,6 +25,7 @@ class LocationReportService(
     private val juso: JusoClient,
     private val kapt: KaptClient,
     private val rtms: RtmsClient,
+    private val ecos: EcosClient,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -52,12 +56,20 @@ class LocationReportService(
         val deals = rtms.aptTransactions(geo.sigunguCode, DEAL_YEARS).map { it.toDomain() }
         if (deals.isEmpty()) notes += "최근 아파트 실거래가 없습니다(RTMS 아파트 API 활용신청 확인)."
 
+        val macro = runCatching { ecos.latestRates() }.getOrNull()
+            ?.let { MacroContext(baseRate = it.baseRate, gov10y = it.gov10y, asOf = it.asOf) }
+
         log.info(
             "[residential] 입지리포트 query='{}' geo={} nearby={}그룹 단지={} 실거래={}",
             query, geo.sigunguCode, nearby.size, complexes.size, deals.size,
         )
-        return LocationReport(query, geo, nearby, complexes, deals, notes)
+        return LocationReport(query, geo, nearby, complexes, deals, notes, macro)
     }
+
+    /** 시군구코드(5) 기준 최근 [months]개월 아파트 매매 트렌드(평단가·건수). Phase 2 - 별도 지연 로딩용. */
+    fun priceTrend(sigunguCode: String, months: Int): List<MonthlyPrice> =
+        rtms.aptMonthlyTrend(sigunguCode, months.coerceIn(1, 24))
+            .map { MonthlyPrice(it.ym, it.dealCount, it.avgPricePerPyeong) }
 
     /** 카카오 지오코딩 불가 시 juso(무료·비즈인증 불필요)로 법정동코드만 확보 → 단지·실거래는 동작, POI 는 생략. */
     private fun jusoFallback(query: String, notes: MutableList<String>): GeoPoint? {

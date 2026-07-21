@@ -53,6 +53,60 @@ class RtmsClient(
         val umdNm: String,
     )
 
+    /** 월별 아파트 매매 집계(평단가·거래건수) - 실거래 트렌드용. */
+    data class MonthlyStat(
+        val ym: String,                 // yyyy.MM
+        val dealCount: Int,             // 거래 건수
+        val avgPricePerPyeong: Int,     // 평단가(만원/평), 건수 0이면 0
+    )
+
+    /**
+     * 최근 [months]개월 아파트 매매 월별 집계(시군구 기준). 각 월 1콜(numOfRows 크게)로 전 거래를 받아
+     * 평단가(만원/평 = dealAmount * 3.3058 / 전용㎡)의 평균과 건수를 낸다. 403 시 중단(graceful).
+     * @return 과거→현재 시간순. 키 미설정/빈 코드 시 빈 리스트.
+     */
+    fun aptMonthlyTrend(lawdCd: String, months: Int): List<MonthlyStat> {
+        if (props.dataGoKrKey.isBlank() || lawdCd.isBlank()) return emptyList()
+        val out = ArrayList<MonthlyStat>()
+        for (m in 0 until months) {
+            val dealYmd = LocalDate.now().minusMonths(m.toLong()).format(YM)
+            try {
+                val uri = UriComponentsBuilder.fromHttpUrl(APT_TRADE)
+                    .queryParam("serviceKey", props.dataGoKrKey)
+                    .queryParam("LAWD_CD", lawdCd)
+                    .queryParam("DEAL_YMD", dealYmd)
+                    .queryParam("_type", "json")
+                    .queryParam("pageNo", "1")
+                    .queryParam("numOfRows", "1000")
+                    .build(false).encode().toUri()
+                val body = rest.get().uri(uri).retrieve().body(String::class.java) ?: continue
+                val items = mapper.readTree(body).path("response").path("body").path("items").path("item")
+                var sum = 0.0
+                var cnt = 0
+                val each: (JsonNode) -> Unit = { item ->
+                    val amount = item.path("dealAmount").asText("").replace(",", "").trim().toDoubleOrNull()
+                    val area = item.path("excluUseAr").asText("").trim().toDoubleOrNull()
+                    if (amount != null && amount > 0 && area != null && area > 0) {
+                        sum += amount * PYEONG_PER_SQM / area
+                        cnt++
+                    }
+                }
+                when {
+                    items.isArray -> items.forEach(each)
+                    items.isObject && !items.isMissingNode -> each(items)
+                }
+                val ym = "${dealYmd.substring(0, 4)}.${dealYmd.substring(4)}"
+                out.add(MonthlyStat(ym, cnt, if (cnt > 0) Math.round(sum / cnt).toInt() else 0))
+            } catch (e: HttpStatusCodeException) {
+                if (e.statusCode.value() == 403) { log.warn("[RTMS] 트렌드 403 (lawdCd={}) 중단", lawdCd); break }
+                log.debug("[RTMS] 트렌드 {} 건너뜀: {}", dealYmd, e.message)
+            } catch (e: Exception) {
+                log.debug("[RTMS] 트렌드 {} 건너뜀: {}", dealYmd, e.message)
+            }
+        }
+        return out.reversed()
+    }
+
     /** 최근 [years]년 아파트 매매 거래(최대 10건, 주거 입지 리포트용). 키 미설정 시 빈 리스트. */
     fun aptTransactions(lawdCd: String, years: Int): List<AptTrade> =
         fetchMonthly(APT_TRADE, lawdCd, years) { item, ymd ->
@@ -148,6 +202,7 @@ class RtmsClient(
         // 이미 활용신청된 "국토교통부_아파트 매매 실거래가 자료"(일반, 15126469). 필드는 상세(Dev)와 동일 계열
         // (dealAmount·excluUseAr·floor·buildYear·aptNm·umdNm·dealYear/Month) - 리포트엔 일반으로 충분.
         const val APT_TRADE = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade"
+        const val PYEONG_PER_SQM = 3.3058 // 1평 = 3.3058㎡ → 만원/㎡ * 3.3058 = 만원/평
         val YM: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMM")
     }
 }

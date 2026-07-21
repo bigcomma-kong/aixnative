@@ -1458,6 +1458,13 @@ export interface ComplexInfo {
   approvalDate: string | null
   parkingTotal: number | null
   heatingType: string | null
+  subwayWalk: string | null
+  busWalk: string | null
+}
+export interface MacroContext {
+  baseRate: number | null
+  gov10y: number | null
+  asOf: string | null
 }
 export interface AptDeal {
   dealYmd: string
@@ -1475,9 +1482,22 @@ export interface LocationReport {
   complexes: ComplexInfo[]
   recentDeals: AptDeal[]
   notes: string[]
+  macro: MacroContext | null
 }
 
 /** 무료 입지 리포트(비인증 가능). 주소/지역 문자열 → POI·단지·실거래 종합. */
 export function fetchLocationReport(query: string): Promise<LocationReport> {
   return request(`/api/public/residential/location-report?query=${encodeURIComponent(query)}`)
+}
+
+/** 월별 아파트 매매 트렌드 1포인트(시군구 기준). */
+export interface MonthlyPrice {
+  ym: string
+  dealCount: number
+  avgPricePerPyeong: number
+}
+
+/** 시군구코드(5) 기준 아파트 매매 트렌드(평단가·건수). 리포트의 geo.sigunguCode 로 지연 로딩. */
+export function fetchPriceTrend(sigungu: string, months = 12): Promise<MonthlyPrice[]> {
+  return request(`/api/public/residential/price-trend?sigungu=${encodeURIComponent(sigungu)}&months=${months}`)
 }

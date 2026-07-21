@@ -2,6 +2,7 @@ package com.aixnative.residential.web
 
 import com.aixnative.common.web.ApiResponse
 import com.aixnative.residential.domain.LocationReport
+import com.aixnative.residential.domain.MonthlyPrice
 import com.aixnative.residential.service.LocationReportService
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
@@ -22,4 +23,12 @@ class ResidentialController(
     @GetMapping("/location-report")
     fun locationReport(@RequestParam query: String): ApiResponse<LocationReport> =
         ApiResponse.ok(locationReportService.report(query.trim()))
+
+    /** 시군구(5) 기준 아파트 매매 트렌드(평단가·건수). 리포트 응답의 geo.sigunguCode 로 지연 로딩. */
+    @GetMapping("/price-trend")
+    fun priceTrend(
+        @RequestParam sigungu: String,
+        @RequestParam(defaultValue = "12") months: Int,
+    ): ApiResponse<List<MonthlyPrice>> =
+        ApiResponse.ok(locationReportService.priceTrend(sigungu.trim(), months))
 }

@@ -52,19 +52,13 @@ class KaptClient(
         }
     }.getOrElse { log.debug("[kapt] 목록 실패: {}", it.message); emptyList() }
 
-    /** 단지 기본 스펙(세대수·동수·사용승인일·주차·난방). */
+    /** 단지 기본 스펙(bass) + 상세(dtl: 주차·도보시간) 병합. bass 실패면 null(상세 실패는 무시). */
     private fun basicInfo(ref: ComplexRef): ComplexInfo? = runCatching {
-        val uri = UriComponentsBuilder.fromHttpUrl(BASIS_INFO)
-            .queryParam("serviceKey", marketProps.dataGoKrKey)
-            .queryParam("kaptCode", ref.kaptCode)
-            .queryParam("_type", "json")
-            .build(false).encode().toUri()
-        val body = rest.get().uri(uri).retrieve().body(String::class.java) ?: return null
-        val item = mapper.readTree(body).path("response").path("body").path("item")
-        if (item.isMissingNode || item.isNull) return null
-        // 필드는 문자열("1")·숫자(0.0) 혼재 → asInt 로 통일 파싱. 주차(kaptdPcnt)는 상세서비스라 bass 엔 보통 없음(null).
-        val ground = item.path("kaptdPcnt").asInt(0)
-        val under = item.path("kaptdPcntu").asInt(0)
+        val item = fetchItem(BASIS_INFO, ref.kaptCode) ?: return null
+        val dtl = runCatching { fetchItem(DETAIL_INFO, ref.kaptCode) }.getOrNull()
+        // 주차는 상세(dtl)에 지상(kaptdPcnt)+지하(kaptdPcntu). bass 엔 보통 없음.
+        val ground = dtl?.path("kaptdPcnt")?.asInt(0) ?: 0
+        val under = dtl?.path("kaptdPcntu")?.asInt(0) ?: 0
         ComplexInfo(
             kaptCode = ref.kaptCode,
             name = item.path("kaptName").asText(ref.name),
@@ -73,8 +67,22 @@ class KaptClient(
             approvalDate = item.path("kaptUsedate").asText("").ifBlank { null },
             parkingTotal = (ground + under).takeIf { it > 0 },
             heatingType = item.path("codeHeatNm").asText("").ifBlank { null },
+            subwayWalk = dtl?.path("kaptdWtimesub")?.asText("")?.ifBlank { null },
+            busWalk = dtl?.path("kaptdWtimebus")?.asText("")?.ifBlank { null },
         )
     }.getOrElse { log.debug("[kapt] 기본정보({}) 실패: {}", ref.kaptCode, it.message); null }
+
+    /** K-apt 단건 조회 공통(response.body.item 객체 반환). */
+    private fun fetchItem(endpoint: String, kaptCode: String): com.fasterxml.jackson.databind.JsonNode? {
+        val uri = UriComponentsBuilder.fromHttpUrl(endpoint)
+            .queryParam("serviceKey", marketProps.dataGoKrKey)
+            .queryParam("kaptCode", kaptCode)
+            .queryParam("_type", "json")
+            .build(false).encode().toUri()
+        val body = rest.get().uri(uri).retrieve().body(String::class.java) ?: return null
+        val item = mapper.readTree(body).path("response").path("body").path("item")
+        return if (item.isMissingNode || item.isNull) null else item
+    }
 
     /** items 노드 → 원소 리스트. 배열 직접([...]) 또는 XML변환형({item:[...]}·{item:{...}}) 모두 처리. */
     private fun itemsToList(items: com.fasterxml.jackson.databind.JsonNode): List<com.fasterxml.jackson.databind.JsonNode> {
@@ -93,5 +101,6 @@ class KaptClient(
         // ⚠ 이 서비스들은 DATA_GO_KR 키(계정)에 별도 활용신청(구독)돼 있어야 함(미구독 시 403).
         const val LEGALDONG_LIST = "https://apis.data.go.kr/1613000/AptListService3/getLegaldongAptList3"
         const val BASIS_INFO = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV4/getAphusBassInfoV4"
+        const val DETAIL_INFO = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV4/getAphusDtlInfoV4"
     }
 }

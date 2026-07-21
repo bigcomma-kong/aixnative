@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { fetchLocationReport, track, type LocationReport } from './api'
+import { fetchLocationReport, fetchPriceTrend, track, type LocationReport, type MonthlyPrice } from './api'
+import { RentBarChart } from './RentBarChart'
 
 /**
  * 무료 입지 리포트 뷰(Phase 1) - 주소/지역 입력 → 주변 시설·단지 스펙·최근 실거래 종합.
@@ -8,6 +9,7 @@ import { fetchLocationReport, track, type LocationReport } from './api'
 export function LocationReportView({ onWantMore, embedded }: { onWantMore?: () => void; embedded?: boolean }) {
   const [query, setQuery] = useState('')
   const [report, setReport] = useState<LocationReport | null>(null)
+  const [trend, setTrend] = useState<MonthlyPrice[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -17,9 +19,14 @@ export function LocationReportView({ onWantMore, embedded }: { onWantMore?: () =
     if (!q || loading) return
     setLoading(true)
     setError(null)
+    setTrend([])
     track('location_report', { meta: q.slice(0, 60) })
     try {
-      setReport(await fetchLocationReport(q))
+      const rep = await fetchLocationReport(q)
+      setReport(rep)
+      // 실거래 트렌드는 별도 지연 로딩(리포트 응답을 막지 않음). 실패해도 리포트는 그대로.
+      const sigungu = rep.geo?.sigunguCode
+      if (sigungu) fetchPriceTrend(sigungu, 12).then(setTrend).catch(() => setTrend([]))
     } catch (err) {
       setError(err instanceof Error ? err.message : '리포트를 불러오지 못했습니다.')
       setReport(null)
@@ -55,19 +62,27 @@ export function LocationReportView({ onWantMore, embedded }: { onWantMore?: () =
 
       {error && <p className="locrep-error" role="alert">{error}</p>}
 
-      {report && <ReportBody report={report} onWantMore={onWantMore} />}
+      {report && <ReportBody report={report} trend={trend} onWantMore={onWantMore} />}
 
       <style>{LOCREP_CSS}</style>
     </>
   )
 }
 
-function ReportBody({ report, onWantMore }: { report: LocationReport; onWantMore?: () => void }) {
+function ReportBody({ report, trend, onWantMore }: { report: LocationReport; trend: MonthlyPrice[]; onWantMore?: () => void }) {
   const { geo, nearby, complexes, recentDeals, notes } = report
   const hasAny = nearby.length > 0 || complexes.length > 0 || recentDeals.length > 0
+  const trendRows = trend.filter((t) => t.avgPricePerPyeong > 0)
 
   return (
     <div className="locrep-body">
+      {report.macro && report.macro.baseRate != null && (
+        <p className="locrep-macro muted">
+          참고 · 기준금리 {report.macro.baseRate}%
+          {report.macro.gov10y != null ? ` · 국고채 10년 ${report.macro.gov10y}%` : ''}
+          {report.macro.asOf ? ` (${report.macro.asOf} 기준)` : ''}
+        </p>
+      )}
       {geo && (
         <p className="locrep-addr muted">
           {geo.roadAddress ?? geo.jibunAddress ?? report.query}
@@ -108,6 +123,8 @@ function ReportBody({ report, onWantMore }: { report: LocationReport; onWantMore
                   <Spec label="동수" value={c.dongCount != null ? `${c.dongCount}개동` : null} />
                   <Spec label="사용승인" value={formatApprovalDate(c.approvalDate)} />
                   <Spec label="주차" value={c.parkingTotal != null ? `${c.parkingTotal.toLocaleString()}대` : null} />
+                  <Spec label="지하철" value={c.subwayWalk} />
+                  <Spec label="버스" value={c.busWalk} />
                   <Spec label="난방" value={c.heatingType} />
                 </dl>
               </div>
@@ -137,6 +154,18 @@ function ReportBody({ report, onWantMore }: { report: LocationReport; onWantMore
               </tbody>
             </table>
           </div>
+        </section>
+      )}
+
+      {trendRows.length >= 2 && (
+        <section className="locrep-section">
+          <h2 className="locrep-h2">
+            실거래 트렌드 <span className="muted">(시군구 · 최근 {trendRows.length}개월 · 평단가)</span>
+          </h2>
+          <RentBarChart
+            data={trendRows.map((t) => ({ label: `${t.ym} · ${t.dealCount}건`, value: t.avgPricePerPyeong }))}
+            unit="만원/평"
+          />
         </section>
       )}
 
@@ -212,6 +241,7 @@ const LOCREP_CSS = `
 .locrep-input:focus { outline: 2px solid var(--accent, #2563eb); outline-offset: 1px; }
 .locrep-error { color: #c2410c; margin: 0 0 1rem; }
 .locrep-addr { margin: -0.4rem 0 1.4rem; }
+.locrep-macro { margin: 0 0 0.5rem; font-size: 0.82rem; }
 .locrep-section { margin: 0 0 1.8rem; }
 .locrep-h2 { font-size: 1.05rem; font-weight: 700; margin: 0 0 0.8rem; }
 .locrep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.9rem; }
