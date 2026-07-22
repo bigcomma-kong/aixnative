@@ -1523,13 +1523,24 @@ export function fetchPresale(region?: string, limit = 6): Promise<PresaleNotice[
   return request(`/api/public/residential/presale?${q}`)
 }
 
-/** AI 분양 브리핑(크레딧 과금, 인증). 성공 시 남은 크레딧 포함. */
-export interface PresaleBrief {
+/** AI 동네 브리핑(크레딧 과금, 인증) - 지역 맞춤 시장 브리핑. 성공 시 저장 id + 남은 크레딧. */
+export interface LocationBrief {
+  id: number | null
   brief: string
-  noticesUsed: number
   creditBalance: number
 }
-export function fetchPresaleBrief(region?: string): Promise<PresaleBrief> {
-  const q = region ? `?region=${encodeURIComponent(region)}` : ''
-  return request(`/api/residential/presale-brief${q}`, { method: 'POST' })
+export function fetchLocationBrief(query: string): Promise<LocationBrief> {
+  return request(`/api/residential/brief?query=${encodeURIComponent(query)}`, { method: 'POST' })
+}
+
+/** 마이페이지 - 저장된 내 브리핑. */
+export interface SavedBrief {
+  id: number
+  query: string
+  region: string | null
+  brief: string
+  createdAt: string | null
+}
+export function fetchMyBriefs(): Promise<SavedBrief[]> {
+  return request('/api/residential/briefs')
 }

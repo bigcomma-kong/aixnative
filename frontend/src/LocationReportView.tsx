@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  fetchLocationReport, fetchPriceTrend, fetchPresale, fetchPresaleBrief, track, ApiError,
+  fetchLocationReport, fetchPriceTrend, fetchPresale, fetchLocationBrief, track, ApiError,
   type LocationReport, type MonthlyPrice, type PresaleNotice,
 } from './api'
 import { RentBarChart } from './RentBarChart'
@@ -125,7 +125,7 @@ function ReportBody({
     setBriefErr(null)
     track('presale_brief')
     try {
-      const res = await fetchPresaleBrief()
+      const res = await fetchLocationBrief(report.query)
       setBrief(res.brief)
       onCreditBalance?.(res.creditBalance)
     } catch (err) {
@@ -264,29 +264,33 @@ function ReportBody({
               </div>
             ))}
           </div>
+        </section>
+      )}
 
-          <div className="locrep-brief">
-            {authed ? (
-              <>
-                {!brief && (
-                  <button type="button" className="btn-primary btn-xs" onClick={runBrief} disabled={briefing}>
-                    {briefing ? 'AI 브리핑 생성 중…' : 'AI 분양 브리핑 (2크레딧)'}
-                  </button>
-                )}
-                {briefErr && <p className="locrep-error" role="alert">{briefErr}</p>}
-                {brief && (
-                  <div className="card locrep-brief-box">
-                    <div className="locrep-brief-title">AI 분양 브리핑</div>
-                    <p className="locrep-brief-text">{brief}</p>
-                  </div>
-                )}
-              </>
-            ) : (
-              <button type="button" className="btn-link" onClick={onWantMore}>
-                로그인하고 AI 분양 브리핑 받기 →
-              </button>
-            )}
-          </div>
+      {hasAny && (
+        <section className="locrep-section locrep-brief">
+          <h2 className="locrep-h2">AI 동네 브리핑 <span className="muted">(실측 시장 + 청약 종합)</span></h2>
+          {authed ? (
+            <>
+              {!brief && (
+                <button type="button" className="btn-primary" onClick={runBrief} disabled={briefing}>
+                  {briefing ? 'AI 브리핑 생성 중…' : 'AI 동네 브리핑 받기 (2크레딧)'}
+                </button>
+              )}
+              {briefErr && <p className="locrep-error" role="alert">{briefErr}</p>}
+              {brief && (
+                <div className="card locrep-brief-box">
+                  <p className="locrep-brief-text">{brief}</p>
+                  <p className="muted locrep-brief-saved">마이페이지에 저장됐습니다.</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="muted">
+              이 동네의 시세·단지·청약을 AI가 종합해 브리핑합니다.{' '}
+              <button type="button" className="btn-link" onClick={onWantMore}>로그인하고 받기 →</button>
+            </p>
+          )}
         </section>
       )}
 
