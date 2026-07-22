@@ -1437,6 +1437,8 @@ export interface GeoPoint {
   bCode: string
   roadAddress: string | null
   jibunAddress: string | null
+  areaLabel: string | null
+  region: string | null
   sigunguCode: string
   hasCoords: boolean
 }

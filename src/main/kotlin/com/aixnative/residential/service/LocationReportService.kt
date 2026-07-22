@@ -41,10 +41,9 @@ class LocationReportService(
     fun report(query: String): LocationReport {
         val notes = ArrayList<String>()
 
-        // 1순위 카카오(좌표+법정동코드 → POI 가능). 실패 시 juso 폴백(법정동코드만 - 비즈앱 불필요, 단지·실거래만).
-        val geo = kakao.geocode(query) ?: jusoFallback(query, notes)
+        val geo = geocode(query)
         if (geo == null) {
-            notes += "주소를 인식하지 못했습니다. 도로명/동 단위로 더 구체적으로 입력해 주세요."
+            notes += "주소를 인식하지 못했습니다. 동/도로명 또는 아파트명으로 다시 입력해 주세요."
             return LocationReport(query, null, emptyList(), emptyList(), emptyList(), notes)
         }
 
@@ -109,17 +108,28 @@ class LocationReportService(
     fun presaleNotices(region: String?, limit: Int): List<PresaleNotice> =
         cheongyak.recentNotices(region?.trim()?.ifBlank { null }, limit.coerceIn(1, 20))
 
-    /** 카카오 지오코딩 불가 시 juso(무료·비즈인증 불필요)로 법정동코드만 확보 → 단지·실거래는 동작, POI 는 생략. */
-    private fun jusoFallback(query: String, notes: MutableList<String>): GeoPoint? {
-        val parcel = juso.resolveParcel(query) ?: return null
-        return GeoPoint(
-            longitude = null,
-            latitude = null,
-            bCode = parcel.admCd,
-            roadAddress = parcel.roadAddr.ifBlank { null },
-            jibunAddress = null,
-            areaLabel = query, // 네이버 POI 검색 키워드(사용자 입력 지역)
-        )
+    /**
+     * 지오코딩 - ① juso 직접(정식 주소) → ② 실패 시 네이버 장소해석(아파트명·랜드마크)으로 주소를 얻어 juso 재시도.
+     * 네이버가 준 주소도 juso 가 못 풀면(코드 없음) POI·주소만 채우고 단지·실거래는 생략(부분 결과).
+     */
+    private fun geocode(query: String): GeoPoint? {
+        // ① 정식 주소면 juso 가 바로 법정동코드 반환.
+        juso.resolveParcel(query)?.let {
+            return GeoPoint(
+                null, null, it.admCd, it.roadAddr.ifBlank { null }, null,
+                areaLabel = query, region = shortSido(it.roadAddr),
+            )
+        }
+        // ② 아파트명 등 → 네이버로 주소 해석 후 juso 재시도.
+        val place = naver.resolvePlace(query) ?: return null
+        val addr = place.jibunAddress ?: place.roadAddress
+        val area = areaLabelOf(place.jibunAddress ?: place.roadAddress) ?: query
+        val region = shortSido(place.jibunAddress ?: place.roadAddress)
+        juso.resolveParcel(addr)?.let {
+            return GeoPoint(null, null, it.admCd, place.roadAddress, place.jibunAddress, areaLabel = area, region = region)
+        }
+        // juso 도 실패: 코드 없이(bCode 빈값 → 단지·실거래 생략) 주소·POI 만.
+        return GeoPoint(null, null, "", place.roadAddress, place.jibunAddress, areaLabel = area, region = region)
     }
 
     private fun RtmsClient.AptTrade.toDomain() = AptDeal(

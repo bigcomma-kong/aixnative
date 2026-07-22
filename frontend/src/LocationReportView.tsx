@@ -45,7 +45,8 @@ export function LocationReportView({ onWantMore, embedded, authed, onCreditBalan
         setTrendLoading(true)
         fetchPriceTrend(sigungu, 12).then(setTrend).catch(() => setTrend([])).finally(() => setTrendLoading(false))
       }
-      fetchPresale(undefined, 6).then(setPresale).catch(() => setPresale([]))
+      // 분양 동향은 리포트 지역(시도)으로 필터 - 전국 대신 그 동네 위주.
+      fetchPresale(rep.geo?.region ?? undefined, 6).then(setPresale).catch(() => setPresale([]))
     } catch (err) {
       setError(err instanceof Error ? err.message : '리포트를 불러오지 못했습니다.')
       setReport(null)
@@ -241,7 +242,7 @@ function ReportBody({
 
       {presale.length > 0 && (
         <section className="locrep-section">
-          <h2 className="locrep-h2">분양 동향 <span className="muted">(전국 · 최근 청약공고)</span></h2>
+          <h2 className="locrep-h2">분양 동향 <span className="muted">({report.geo?.region ?? '전국'} · 최근 청약공고)</span></h2>
           <div className="locrep-grid">
             {presale.map((p) => (
               <div className="card locrep-presale" key={`${p.houseName}-${p.noticeDate}`}>

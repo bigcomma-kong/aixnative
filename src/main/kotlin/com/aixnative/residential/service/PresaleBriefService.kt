@@ -44,8 +44,8 @@ class PresaleBriefService(
         }
         val report = locationReportService.report(query.trim())
         val geo = report.geo
-            ?: throw IllegalArgumentException("주소를 인식하지 못했습니다. 도로명/동 단위로 입력해 주세요.")
-        val region = shortSido(geo.roadAddress ?: geo.jibunAddress ?: query)
+            ?: throw IllegalArgumentException("주소를 인식하지 못했습니다. 동/도로명 또는 아파트명으로 입력해 주세요.")
+        val region = geo.region
         val trend = locationReportService.priceTrend(geo.sigunguCode, 12)
         val notices = cheongyak.recentNotices(region, 8)
 
@@ -134,15 +134,6 @@ class PresaleBriefService(
             <해당 지역 최근 분양공고>
             $noticeLines
         """.trimIndent()
-    }
-
-    /** "서울특별시"→"서울", "경기도"→"경기" 등 시도 축약(분양공고 지역 필터·표시용). */
-    private fun shortSido(addr: String): String? {
-        val first = addr.trim().split(" ").firstOrNull()?.trim().orEmpty()
-        return first
-            .removeSuffix("특별자치시").removeSuffix("특별자치도")
-            .removeSuffix("특별시").removeSuffix("광역시").removeSuffix("도")
-            .ifBlank { null }
     }
 
     private companion object {

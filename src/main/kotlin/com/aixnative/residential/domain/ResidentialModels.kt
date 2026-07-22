@@ -11,6 +11,7 @@ data class GeoPoint(
     val roadAddress: String?,
     val jibunAddress: String?,
     val areaLabel: String? = null, // POI 검색용 지역 라벨("강남구 역삼동" 또는 입력 질의)
+    val region: String? = null,    // 시도 축약(서울·경기 등) - 분양공고 지역 필터·표시
 ) {
     /** RTMS/단지 조회용 시군구코드(5). bCode 앞 5자리. */
     val sigunguCode: String get() = bCode.take(5)

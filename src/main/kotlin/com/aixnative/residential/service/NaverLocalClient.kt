@@ -23,6 +23,29 @@ class NaverLocalClient(
 
     fun isConfigured(): Boolean = props.naverEnabled
 
+    /** 장소 해석용 주소(지번·도로명). */
+    data class Place(val roadAddress: String?, val jibunAddress: String?)
+
+    /** 질의(아파트명·랜드마크 등)를 네이버 지역검색으로 해석해 첫 결과의 주소. juso 지오코딩 폴백용. */
+    fun resolvePlace(query: String): Place? {
+        if (!isConfigured() || query.isBlank()) return null
+        return runCatching {
+            val uri = UriComponentsBuilder.fromHttpUrl(LOCAL_URL)
+                .queryParam("query", query)
+                .queryParam("display", 1)
+                .build(false).encode().toUri()
+            val body = rest.get().uri(uri)
+                .header("X-Naver-Client-Id", props.naverClientId)
+                .header("X-Naver-Client-Secret", props.naverClientSecret)
+                .retrieve().body(String::class.java) ?: return null
+            val it = mapper.readTree(body).path("items").firstOrNull() ?: return null
+            Place(
+                roadAddress = it.path("roadAddress").asText("").ifBlank { null },
+                jibunAddress = it.path("address").asText("").ifBlank { null },
+            )
+        }.getOrElse { log.debug("[naver] 장소 해석 실패: {}", it.message); null }
+    }
+
     /** "{area} {term}"(예 "역삼동 지하철역")으로 검색해 최대 [display]곳. 실패/무결과 시 빈 리스트. */
     fun search(area: String, term: String, display: Int = 5): List<NearbyPlace> {
         if (!isConfigured() || area.isBlank()) return emptyList()
