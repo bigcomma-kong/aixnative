@@ -16,10 +16,17 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 data class ResidentialProperties(
     /** 카카오 로컬(주소검색·카테고리/키워드 POI) REST API 키. 빈 값이면 지오코딩·POI 비활성. */
     val kakaoRestKey: String = "",
+    /**
+     * 네이버 지역검색(POI) client-id/secret - 카카오맵(비즈앱) 대체. 로그인용 네이버 앱 자격증명 재사용 가능하나,
+     * 로그인 버튼 노출과 분리하려고 oauth.naver 와 **독립** 설정(둘 다 있으면 POI 온, 로그인은 oauth 로 별도 판단).
+     */
+    val naverClientId: String = "",
+    val naverClientSecret: String = "",
     /** 공동주택 단지(K-apt) 조회 사용 여부(data.go.kr 활용신청 후 on). */
     val kaptEnabled: Boolean = true,
     /** 청약홈 분양정보 조회 사용 여부(Phase 3, data.go.kr 활용신청 후 on). */
     val cheongyakEnabled: Boolean = true,
 ) {
     val kakaoEnabled: Boolean get() = kakaoRestKey.isNotBlank()
+    val naverEnabled: Boolean get() = naverClientId.isNotBlank() && naverClientSecret.isNotBlank()
 }

@@ -235,11 +235,11 @@ export function LandingView({ onAuthed, oauthError }: LandingViewProps) {
 
       <section className="locrep-landing reveal" id="location" aria-labelledby="loc-h">
         <div className="feat-head">
-          <span className="eyebrow">무료 체험 <span className="soon-tag">준비중</span></span>
+          <span className="eyebrow">로그인 없이 지금 체험</span>
           <h2 id="loc-h" className="feat-h">주소만 넣어보세요 - 무료 동네 리포트</h2>
           <p className="modes-sub">
-            인근 단지 스펙과 최근 아파트 실거래를 주소 한 줄로. 주변 교통·학교·편의시설은 순차 오픈 예정입니다.
-            상업용 딜이라면 그대로 AI 언더라이팅까지.
+            주변 교통·학교·편의시설, 인근 단지 스펙, 최근 아파트 실거래를 주소 한 줄로.
+            가입 없이 바로 확인하고, 상업용 딜이라면 그대로 AI 언더라이팅까지.
           </p>
         </div>
         <LocationReportView embedded onWantMore={() => focusAuth('signup')} />

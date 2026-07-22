@@ -41,12 +41,15 @@ class KakaoLocalClient(
         val addr = doc.path("address")
         val road = doc.path("road_address")
         val bCode = addr.path("b_code").asText("").ifBlank { road.path("b_code").asText("") }
+        val gu = addr.path("region_2depth_name").asText("").ifBlank { road.path("region_2depth_name").asText("") }
+        val dong = addr.path("region_3depth_name").asText("").ifBlank { road.path("region_3depth_name").asText("") }
         return GeoPoint(
             longitude = lon,
             latitude = lat,
             bCode = bCode,
             roadAddress = road.path("address_name").asText("").ifBlank { null },
             jibunAddress = addr.path("address_name").asText("").ifBlank { null },
+            areaLabel = listOf(gu, dong).filter { it.isNotBlank() }.joinToString(" ").ifBlank { null },
         )
     }
 

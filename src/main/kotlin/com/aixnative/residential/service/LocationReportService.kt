@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service
 @Service
 class LocationReportService(
     private val kakao: KakaoLocalClient,
+    private val naver: NaverLocalClient,
     private val juso: JusoClient,
     private val kapt: KaptClient,
     private val rtms: RtmsClient,
@@ -42,14 +43,18 @@ class LocationReportService(
             return LocationReport(query, null, emptyList(), emptyList(), emptyList(), notes)
         }
 
-        // POI 는 좌표가 있어야(카카오 지오코딩) 검색 가능. juso 폴백이면 생략.
-        val nearby = if (geo.hasCoords) {
-            POI_GROUPS.mapNotNull { (label, code) ->
-                val places = kakao.nearby(geo.longitude!!, geo.latitude!!, code, RADIUS_M, PER_GROUP)
+        // POI = 네이버 지역검색(카카오맵 비즈앱 대체). "지역명 + 카테고리" 키워드라 좌표 불필요 → juso 폴백에서도 동작.
+        val area = geo.areaLabel ?: query
+        val nearby = if (naver.isConfigured()) {
+            POI_QUERIES.mapNotNull { (label, term) ->
+                val places = naver.search(area, term, PER_GROUP)
                 if (places.isEmpty()) null else NearbyGroup(label, places)
             }
         } else {
             emptyList()
+        }
+        if (nearby.isEmpty() && !naver.isConfigured()) {
+            notes += "주변 시설은 준비 중입니다(네이버 검색 API 연동 대기)."
         }
 
         val complexes = kapt.complexesInDong(geo.bCode, COMPLEX_LIMIT)
@@ -80,13 +85,13 @@ class LocationReportService(
     /** 카카오 지오코딩 불가 시 juso(무료·비즈인증 불필요)로 법정동코드만 확보 → 단지·실거래는 동작, POI 는 생략. */
     private fun jusoFallback(query: String, notes: MutableList<String>): GeoPoint? {
         val parcel = juso.resolveParcel(query) ?: return null
-        notes += "주변 시설(지하철·학교 등)은 카카오맵 서비스 활성화 후 표시됩니다. 단지·실거래는 표시됩니다."
         return GeoPoint(
             longitude = null,
             latitude = null,
             bCode = parcel.admCd,
             roadAddress = parcel.roadAddr.ifBlank { null },
             jibunAddress = null,
+            areaLabel = query, // 네이버 POI 검색 키워드(사용자 입력 지역)
         )
     }
 
@@ -96,19 +101,18 @@ class LocationReportService(
     )
 
     private companion object {
-        const val RADIUS_M = 1000
         const val PER_GROUP = 5
         const val COMPLEX_LIMIT = 3
         const val DEAL_YEARS = 1
-        // (라벨, 카카오 category_group_code) - 입지 핵심 카테고리.
-        val POI_GROUPS = listOf(
-            "지하철" to "SW8",
-            "학교" to "SC4",
-            "학원" to "AC5",
-            "마트" to "MT1",
-            "편의점" to "CS2",
-            "병원" to "HP8",
-            "은행" to "BK9",
+        // (라벨, 네이버 지역검색 키워드) - 입지 핵심 카테고리.
+        val POI_QUERIES = listOf(
+            "지하철" to "지하철역",
+            "학교" to "학교",
+            "학원" to "학원",
+            "마트" to "마트",
+            "편의점" to "편의점",
+            "병원" to "병원",
+            "은행" to "은행",
         )
     }
 }
