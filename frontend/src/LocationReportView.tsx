@@ -22,6 +22,7 @@ export function LocationReportView({ onWantMore, embedded, authed, onCreditBalan
   const [query, setQuery] = useState('')
   const [report, setReport] = useState<LocationReport | null>(null)
   const [trend, setTrend] = useState<MonthlyPrice[]>([])
+  const [trendLoading, setTrendLoading] = useState(false)
   const [presale, setPresale] = useState<PresaleNotice[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -40,7 +41,10 @@ export function LocationReportView({ onWantMore, embedded, authed, onCreditBalan
       setReport(rep)
       // 실거래 트렌드·분양 동향은 별도 지연 로딩(리포트 응답을 막지 않음). 실패해도 리포트는 그대로.
       const sigungu = rep.geo?.sigunguCode
-      if (sigungu) fetchPriceTrend(sigungu, 12).then(setTrend).catch(() => setTrend([]))
+      if (sigungu) {
+        setTrendLoading(true)
+        fetchPriceTrend(sigungu, 12).then(setTrend).catch(() => setTrend([])).finally(() => setTrendLoading(false))
+      }
       fetchPresale(undefined, 6).then(setPresale).catch(() => setPresale([]))
     } catch (err) {
       setError(err instanceof Error ? err.message : '리포트를 불러오지 못했습니다.')
@@ -81,6 +85,7 @@ export function LocationReportView({ onWantMore, embedded, authed, onCreditBalan
         <ReportBody
           report={report}
           trend={trend}
+          trendLoading={trendLoading}
           presale={presale}
           onWantMore={onWantMore}
           authed={authed}
@@ -95,10 +100,11 @@ export function LocationReportView({ onWantMore, embedded, authed, onCreditBalan
 }
 
 function ReportBody({
-  report, trend, presale, onWantMore, authed, onCreditBalance, onNeedCredits,
+  report, trend, trendLoading, presale, onWantMore, authed, onCreditBalance, onNeedCredits,
 }: {
   report: LocationReport
   trend: MonthlyPrice[]
+  trendLoading: boolean
   presale: PresaleNotice[]
   onWantMore?: () => void
   authed?: boolean
@@ -217,15 +223,19 @@ function ReportBody({
         </section>
       )}
 
-      {trendRows.length >= 2 && (
+      {(trendLoading || trendRows.length >= 2) && (
         <section className="locrep-section">
           <h2 className="locrep-h2">
-            실거래 트렌드 <span className="muted">(시군구 · 최근 {trendRows.length}개월 · 평단가)</span>
+            실거래 트렌드 <span className="muted">(시군구 · 최근 {trendRows.length || 12}개월 · 평단가)</span>
           </h2>
-          <RentBarChart
-            data={trendRows.map((t) => ({ label: `${t.ym} · ${t.dealCount}건`, value: t.avgPricePerPyeong }))}
-            unit="만원/평"
-          />
+          {trendRows.length >= 2 ? (
+            <RentBarChart
+              data={trendRows.map((t) => ({ label: `${t.ym} · ${t.dealCount}건`, value: t.avgPricePerPyeong }))}
+              unit="만원/평"
+            />
+          ) : (
+            <p className="muted locrep-loading">실거래 트렌드 불러오는 중…</p>
+          )}
         </section>
       )}
 
@@ -353,6 +363,7 @@ const LOCREP_CSS = `
 .locrep-error { color: #c2410c; margin: 0 0 1rem; }
 .locrep-addr { margin: -0.4rem 0 1.4rem; }
 .locrep-macro { margin: 0 0 0.5rem; font-size: 0.82rem; }
+.locrep-loading { padding: 1rem 0; opacity: 0.8; }
 .locrep-section { margin: 0 0 1.8rem; }
 .locrep-h2 { font-size: 1.05rem; font-weight: 700; margin: 0 0 0.8rem; }
 .locrep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.9rem; }

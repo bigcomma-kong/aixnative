@@ -20,16 +20,17 @@ class KaptClient(
     private val props: ResidentialProperties,
     @Qualifier("marketDataRestClient") private val rest: RestClient,
     private val mapper: ObjectMapper,
+    private val executor: java.util.concurrent.ExecutorService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
     private data class ComplexRef(val kaptCode: String, val name: String)
 
-    /** 법정동코드(10) 내 단지 상위 [limit]개의 기본 스펙. 키 미설정/미승인 시 빈 리스트. */
+    /** 법정동코드(10) 내 단지 상위 [limit]개의 기본 스펙(단지별 동시 조회). 키 미설정/미승인 시 빈 리스트. */
     fun complexesInDong(bCode: String, limit: Int = 3): List<ComplexInfo> {
         if (!enabled() || bCode.length < 10) return emptyList()
         val refs = listComplexes(bCode).take(limit)
-        return refs.mapNotNull { basicInfo(it) }
+        return executor.parMap(refs) { basicInfo(it) }.filterNotNull()
     }
 
     private fun enabled(): Boolean = props.kaptEnabled && marketProps.dataGoKrKey.isNotBlank()
@@ -54,8 +55,13 @@ class KaptClient(
 
     /** 단지 기본 스펙(bass) + 상세(dtl: 주차·도보시간) 병합. bass 실패면 null(상세 실패는 무시). */
     private fun basicInfo(ref: ComplexRef): ComplexInfo? = runCatching {
-        val item = fetchItem(BASIS_INFO, ref.kaptCode) ?: return null
-        val dtl = runCatching { fetchItem(DETAIL_INFO, ref.kaptCode) }.getOrNull()
+        // 기본정보(bass)와 상세(dtl) 동시 호출.
+        val fItem = java.util.concurrent.CompletableFuture.supplyAsync({ fetchItem(BASIS_INFO, ref.kaptCode) }, executor)
+        val fDtl = java.util.concurrent.CompletableFuture.supplyAsync(
+            { runCatching { fetchItem(DETAIL_INFO, ref.kaptCode) }.getOrNull() }, executor,
+        )
+        val item = fItem.join() ?: return null
+        val dtl = fDtl.join()
         // 주차는 상세(dtl)에 지상(kaptdPcnt)+지하(kaptdPcntu). bass 엔 보통 없음.
         val ground = dtl?.path("kaptdPcnt")?.asInt(0) ?: 0
         val under = dtl?.path("kaptdPcntu")?.asInt(0) ?: 0

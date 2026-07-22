@@ -12,6 +12,10 @@ import com.aixnative.residential.domain.NearbyGroup
 import com.aixnative.residential.domain.PresaleNotice
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ExecutorService
 
 /**
  * 무료 입지 리포트 오케스트레이터(Phase 1) - 주소 1건을 종합:
@@ -29,6 +33,7 @@ class LocationReportService(
     private val rtms: RtmsClient,
     private val ecos: EcosClient,
     private val cheongyak: CheongyakClient,
+    private val executor: ExecutorService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -43,28 +48,23 @@ class LocationReportService(
             return LocationReport(query, null, emptyList(), emptyList(), emptyList(), notes)
         }
 
-        // POI = 네이버 지역검색(카카오맵 비즈앱 대체). "지역명 + 카테고리" 키워드라 좌표 불필요 → juso 폴백에서도 동작.
+        // 4개 섹션(POI·단지·실거래·거시)을 동시 실행 - 순차 ~16콜(수십 초)을 섹션 병렬로 단축.
         val area = geo.areaLabel ?: query
-        val nearby = if (naver.isConfigured()) {
-            POI_QUERIES.mapNotNull { (label, term) ->
-                val places = naver.search(area, term, PER_GROUP)
-                if (places.isEmpty()) null else NearbyGroup(label, places)
-            }
-        } else {
-            emptyList()
-        }
-        if (nearby.isEmpty() && !naver.isConfigured()) {
-            notes += "주변 시설은 준비 중입니다(네이버 검색 API 연동 대기)."
-        }
+        val fPoi = CompletableFuture.supplyAsync({ buildPoi(area) }, executor)
+        val fComplex = CompletableFuture.supplyAsync({ kapt.complexesInDong(geo.bCode, COMPLEX_LIMIT) }, executor)
+        val fDeals = CompletableFuture.supplyAsync(
+            { rtms.aptTransactions(geo.sigunguCode, DEAL_YEARS).map { it.toDomain() } }, executor,
+        )
+        val fMacro = CompletableFuture.supplyAsync({ macro() }, executor)
 
-        val complexes = kapt.complexesInDong(geo.bCode, COMPLEX_LIMIT)
+        val nearby = fPoi.join()
+        val complexes = fComplex.join()
+        val deals = fDeals.join()
+        val macro = fMacro.join()
+
+        if (nearby.isEmpty() && !naver.isConfigured()) notes += "주변 시설은 준비 중입니다(네이버 검색 API 연동 대기)."
         if (complexes.isEmpty()) notes += "단지 스펙(K-apt)이 없습니다(data.go.kr 활용신청 확인)."
-
-        val deals = rtms.aptTransactions(geo.sigunguCode, DEAL_YEARS).map { it.toDomain() }
         if (deals.isEmpty()) notes += "최근 아파트 실거래가 없습니다(RTMS 아파트 API 활용신청 확인)."
-
-        val macro = runCatching { ecos.latestRates() }.getOrNull()
-            ?.let { MacroContext(baseRate = it.baseRate, gov10y = it.gov10y, asOf = it.asOf) }
 
         log.info(
             "[residential] 입지리포트 query='{}' geo={} nearby={}그룹 단지={} 실거래={}",
@@ -73,10 +73,37 @@ class LocationReportService(
         return LocationReport(query, geo, nearby, complexes, deals, notes, macro)
     }
 
-    /** 시군구코드(5) 기준 최근 [months]개월 아파트 매매 트렌드(평단가·건수). Phase 2 - 별도 지연 로딩용. */
-    fun priceTrend(sigunguCode: String, months: Int): List<MonthlyPrice> =
-        rtms.aptMonthlyTrend(sigunguCode, months.coerceIn(1, 24))
+    @Volatile
+    private var macroCache: Pair<Long, MacroContext?>? = null
+
+    /** 거시(ECOS 기준금리·국고채) - 월 단위로만 바뀌므로 [MACRO_TTL_MS] 캐시(전 리포트 공유, 매 호출 비용 제거). */
+    private fun macro(): MacroContext? {
+        val now = System.currentTimeMillis()
+        macroCache?.let { if (now - it.first < MACRO_TTL_MS) return it.second }
+        val m = runCatching { ecos.latestRates() }.getOrNull()
+            ?.let { MacroContext(it.baseRate, it.gov10y, it.asOf) }
+        macroCache = now to m
+        return m
+    }
+
+    /** 카테고리별 POI(네이버 지역검색) 동시 조회. 미설정 시 빈 리스트. */
+    private fun buildPoi(area: String): List<NearbyGroup> {
+        if (!naver.isConfigured()) return emptyList()
+        return executor.parMap(POI_QUERIES) { (label, term) ->
+            val places = naver.search(area, term, PER_GROUP)
+            if (places.isEmpty()) null else NearbyGroup(label, places)
+        }.filterNotNull()
+    }
+
+    /** 시군구코드(5) 기준 최근 [months]개월 아파트 매매 트렌드(평단가·건수) - 월별 동시 호출. */
+    fun priceTrend(sigunguCode: String, months: Int): List<MonthlyPrice> {
+        val m = months.coerceIn(1, 24)
+        val yms = (0 until m).map { LocalDate.now().minusMonths(it.toLong()).format(YM) }
+        return executor.parMap(yms) { rtms.aptMonthlyStat(sigunguCode, it) }
+            .filterNotNull()
+            .sortedBy { it.ym }
             .map { MonthlyPrice(it.ym, it.dealCount, it.avgPricePerPyeong) }
+    }
 
     /** 분양 동향 - 최근 청약 분양공고(지역 필터 선택). Phase 3 - 별도 지연 로딩용. */
     fun presaleNotices(region: String?, limit: Int): List<PresaleNotice> =
@@ -104,6 +131,8 @@ class LocationReportService(
         const val PER_GROUP = 5
         const val COMPLEX_LIMIT = 3
         const val DEAL_YEARS = 1
+        const val MACRO_TTL_MS = 6 * 60 * 60 * 1000L // 거시 캐시 6시간
+        val YM: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMM")
         // (라벨, 네이버 지역검색 키워드) - 입지 핵심 카테고리.
         val POI_QUERIES = listOf(
             "지하철" to "지하철역",
