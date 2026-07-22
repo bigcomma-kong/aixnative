@@ -100,13 +100,13 @@ mistral:
     max-tokens: ${MISTRAL_MAX_TOKENS:4096}
   priority: ${MISTRAL_PRIORITY:5}
 
-# Gemini 이미지 생성 - 신규 키만(env). 공감랭킹 스토리 장면 이미지 생성에 직접 사용(배경 운영비).
-# 미설정 시 장면은 타이포형으로 폴백(파이프라인은 정상). 키는 GCP 콘솔 aixnative 에서 신규 발급.
+# Gemini 이미지 생성(Nano Banana) - 신규 키만(env). 공감랭킹 스토리 장면 이미지 생성에 직접 사용(배경 운영비).
+# 미설정 시 장면은 타이포형으로 폴백(파이프라인은 정상). 키는 Google AI Studio(aistudio.google.com) 무료 발급(카드 불필요, 500장/일).
 gemini:
   api:
     key: ${GEMINI_API_KEY:}  # 🔑 값 → application-secret.yml
     url: ${GEMINI_API_URL:https://generativelanguage.googleapis.com/v1beta}
-    model: ${GEMINI_IMAGE_MODEL:gemini-2.0-flash-preview-image-generation}
+    model: ${GEMINI_IMAGE_MODEL:gemini-2.5-flash-image}
 
 # Pexels 무료 스톡사진 - 신규 키만(env). Gemini 그림 대안(무료·건당 0원). 장면 키워드로 실사진 검색.
 # 미설정 시 편집형 타이포 폴백. Gemini 가 설정돼 있으면 그쪽 우선(Order). 키는 pexels.com/api 무료 발급.

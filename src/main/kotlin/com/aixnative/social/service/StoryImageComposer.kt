@@ -1,6 +1,7 @@
 package com.aixnative.social.service
 
 import com.aixnative.social.domain.SocialPost
+import com.aixnative.social.domain.StoryScene
 import com.aixnative.social.domain.StoryScript
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
@@ -23,8 +24,8 @@ class StoryImageComposer(
 
     /** post.slidesJson(StoryScript)의 장면들에 생성 이미지를 채운다. 실패 장면은 null 유지. */
     fun compose(post: SocialPost) {
-        val engine = imageEngines.firstOrNull { it.isConfigured() }
-        if (engine == null) {
+        val engines = imageEngines.filter { it.isConfigured() }
+        if (engines.isEmpty()) {
             log.info("[social][story] 이미지 엔진 미설정 - 전 장면 타이포 폴백 id={}", post.id)
             return
         }
@@ -34,17 +35,27 @@ class StoryImageComposer(
         var made = 0
         val filled = script.scenes.map { scene ->
             if (!scene.imageUrl.isNullOrBlank() || !scene.imageB64.isNullOrBlank()) return@map scene
-            // 스톡 엔진: URL 우선(다운로드/base64 없음 → 렌더 시점 fetch, 빠름·경량). 생성형: base64 폴백.
-            val url = runCatching { engine.imageUrl(scene.imagePrompt) }.getOrNull()
-            if (url != null) {
-                made++
-                return@map scene.copy(imageUrl = url)
-            }
-            val b64 = runCatching { engine.generate(scene.imagePrompt) }.getOrNull()
-            if (b64 != null) made++
-            scene.copy(imageB64 = b64)
+            fillScene(scene).also { if (it !== scene) made++ }
         }
         post.slidesJson = objectMapper.writeValueAsString(script.copy(scenes = filled))
-        log.info("[social][story] 장면 이미지 생성 id={} {}/{} ({})", post.id, made, filled.size, engine.name)
+        log.info("[social][story] 장면 이미지 생성 id={} {}/{} (엔진 {})", post.id, made, filled.size, engines.joinToString(",") { it.name })
     }
+
+    /**
+     * 장면 1개를 [Order] 순 엔진으로 채운다 - 앞선 엔진(Gemini 생성) 실패 시 다음 엔진(스톡)으로 폴백.
+     * 엔진별: imageUrl(스톡, 렌더 시점 fetch·경량) 우선 → generate(생성형 base64). 전부 실패면 원본(null 유지 → 타이포).
+     */
+    private fun fillScene(scene: StoryScene): StoryScene {
+        for (engine in engines()) {
+            runCatching { engine.imageUrl(scene.imagePrompt) }.getOrNull()?.let {
+                return scene.copy(imageUrl = it)
+            }
+            runCatching { engine.generate(scene.imagePrompt) }.getOrNull()?.let {
+                return scene.copy(imageB64 = it)
+            }
+        }
+        return scene
+    }
+
+    private fun engines() = imageEngines.filter { it.isConfigured() }
 }

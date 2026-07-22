@@ -10,6 +10,14 @@ import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
+import java.awt.RenderingHints
+import java.awt.image.BufferedImage
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.util.Base64
+import javax.imageio.IIOImage
+import javax.imageio.ImageIO
+import javax.imageio.ImageWriteParam
 
 /**
  * Google Gemini 이미지 생성 엔진([ImageEngine]) - generativelanguage generateContent.
@@ -53,7 +61,7 @@ class GeminiImageClient(
                 .retrieve()
                 .body(String::class.java)
                 ?: return null
-            extractImage(response)
+            extractImage(response)?.let { downscaleToJpeg(it) }
         } catch (e: RestClientResponseException) {
             log.warn("[Gemini] 이미지 생성 HTTP {} - {}", e.statusCode, e.responseBodyAsString.take(300))
             null
@@ -76,5 +84,49 @@ class GeminiImageClient(
         }
         log.warn("[Gemini] 응답에 이미지 파트 없음")
         return null
+    }
+
+    /**
+     * 생성 PNG(base64, ~1MB) → 최대 [MAX_SIDE]px JPEG(base64, ~100KB)로 축소.
+     * 큰 data URI 4장을 satori/resvg 로 임베드 시 Cloud Run 1 vCPU 렌더가 수 분까지 느려지던 문제 방지
+     * (배경 위 자막 오버레이라 소프트해도 무방 - 속도 우선). 디코드/인코드 실패 시 원본 반환(graceful).
+     */
+    private fun downscaleToJpeg(b64: String): String = try {
+        val src = ImageIO.read(ByteArrayInputStream(Base64.getDecoder().decode(b64)))
+        if (src == null) {
+            b64
+        } else {
+            val scale = MAX_SIDE.toDouble() / maxOf(src.width, src.height)
+            val tw = if (scale >= 1.0) src.width else (src.width * scale).toInt().coerceAtLeast(1)
+            val th = if (scale >= 1.0) src.height else (src.height * scale).toInt().coerceAtLeast(1)
+            val dst = BufferedImage(tw, th, BufferedImage.TYPE_INT_RGB)
+            dst.createGraphics().apply {
+                setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+                drawImage(src, 0, 0, tw, th, null)
+                dispose()
+            }
+            val writer = ImageIO.getImageWritersByFormatName("jpeg").next()
+            val out = ByteArrayOutputStream()
+            ImageIO.createImageOutputStream(out).use { ios ->
+                writer.output = ios
+                val param = writer.defaultWriteParam.apply {
+                    if (canWriteCompressed()) {
+                        compressionMode = ImageWriteParam.MODE_EXPLICIT
+                        compressionQuality = JPEG_QUALITY
+                    }
+                }
+                writer.write(null, IIOImage(dst, null, null), param)
+            }
+            writer.dispose()
+            Base64.getEncoder().encodeToString(out.toByteArray())
+        }
+    } catch (e: Exception) {
+        log.warn("[Gemini] 이미지 축소 실패(원본 사용): {}", e.message)
+        b64
+    }
+
+    private companion object {
+        const val MAX_SIDE = 1024
+        const val JPEG_QUALITY = 0.82f
     }
 }

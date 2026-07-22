@@ -55,8 +55,8 @@ data class GeminiProperties(
     data class Api(
         val key: String = "",
         val url: String = "https://generativelanguage.googleapis.com/v1beta",
-        /** 이미지 생성 지원 모델. 필요 시 env(GEMINI_IMAGE_MODEL)로 교체. */
-        val model: String = "gemini-2.0-flash-preview-image-generation",
+        /** 이미지 생성 모델 = Nano Banana(Gemini 2.5 Flash Image, 무료 500장/일). 필요 시 env(GEMINI_IMAGE_MODEL)로 교체. */
+        val model: String = "gemini-2.5-flash-image",
     )
 }
 
