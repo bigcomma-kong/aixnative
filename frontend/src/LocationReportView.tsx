@@ -163,12 +163,15 @@ function ReportBody({
           <div className="locrep-grid">
             {nearby.map((g) => (
               <div className="card locrep-poi" key={g.label}>
-                <div className="locrep-poi-head">{g.label}</div>
+                <div className="locrep-poi-head">
+                  <span className="locrep-poi-cat">{g.label}</span>
+                  <span className="locrep-poi-count">{g.places.length}</span>
+                </div>
                 <ul className="locrep-poi-list">
                   {g.places.map((p, i) => (
                     <li key={`${g.label}-${i}`}>
                       <span className="locrep-poi-name">{p.name}</span>
-                      {p.distanceM != null && <span className="chip locrep-dist">{formatMeters(p.distanceM)}</span>}
+                      {p.distanceM != null && <span className="locrep-dist">{formatMeters(p.distanceM)}</span>}
                     </li>
                   ))}
                 </ul>
@@ -359,45 +362,100 @@ function formatApprovalDate(raw: string | null): string | null {
 }
 
 const LOCREP_CSS = `
-.locrep-search { display: flex; gap: 0.6rem; margin: 0 0 1.2rem; flex-wrap: wrap; }
+.locrep-search { display: flex; gap: 0.6rem; margin: 0 0 1.4rem; flex-wrap: wrap; }
 .locrep-input {
-  flex: 1; min-width: 240px; padding: 0.8rem 1rem; font-size: 1rem;
-  border: 1px solid var(--line, #d7dbe3); border-radius: 12px; background: var(--surface, #fff); color: inherit;
+  flex: 1; min-width: 240px; padding: 0.85rem 1.05rem; font-size: 1rem;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: inherit;
+  transition: border-color .15s ease, box-shadow .15s ease;
 }
-.locrep-input:focus { outline: 2px solid var(--accent, #2563eb); outline-offset: 1px; }
-.locrep-error { color: #c2410c; margin: 0 0 1rem; }
-.locrep-addr { margin: -0.4rem 0 1.4rem; }
+.locrep-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.locrep-error { color: var(--no, #c2410c); margin: 0 0 1rem; }
+.locrep-addr { margin: -0.4rem 0 1.4rem; overflow-wrap: anywhere; }
 .locrep-macro { margin: 0 0 0.5rem; font-size: 0.82rem; }
 .locrep-loading { padding: 1rem 0; opacity: 0.8; }
-.locrep-section { margin: 0 0 1.8rem; }
-.locrep-h2 { font-size: 1.05rem; font-weight: 700; margin: 0 0 0.8rem; }
-.locrep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.9rem; }
-.locrep-poi { padding: 1rem 1.1rem; }
-.locrep-poi-head { font-weight: 700; margin-bottom: 0.55rem; }
-.locrep-poi-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
-.locrep-poi-list li { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.9rem; }
-.locrep-poi-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.locrep-dist { flex: none; font-size: 0.72rem; }
-.locrep-complex { padding: 1rem 1.1rem; }
-.locrep-complex-name { font-weight: 700; margin-bottom: 0.6rem; }
-.locrep-presale { padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.5rem; }
-.locrep-presale-top { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
-.locrep-presale-name { font-weight: 700; line-height: 1.3; }
-.locrep-presale-addr { font-size: 0.82rem; }
-.locrep-presale-link { align-self: flex-start; margin-top: 0.2rem; font-size: 0.86rem; }
-.locrep-brief { margin-top: 1.1rem; }
-.locrep-brief-box { padding: 1.1rem 1.2rem; margin-top: 0.6rem; border-left: 3px solid var(--accent, #2d3aa8); }
-.locrep-brief-title { font-weight: 700; font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--accent, #2d3aa8); }
-.locrep-brief-text { margin: 0; line-height: 1.65; white-space: pre-line; }
-.locrep-spec { margin: 0; display: grid; gap: 0.35rem; }
-.locrep-spec-row { display: flex; justify-content: space-between; gap: 0.6rem; font-size: 0.9rem; }
-.locrep-spec-row dt { color: var(--ink-soft, #6b7280); margin: 0; }
-.locrep-spec-row dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
-.locrep-table-wrap { overflow-x: auto; }
+
+.locrep-section { margin: 0 0 2rem; }
+.locrep-h2 {
+  display: flex; align-items: baseline; gap: 0.5rem;
+  font-size: 1.08rem; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 0.9rem;
+}
+.locrep-h2::before {
+  content: ""; flex: none; width: 4px; height: 1.05em; border-radius: 2px;
+  background: var(--accent); transform: translateY(0.14em);
+}
+.locrep-h2 .muted { font-weight: 500; }
+
+/* 카드 그리드 - 그리드 자식에 min-width:0 을 줘야 긴 내용이 트랙을 밀지 않는다(오버플로 방지) */
+.locrep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }
+.locrep-grid > .card { min-width: 0; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+.locrep-grid > .card:hover {
+  transform: translateY(-2px); border-color: var(--line-strong);
+  box-shadow: 0 10px 26px -14px oklch(45% 0.03 266 / 0.35);
+}
+
+/* 주변 시설 */
+.locrep-poi { padding: 1rem 1.15rem; }
+.locrep-poi-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  margin-bottom: 0.65rem; padding-bottom: 0.55rem; border-bottom: 1px solid var(--line);
+}
+.locrep-poi-cat { font-weight: 700; font-size: 0.98rem; color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
+.locrep-poi-count {
+  flex: none; font-size: 0.72rem; font-weight: 700; color: var(--accent);
+  background: var(--accent-tint); border-radius: 999px; padding: 0.12rem 0.5rem; min-width: 1.5rem; text-align: center;
+}
+.locrep-poi-list { list-style: none; margin: 0; padding: 0; }
+.locrep-poi-list li {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+  font-size: 0.9rem; padding: 0.36rem 0;
+}
+.locrep-poi-list li + li { border-top: 1px dashed var(--line); }
+/* flex 자식이 줄어들 수 있어야(min-width:0) ellipsis 가 작동해 카드 밖으로 안 넘친다 */
+.locrep-poi-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.locrep-dist {
+  flex: none; font-size: 0.72rem; font-weight: 600; color: var(--ink-soft);
+  background: var(--surface-sunken); border: 1px solid var(--line); border-radius: 999px; padding: 0.14rem 0.5rem;
+}
+
+/* 인근 단지 */
+.locrep-complex { padding: 1rem 1.15rem; }
+.locrep-complex-name {
+  font-weight: 700; font-size: 1rem; line-height: 1.35; margin-bottom: 0.7rem;
+  overflow-wrap: break-word; word-break: keep-all;
+}
+
+/* 분양 동향 */
+.locrep-presale { padding: 1rem 1.15rem; display: flex; flex-direction: column; gap: 0.55rem; }
+.locrep-presale-top { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+.locrep-presale-name { font-weight: 700; font-size: 1rem; line-height: 1.35; overflow-wrap: break-word; word-break: keep-all; }
+.locrep-presale-addr { font-size: 0.82rem; overflow-wrap: anywhere; }
+.locrep-presale-link { align-self: flex-start; margin-top: 0.1rem; font-size: 0.86rem; }
+
+/* spec 키-값(단지·분양 공통) - dt 고정, dd 는 줄어들며 우측 정렬, 긴 값은 줄바꿈(오버플로 방지) */
+.locrep-spec { margin: 0; }
+.locrep-spec-row { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; font-size: 0.9rem; padding: 0.4rem 0; }
+.locrep-spec-row + .locrep-spec-row { border-top: 1px solid var(--line); }
+.locrep-spec-row dt { flex: 0 0 auto; color: var(--ink-soft); margin: 0; }
+.locrep-spec-row dd {
+  flex: 1 1 auto; min-width: 0; margin: 0; text-align: right; font-weight: 600;
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere; word-break: keep-all;
+}
+
+/* AI 브리핑 */
+.locrep-brief { margin-top: 1.2rem; }
+.locrep-brief-box { padding: 1.15rem 1.25rem; margin-top: 0.7rem; border-left: 3px solid var(--accent); background: var(--accent-tint); }
+.locrep-brief-text { margin: 0; line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere; word-break: keep-all; }
+.locrep-brief-saved { margin: 0.65rem 0 0; font-size: 0.78rem; }
+
+/* 실거래 표 */
+.locrep-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r); }
 .locrep-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-.locrep-table th, .locrep-table td { padding: 0.6rem 0.7rem; text-align: left; border-bottom: 1px solid var(--line, #e5e7eb); white-space: nowrap; }
-.locrep-table th { font-weight: 600; color: var(--ink-soft, #6b7280); }
-.locrep-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.locrep-table th, .locrep-table td { padding: 0.65rem 0.85rem; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.locrep-table thead th { font-weight: 600; color: var(--ink-soft); background: var(--surface-sunken); }
+.locrep-table tbody tr:last-child td { border-bottom: none; }
+.locrep-table tbody tr:hover td { background: var(--surface-sunken); }
+.locrep-table .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+
 .locrep-notes { margin: 1rem 0 0; padding-left: 1.1rem; font-size: 0.82rem; }
-.locrep-cta { margin-top: 1.6rem; }
+.locrep-cta { margin-top: 1.8rem; }
 `
