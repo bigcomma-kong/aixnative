@@ -100,8 +100,15 @@ mistral:
     max-tokens: ${MISTRAL_MAX_TOKENS:4096}
   priority: ${MISTRAL_PRIORITY:5}
 
-# Gemini 이미지 생성(Nano Banana) - 신규 키만(env). 공감랭킹 스토리 장면 이미지 생성에 직접 사용(배경 운영비).
-# 미설정 시 장면은 타이포형으로 폴백(파이프라인은 정상). 키는 Google AI Studio(aistudio.google.com) 무료 발급(카드 불필요, 500장/일).
+# Pollinations 무료 AI 이미지 생성(키 불필요·건당 0원) - 공감랭킹 스토리 장면 배경 생성의 기본 경로.
+# Gemini 이미지는 API 무료 할당량이 0(빌링 필요)이라, 진짜 무료 생성형은 이쪽. 실패 시 스톡→타이포로 장면별 폴백.
+pollinations:
+  enabled: ${POLLINATIONS_ENABLED:true}
+  url: ${POLLINATIONS_URL:https://image.pollinations.ai/prompt}
+  model: ${POLLINATIONS_MODEL:flux}
+
+# Gemini 이미지 생성(Nano Banana) - 신규 키만(env). ⚠️ API 무료 할당량 0(2026-07 확인) → 빌링(유료, 장당 ~$0.04) 켜야 동작.
+# 무료로 쓰려면 pollinations 사용(위). 키 설정 + 빌링 시 Pollinations 다음 우선순위로 사용됨.
 gemini:
   api:
     key: ${GEMINI_API_KEY:}  # 🔑 값 → application-secret.yml

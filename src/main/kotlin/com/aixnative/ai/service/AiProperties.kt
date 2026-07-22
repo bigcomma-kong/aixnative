@@ -76,6 +76,19 @@ data class PexelsProperties(
 }
 
 /**
+ * Pollinations 무료 AI 이미지 생성 config — **키 불필요·건당 0원**. 장면 프롬프트로 AI 그림을 생성해 배경으로.
+ * Gemini(유료 빌링 필요)와 달리 진짜 무료라 생성형 그림의 기본 경로. 스톡(Pixabay/Pexels)보다 우선(Order).
+ * 생성 실패/느림 시 [com.aixnative.social.service.StoryImageComposer] 가 다음 엔진(스톡)으로 장면별 폴백.
+ * model: flux(품질)·turbo(속도) 등. enabled=false 로 끄면 스톡/타이포로 폴백.
+ */
+@ConfigurationProperties(prefix = "pollinations")
+data class PollinationsProperties(
+    val enabled: Boolean = true,
+    val url: String = "https://image.pollinations.ai/prompt",
+    val model: String = "flux",
+)
+
+/**
  * Pixabay 무료 스톡사진 config — 신규 키만(application-secret.yml). Pexels 와 함께 스톡 대안,
  * 키는 계정 페이지에 바로 노출돼 발급이 수월. 키 미설정 시 isConfigured false → 편집형 타이포 폴백.
  */

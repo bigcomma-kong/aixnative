@@ -26,8 +26,8 @@ import javax.imageio.ImageWriteParam
  * 키 미설정/실패 시 null → 호출부([com.aixnative.social.service.StoryImageComposer])가 타이포 폴백.
  * (키는 신규 발급, MASTERN 값 복사 금지.)
  *
- * [StoryImageComposer] 는 설정된 엔진 중 [Order] 가 앞선 것을 쓴다 - Gemini(10)가 Pexels 스톡(20)보다
- * 우선(맞춤 그림 > 일반 스톡). 둘 다 미설정이면 편집형 타이포 폴백.
+ * [StoryImageComposer] 는 설정된 엔진을 [Order] 순으로 장면별 폴백 - Pollinations(5, 무료 생성) > Gemini(10, 유료 빌링 시)
+ * > 스톡(20/30). Gemini 는 API 무료 할당량이 0이라 빌링을 켠 경우에만 성공(미설정/429 시 다음 엔진 폴백).
  */
 @Component
 @Order(10)
