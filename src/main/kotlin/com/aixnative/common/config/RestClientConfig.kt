@@ -39,6 +39,20 @@ class RestClientConfig {
     }
 
     /**
+     * Pollinations 무료 AI 이미지 생성 전용 - 지연 편차가 커(1~48s) 한 장이 오래 붙잡지 않도록
+     * read 20s 로 제한(초과 시 [com.aixnative.ai.service.PollinationsImageClient] 가 재시도 후 다음 엔진으로 폴백).
+     * 동기 재생성 엔드포인트가 Cloud Run 300s 요청 상한을 넘지 않도록 장면당 최악(재시도 포함)을 bound.
+     */
+    @Bean
+    fun pollinationsRestClient(builder: RestClient.Builder): RestClient {
+        val factory = SimpleClientHttpRequestFactory().apply {
+            setConnectTimeout(Duration.ofSeconds(8))
+            setReadTimeout(Duration.ofSeconds(20))
+        }
+        return builder.requestFactory(factory).build()
+    }
+
+    /**
      * Short-timeout client for public market-data APIs (ECOS·R-ONE·RTMS·Kakao).
      * These must respond quickly; a slow source is skipped (graceful degrade) rather
      * than parking the analysis request.

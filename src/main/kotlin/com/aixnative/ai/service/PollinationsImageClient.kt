@@ -25,7 +25,7 @@ import kotlin.math.abs
 @Component
 @Order(5)
 class PollinationsImageClient(
-    @Qualifier("imageGenRestClient") private val rest: RestClient,
+    @Qualifier("pollinationsRestClient") private val rest: RestClient,
     private val props: PollinationsProperties,
 ) : ImageEngine {
 
@@ -35,6 +35,10 @@ class PollinationsImageClient(
 
     override fun isConfigured(): Boolean = props.enabled
 
+    /**
+     * 프롬프트 → AI 이미지(base64). 무료(익명) 티어는 지연 편차·버스트 429 가 잦아
+     * 429/5xx/타임아웃은 백오프 후 [MAX_RETRIES]회 재시도(그 외 4xx 는 즉시 중단). 전부 실패 시 null(다음 엔진 폴백).
+     */
     override fun generate(prompt: String, aspectRatio: String): String? {
         if (!isConfigured()) return null
         val (w, h) = dims(aspectRatio)
@@ -42,17 +46,24 @@ class PollinationsImageClient(
         val seed = abs(prompt.hashCode()) % 1_000_000
         val uri = "${props.url}/${enc(styled)}" +
             "?width=$w&height=$h&model=${props.model}&nologo=true&seed=$seed"
-        return try {
-            val bytes = rest.get().uri(uri).retrieve().body(ByteArray::class.java) ?: return null
-            if (!isImage(bytes)) {
-                log.info("[Pollinations] 이미지 아님/무결과(size={})", bytes.size); return null
+
+        var lastErr: String? = null
+        for (attempt in 0..MAX_RETRIES) {
+            try {
+                val bytes = rest.get().uri(uri).retrieve().body(ByteArray::class.java)
+                if (bytes != null && isImage(bytes)) return Base64.getEncoder().encodeToString(bytes)
+                lastErr = "이미지 아님/무결과(size=${bytes?.size ?: 0})"
+            } catch (e: RestClientResponseException) {
+                lastErr = "HTTP ${e.statusCode}"
+                val retryable = e.statusCode.value() == 429 || e.statusCode.is5xxServerError
+                if (!retryable) { log.warn("[Pollinations] 생성 {} - 재시도 안 함", lastErr); return null }
+            } catch (e: Exception) {
+                lastErr = e.message // 타임아웃·연결 등
             }
-            Base64.getEncoder().encodeToString(bytes)
-        } catch (e: RestClientResponseException) {
-            log.warn("[Pollinations] 생성 HTTP {} - {}", e.statusCode, e.responseBodyAsString.take(200)); null
-        } catch (e: Exception) {
-            log.warn("[Pollinations] 생성 실패: {}", e.message); null
+            if (attempt < MAX_RETRIES) Thread.sleep(RETRY_BACKOFF_MS * (attempt + 1))
         }
+        log.warn("[Pollinations] 생성 실패({}회 시도): {}", MAX_RETRIES + 1, lastErr)
+        return null
     }
 
     /** "4:5" 등 종횡비 → 너비 [BASE] 기준 픽셀. 세로는 [MAX_SIDE]로 상한(과대 이미지·지연 방지). */
@@ -78,5 +89,7 @@ class PollinationsImageClient(
         const val MAX_SIDE = 1536
         const val MIN_BYTES = 1024
         const val MAX_BYTES = 8 * 1024 * 1024
+        const val MAX_RETRIES = 2
+        const val RETRY_BACKOFF_MS = 1500L
     }
 }

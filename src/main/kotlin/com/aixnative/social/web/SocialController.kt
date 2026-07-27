@@ -56,6 +56,10 @@ class SocialAdminController(
     @PostMapping("/{id}/publish")
     fun publish(@PathVariable id: Long): ApiResponse<SocialPostView> = ApiResponse.ok(service.publish(id))
 
+    /** STORY 게시물 이미지 재생성(관리자) - 새 이미지 엔진 결과를 즉시 확인·비교용. 응답까지 수 초~분 소요 가능. */
+    @PostMapping("/{id}/regenerate-images")
+    fun regenerateImages(@PathVariable id: Long): ApiResponse<SocialPostView> = ApiResponse.ok(service.regenerateImages(id))
+
     @DeleteMapping("/{id}")
     fun delete(@PathVariable id: Long): ApiResponse<Map<String, Boolean>> {
         service.delete(id)

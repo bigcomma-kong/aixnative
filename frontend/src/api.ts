@@ -1354,6 +1354,10 @@ export const api = {
   adminSocialPublish: (id: number): Promise<SocialPost> =>
     request(`/api/admin/social/${id}/publish`, { method: 'POST' }),
 
+  /** STORY 이미지 재생성(새 AI 엔진 결과 즉시 확인용). 응답까지 수 초~분 소요 가능. */
+  adminSocialRegenerateImages: (id: number): Promise<SocialPost> =>
+    request(`/api/admin/social/${id}/regenerate-images`, { method: 'POST' }),
+
   /** 삭제. */
   adminSocialDelete: (id: number): Promise<{ deleted: boolean }> =>
     request(`/api/admin/social/${id}`, { method: 'DELETE' }),

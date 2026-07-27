@@ -205,6 +205,25 @@ function SocialPanel() {
     finally { setBusyId(null) }
   }
 
+  /** STORY 이미지 재생성 - 수 초~분 소요. 완료 후 같은 URL 이라 캐시버스터(?r=)로 새 이미지 강제 로드. */
+  async function regen(id: number) {
+    setBusyId(id); setError(null); setMsg(null)
+    try {
+      const updated = await api.adminSocialRegenerateImages(id)
+      const bust = `?r=${Date.now()}`
+      replace({
+        ...updated,
+        imageUrl: updated.imageUrl ? updated.imageUrl + bust : updated.imageUrl,
+        imageUrls: updated.imageUrls.map((u) => u + bust),
+      })
+      setMsg('이미지를 재생성했습니다.')
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.message : '이미지 재생성 실패')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   async function remove(id: number) {
     if (!window.confirm('이 게시물을 삭제할까요?')) return
     setBusyId(id); setError(null)
@@ -287,6 +306,16 @@ function SocialPanel() {
                       onClick={() => act(p.id, () => api.adminSocialPublish(p.id), '게시')}
                     >
                       {p.canPublish ? '게시' : '게시(계정 미연동)'}
+                    </button>
+                  )}
+                  {p.kind === 'STORY' && p.status !== 'PUBLISHED' && (
+                    <button
+                      className="btn-ghost btn-xs"
+                      disabled={busy}
+                      title="장면 이미지를 새 AI 엔진으로 다시 생성(수 초~분 소요)"
+                      onClick={() => regen(p.id)}
+                    >
+                      {busy ? '재생성 중…' : '이미지 재생성'}
                     </button>
                   )}
                   {p.status !== 'REJECTED' && p.status !== 'PUBLISHED' && (

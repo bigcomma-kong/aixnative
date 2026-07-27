@@ -4,8 +4,10 @@ import com.aixnative.social.domain.RankSlide
 import com.aixnative.social.domain.SocialIngestReport
 import com.aixnative.social.domain.SocialMediaType
 import com.aixnative.social.domain.SocialPost
+import com.aixnative.social.domain.SocialPostKind
 import com.aixnative.social.domain.SocialPostStatus
 import com.aixnative.social.domain.SourceRef
+import com.aixnative.social.domain.StoryScript
 import com.aixnative.social.repository.SocialPostRepository
 import com.aixnative.social.web.SocialPostView
 import com.fasterxml.jackson.core.type.TypeReference
@@ -212,6 +214,33 @@ class SocialPostService(
             repository.save(post)
             throw e
         }
+    }
+
+    /**
+     * STORY 게시물의 장면 이미지를 지우고 다시 생성·렌더한다(관리자) - 새 이미지 엔진/프롬프트 결과를
+     * 새 소재(글) 없이 즉시 확인·비교하기 위함. 재생성 후 상태는 PENDING(재검토).
+     *
+     * ⚠ 의도적 **비트랜잭션** - compose 가 외부 이미지 API 로 수 초~분 걸려 DB 커넥션을 오래 잡지 않도록
+     * (ingest 와 동일 방침). 각 저장은 개별 커밋.
+     */
+    fun regenerateImages(id: Long): SocialPostView {
+        val post = repository.findById(id).orElseThrow { IllegalArgumentException("게시물을 찾을 수 없습니다: $id") }
+        require(post.kind == SocialPostKind.STORY) { "스토리(STORY) 게시물만 이미지 재생성이 가능합니다." }
+        clearSceneImages(post) // 기존 이미지 제거 → compose 가 전 장면 재생성(채워진 장면은 건너뛰므로)
+        repository.save(post)
+        imageComposer.compose(post)
+        repository.save(post)
+        if (!renderImage(post)) throw IllegalStateException("이미지 렌더에 실패했습니다.")
+        return repository.findById(id).orElseThrow { IllegalStateException("재생성 후 게시물 로드 실패: $id") }.toView()
+    }
+
+    /** slides_json(StoryScript)의 각 장면 이미지(imageUrl/imageB64)를 모두 비운다(재생성 준비). */
+    private fun clearSceneImages(post: SocialPost) {
+        val json = post.slidesJson ?: return
+        val script = runCatching { objectMapper.readValue(json, StoryScript::class.java) }.getOrNull() ?: return
+        post.slidesJson = objectMapper.writeValueAsString(
+            script.copy(scenes = script.scenes.map { it.copy(imageUrl = null, imageB64 = null) }),
+        )
     }
 
     @Transactional
