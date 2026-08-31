@@ -115,9 +115,12 @@ class LocationReportService(
     private fun geocode(query: String): GeoPoint? {
         // ① 정식 주소면 juso 가 바로 법정동코드 반환.
         juso.resolveParcel(query)?.let {
-            return GeoPoint(
-                null, null, it.admCd, it.roadAddr.ifBlank { null }, null,
-                areaLabel = query, region = shortSido(it.roadAddr),
+            return withCoords(
+                GeoPoint(
+                    null, null, it.admCd, it.roadAddr.ifBlank { null }, null,
+                    areaLabel = query, region = shortSido(it.roadAddr),
+                ),
+                it.roadAddr.ifBlank { null } ?: query,
             )
         }
         // ② 아파트명 등 → 네이버로 주소 해석 후 juso 재시도.
@@ -126,10 +129,31 @@ class LocationReportService(
         val area = areaLabelOf(place.jibunAddress ?: place.roadAddress) ?: query
         val region = shortSido(place.jibunAddress ?: place.roadAddress)
         juso.resolveParcel(addr)?.let {
-            return GeoPoint(null, null, it.admCd, place.roadAddress, place.jibunAddress, areaLabel = area, region = region)
+            return withCoords(
+                GeoPoint(null, null, it.admCd, place.roadAddress, place.jibunAddress, areaLabel = area, region = region),
+                addr ?: query,
+            )
         }
         // juso 도 실패: 코드 없이(bCode 빈값 → 단지·실거래 생략) 주소·POI 만.
-        return GeoPoint(null, null, "", place.roadAddress, place.jibunAddress, areaLabel = area, region = region)
+        return withCoords(
+            GeoPoint(null, null, "", place.roadAddress, place.jibunAddress, areaLabel = area, region = region),
+            addr ?: query,
+        )
+    }
+
+    /**
+     * 좌표 보강 - juso/네이버는 법정동코드와 주소는 주지만 **경위도를 주지 않는다**.
+     * 지도를 그리려면 좌표가 필요하므로 카카오 주소검색으로 한 번 더 물어 채운다.
+     *
+     * 역할을 나눈 것이 요점이다: 법정동코드(단지·실거래 조회의 기준)는 juso 가 계속 권위를 갖고,
+     * 카카오는 **좌표만** 채운다. 카카오가 실패하면 좌표만 비고 리포트 본문은 그대로 나온다
+     * (화면은 좌표가 없으면 지도를 생략한다).
+     */
+    private fun withCoords(geo: GeoPoint, addressForLookup: String): GeoPoint {
+        if (geo.hasCoords) return geo
+        val hit = kakao.geocode(addressForLookup) ?: return geo
+        if (hit.longitude == null || hit.latitude == null) return geo
+        return geo.copy(longitude = hit.longitude, latitude = hit.latitude)
     }
 
     private fun RtmsClient.AptTrade.toDomain() = AptDeal(
