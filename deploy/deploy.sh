@@ -36,6 +36,9 @@ JWT_SECRET="${JWT_SECRET:-}"
 MARKETFEED_INGEST_TOKEN="${MARKETFEED_INGEST_TOKEN:-}"
 # 자동수집 크론(서울 시간). 기본 평일 06:30. Cloud Scheduler 잡으로 등록.
 INGEST_CRON="${INGEST_CRON:-30 6 * * 1-5}"
+# 공감랭킹 소셜 수집 트리거 토큰·크론. 시장 데이터와 별개 토큰/잡. 기본 매일 07:10.
+SOCIAL_INGEST_TOKEN="${SOCIAL_INGEST_TOKEN:-}"
+SOCIAL_CRON="${SOCIAL_CRON:-10 7 * * *}"
 
 # SMTP(비-시크릿) — 호스트/계정/발신은 env, 비번(spring.mail.password)은 application-secret.yml 로 구워짐.
 MAIL_HOST="${MAIL_HOST:-}"
@@ -91,12 +94,14 @@ put_secret () {  # $1=name $2=value(빈 값이면 skip)
     gcloud secrets create "$name" --replication-policy=automatic
   printf '%s' "$val" | gcloud secrets versions add "$name" --data-file=-
 }
-# 자동수집 토큰 자동 생성(미지정 시) — 스케줄러와 앱이 공유.
+# 자동수집 토큰 자동 생성(미지정 시) — 스케줄러와 앱이 공유. 시장·소셜은 별개 토큰.
 [ -z "$MARKETFEED_INGEST_TOKEN" ] && MARKETFEED_INGEST_TOKEN="$(openssl rand -hex 24)"
+[ -z "$SOCIAL_INGEST_TOKEN" ] && SOCIAL_INGEST_TOKEN="$(openssl rand -hex 24)"
 # 자동생성 인프라 시크릿만 Secret Manager 로. 사용자 API 키는 이미지에 구워짐(application-secret.yml).
 put_secret DB_PASSWORD             "$DB_PASSWORD"
 put_secret JWT_SECRET              "$JWT_SECRET"
 put_secret MARKETFEED_INGEST_TOKEN "$MARKETFEED_INGEST_TOKEN"
+put_secret SOCIAL_INGEST_TOKEN     "$SOCIAL_INGEST_TOKEN"
 
 ### ── 6. Cloud Run 서비스 계정 권한 (Cloud SQL + 시크릿) ──────────
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
@@ -113,6 +118,7 @@ DB_URL="jdbc:postgresql:///${DB_NAME}?cloudSqlInstance=${ICN}&socketFactory=com.
 # 자동생성 인프라 시크릿만 Cloud Run 에 매핑. 사용자 API 키는 이미지에 구워짐(secret 프로필로 로드).
 SECRET_MAP="DB_PASSWORD=DB_PASSWORD:latest,JWT_SECRET=JWT_SECRET:latest"
 gcloud secrets describe MARKETFEED_INGEST_TOKEN >/dev/null 2>&1 && SECRET_MAP="${SECRET_MAP},MARKETFEED_INGEST_TOKEN=MARKETFEED_INGEST_TOKEN:latest"
+gcloud secrets describe SOCIAL_INGEST_TOKEN >/dev/null 2>&1 && SECRET_MAP="${SECRET_MAP},SOCIAL_INGEST_TOKEN=SOCIAL_INGEST_TOKEN:latest"
 
 # env-vars 조립 ('|' 구분자 ^|^ — ALLOWED_ORIGINS 의 콤마 + MAIL_FROM 의 '@' 회피). 메일 호스트가 주어졌을 때만 SMTP env 추가.
 ENV_VARS="SPRING_PROFILES_ACTIVE=postgres,secret|DB_URL=${DB_URL}|DB_USER=${DB_USER}|ALLOWED_ORIGINS=${ALLOWED_ORIGINS}|APP_BASE_URL=${APP_BASE_URL}|MAIL_FROM=${MAIL_FROM}|ADMIN_EMAIL=${ADMIN_EMAIL}"
@@ -126,7 +132,12 @@ gcloud run deploy "$SERVICE" \
   --add-cloudsql-instances="$ICN" \
   --set-env-vars="^|^${ENV_VARS}" \
   --set-secrets="$SECRET_MAP" \
-  --cpu=1 --memory=1Gi --min-instances=0 --max-instances=4 --port=8080
+  --cpu=1 --memory=2Gi --min-instances=0 --max-instances=4 --port=8080 \
+  --no-cpu-throttling
+# --no-cpu-throttling: 응답을 반환한 뒤에도 백그라운드 작업(소셜 수집·이미지 재생성, AsyncIngestRunner)이
+#   완주하려면 CPU 상시 할당이 필요하다. 기본(요청 중에만 CPU)이면 응답 직후 워커가 얼어붙는다.
+# --memory=2Gi: 문서 업로드(PDFBox/POI)는 원본의 3~8배 힙을 쓴다. 1Gi(힙 약 768MB)에서는 동시 처리 시
+#   OOMKilled 위험. 2Gi 로 여유를 두되 동시 추출은 서비스단 세마포어로 별도 제한한다.
 
 URL="$(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"
 
@@ -149,9 +160,29 @@ else
     --attempt-deadline=300s >/dev/null
 fi
 
+### ── 8b. Cloud Scheduler (공감랭킹 소셜 자동 수집 트리거) ──────────
+# 시장 데이터와 같은 방식. 토큰은 별개(SOCIAL_INGEST_TOKEN)라 한쪽이 새도 다른 쪽은 안전하다.
+# 수집 자체는 앱이 비동기로 돌리고 즉시 200 을 반환하므로 attempt-deadline 은 짧아도 된다.
+SOCIAL_JOB="${SOCIAL_JOB:-aixnative-social-post}"
+SOCIAL_URI="${URL}/api/ingest/social-post"
+if gcloud scheduler jobs describe "$SOCIAL_JOB" --location="$REGION" >/dev/null 2>&1; then
+  gcloud scheduler jobs update http "$SOCIAL_JOB" --location="$REGION" \
+    --schedule="$SOCIAL_CRON" --time-zone="Asia/Seoul" \
+    --uri="$SOCIAL_URI" --http-method=POST \
+    --update-headers="X-Ingest-Token=${SOCIAL_INGEST_TOKEN}" \
+    --attempt-deadline=60s >/dev/null
+else
+  gcloud scheduler jobs create http "$SOCIAL_JOB" --location="$REGION" \
+    --schedule="$SOCIAL_CRON" --time-zone="Asia/Seoul" \
+    --uri="$SOCIAL_URI" --http-method=POST \
+    --headers="X-Ingest-Token=${SOCIAL_INGEST_TOKEN}" \
+    --attempt-deadline=60s >/dev/null
+fi
+
 echo ""
 echo "✅ 배포 완료: $URL"
 echo "→ 첫 관리자: $URL 접속 후 admin@aixnative.com 으로 회원가입하면 자동 ADMIN 권한."
 echo "→ 시장 자동수집: '${SCHED_JOB}' 스케줄러 등록(${INGEST_CRON}, Asia/Seoul). 관리자 '지금 수집'으로 즉시 실행 가능."
+echo "→ 공감랭킹 수집: '${SOCIAL_JOB}' 스케줄러 등록(${SOCIAL_CRON}, Asia/Seoul). 승인 워크플로우는 관리자 콘솔에서."
 echo "→ API 키(Claude·Mistral·Toss·소셜·시장데이터)는 application-secret.yml 값으로 이미지에 반영됨. 키 바꾸려면 그 파일 수정 후 재배포."
 echo "→ 도메인 연결: deploy/README.md 의 '도메인 매핑' 참고."

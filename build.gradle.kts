@@ -35,8 +35,15 @@ dependencies {
 	implementation("org.flywaydb:flyway-core")
 	implementation("org.flywaydb:flyway-database-postgresql")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
-	// 커뮤니티 정적 HTML 파싱(공식 RSS 부재 소스). JS 렌더 사이트는 막히면 graceful.
+	// 커뮤니티 정적 HTML 파싱(공식 RSS 부재 소스) + 업로드 HTML 문서 텍스트 추출.
 	implementation("org.jsoup:jsoup:1.18.3")
+	// 문서 업로드 → 텍스트 추출(com.aixnative.document). IM·계약서·공고문이 전부 이 포맷들로 온다.
+	// PDFBox 3.x: Loader.loadPDF(byte[]) + PDFTextStripper. POI: docx/xlsx/pptx(OOXML)만 — 구포맷
+	// (.doc/.xls/.ppt)은 poi-scratchpad 가 필요한데 이미지 크기 대비 수요가 낮아 제외했다.
+	implementation("org.apache.pdfbox:pdfbox:3.0.3")
+	implementation("org.apache.poi:poi-ooxml:5.3.0")
+	// 한글(.hwp, HWP 5.0 이진) — 국내 공매·매각·입찰 공고문 상당수가 이 포맷이다.
+	implementation("kr.dogfoot:hwplib:1.1.10")
 	// JWT (stateless auth) — jjwt 0.12.x
 	implementation("io.jsonwebtoken:jjwt-api:0.12.6")
 	runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")

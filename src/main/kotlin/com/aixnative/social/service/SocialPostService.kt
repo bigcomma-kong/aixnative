@@ -217,20 +217,43 @@ class SocialPostService(
     }
 
     /**
+     * 이미지 재생성이 가능한 상태인지 검증한다(비동기 시작 **전** 호출 - 잘못된 요청을 즉시 400 으로 돌려주고,
+     * 백그라운드에 못 도는 작업을 쌓지 않기 위함).
+     *
+     * 게시 완료(PUBLISHED)분은 막는다 - 재생성은 렌더 후 상태를 PENDING 으로 되돌리므로, 이미 플랫폼에
+     * 나간 글의 게시 이력을 조용히 승인 대기로 되감는 셈이 된다.
+     */
+    fun assertRegenerable(id: Long) {
+        val post = repository.findById(id).orElseThrow { IllegalArgumentException("게시물을 찾을 수 없습니다: $id") }
+        require(post.kind == SocialPostKind.STORY) { "스토리(STORY) 게시물만 이미지 재생성이 가능합니다." }
+        require(post.status != SocialPostStatus.PUBLISHED) { "이미 게시된 글은 이미지를 재생성할 수 없습니다." }
+    }
+
+    /**
      * STORY 게시물의 장면 이미지를 지우고 다시 생성·렌더한다(관리자) - 새 이미지 엔진/프롬프트 결과를
      * 새 소재(글) 없이 즉시 확인·비교하기 위함. 재생성 후 상태는 PENDING(재검토).
      *
      * ⚠ 의도적 **비트랜잭션** - compose 가 외부 이미지 API 로 수 초~분 걸려 DB 커넥션을 오래 잡지 않도록
      * (ingest 와 동일 방침). 각 저장은 개별 커밋.
+     *
+     * ⚠ **[AsyncIngestRunner] 백그라운드에서만 호출한다.** 장면당 최악 60초대(엔진 재시도 포함)에
+     * Node 렌더까지 더해지면 Cloud Run 300s 요청 상한을 넘을 수 있다. 실패는 예외 대신 post.error 에
+     * 남겨 관리자 화면에서 이유를 볼 수 있게 한다.
      */
     fun regenerateImages(id: Long): SocialPostView {
         val post = repository.findById(id).orElseThrow { IllegalArgumentException("게시물을 찾을 수 없습니다: $id") }
         require(post.kind == SocialPostKind.STORY) { "스토리(STORY) 게시물만 이미지 재생성이 가능합니다." }
+        require(post.status != SocialPostStatus.PUBLISHED) { "이미 게시된 글은 이미지를 재생성할 수 없습니다." }
+        post.error = null
         clearSceneImages(post) // 기존 이미지 제거 → compose 가 전 장면 재생성(채워진 장면은 건너뛰므로)
         repository.save(post)
         imageComposer.compose(post)
         repository.save(post)
-        if (!renderImage(post)) throw IllegalStateException("이미지 렌더에 실패했습니다.")
+        if (!renderImage(post)) {
+            post.error = "이미지 렌더에 실패했습니다."
+            repository.save(post)
+            log.warn("[social] 이미지 재생성 - 렌더 실패 id={}", id)
+        }
         return repository.findById(id).orElseThrow { IllegalStateException("재생성 후 게시물 로드 실패: $id") }.toView()
     }
 
@@ -264,8 +287,11 @@ class SocialPostService(
         val slideCount = imagesJson
             ?.let { runCatching { objectMapper.readValue(it, object : TypeReference<List<String>>() {}).size }.getOrNull() }
             ?: (if (imageBase64 != null) 1 else 0)
+        // 이미지 버전 - 재생성해도 URL 이 같아 브라우저가 1시간 캐시(CardNewsController)를 그대로 쓴다.
+        // 이미지 내용이 바뀌면 값이 바뀌는 해시를 쿼리로 달아 새 이미지를 강제로 다시 받게 한다.
+        val ver = imageBase64?.hashCode()?.let { "?v=${it.toUInt().toString(36)}" }.orEmpty()
         val imageUrls = if (id != null && slideCount > 0) {
-            (0 until slideCount).map { "$baseUrl/cardnews/$id/$it.png" }
+            (0 until slideCount).map { "$baseUrl/cardnews/$id/$it.png$ver" }
         } else emptyList()
         return SocialPostView(
             id = id ?: 0,
@@ -283,7 +309,7 @@ class SocialPostService(
             sourceBoard = sourceBoard,
             slides = slides,
             sourceRefs = refs,
-            imageUrl = if (imageBase64 != null && id != null) "$baseUrl/cardnews/$id.png" else null,
+            imageUrl = if (imageBase64 != null && id != null) "$baseUrl/cardnews/$id.png$ver" else null,
             imageUrls = imageUrls,
             hasImage = imageBase64 != null,
             aiProvider = aiProvider,

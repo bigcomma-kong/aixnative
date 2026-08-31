@@ -1,5 +1,6 @@
 package com.aixnative.common.config
 
+import com.aixnative.ai.service.AiServiceProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.client.SimpleClientHttpRequestFactory
@@ -14,13 +15,22 @@ import java.time.Duration
 @Configuration
 class RestClientConfig {
 
+    /**
+     * Read timeout must sit **above the largest** router deadline, not the default one.
+     * `AiServiceManager.callWithTimeout` uses `CompletableFuture.orTimeout`, which abandons the
+     * future but cannot actually interrupt a blocking socket read — so this timeout is the real
+     * point at which the worker thread is reclaimed. Set it below the router's budget and long
+     * document analyses (contract review: ~170-210s) would die on the socket every single time,
+     * before the router ever got to spend its own budget.
+     */
     @Bean
-    fun aiRestClient(builder: RestClient.Builder): RestClient {
-        // Read timeout aligned just above the router's overall deadline (90s) so a
-        // stalled socket cannot park a worker thread far longer than the AI deadline.
+    fun aiRestClient(
+        builder: RestClient.Builder,
+        aiServiceProperties: AiServiceProperties,
+    ): RestClient {
         val factory = SimpleClientHttpRequestFactory().apply {
             setConnectTimeout(Duration.ofSeconds(10))
-            setReadTimeout(Duration.ofSeconds(95))
+            setReadTimeout(Duration.ofMillis(aiServiceProperties.readTimeoutMs))
         }
         return builder.requestFactory(factory).build()
     }

@@ -17,6 +17,12 @@ data class ResidentialProperties(
     /** 카카오 로컬(주소검색·카테고리/키워드 POI) REST API 키. 빈 값이면 지오코딩·POI 비활성. */
     val kakaoRestKey: String = "",
     /**
+     * 카카오맵 JavaScript 키 - 지도 표시용. **브라우저에 전달되는 공개 키**라 REST 키와 성격이 다르다
+     * (카카오 콘솔의 플랫폼 도메인 등록으로 보호된다). 그래서 서버 시크릿과 섞지 않고 별도 필드로 둔다.
+     * 빈 값이면 지도 없이 리포트만 표시한다(graceful).
+     */
+    val kakaoJsKey: String = "",
+    /**
      * 네이버 지역검색(POI) client-id/secret - 카카오맵(비즈앱) 대체. 로그인용 네이버 앱 자격증명 재사용 가능하나,
      * 로그인 버튼 노출과 분리하려고 oauth.naver 와 **독립** 설정(둘 다 있으면 POI 온, 로그인은 oauth 로 별도 판단).
      */
@@ -28,5 +34,8 @@ data class ResidentialProperties(
     val cheongyakEnabled: Boolean = true,
 ) {
     val kakaoEnabled: Boolean get() = kakaoRestKey.isNotBlank()
+
+    /** 지도 표시 가능 여부(JS 키 설정됨). */
+    val mapEnabled: Boolean get() = kakaoJsKey.isNotBlank()
     val naverEnabled: Boolean get() = naverClientId.isNotBlank() && naverClientSecret.isNotBlank()
 }

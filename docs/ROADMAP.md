@@ -38,6 +38,17 @@
 - 가입 레이트리밋·이메일/소셜 인증 어뷰징 방어. ✅
 - 모니터링·백업 정식화(Cloud SQL 자동 백업·알림), 부하/비용 튜닝(min-instances). ⬜
 
+## Phase 7 - 유입 트랙(문서 미기재분 소급 반영)  🟡
+- **동네 리포트**(`com.aixnative.residential`, V26) ✅ - 무인증 공개 무료 리포트(지오코딩·주변 POI·단지 스펙·아파트 실거래·거시). 랜딩 임베드. 유료 훅 = 동네 AI 브리핑(`PRESALE_BRIEF` 2크레딧).
+- **공개 SEO 인사이트**(`PublicInsightsController` + `SeoController`) ✅ - `/insights` SSR, robots·sitemap.
+- **공감랭킹 소셜 자동게시**(`com.aixnative.social`, V22~V25) 🟡 - 수집→Claude 각색→무료 AI 이미지→satori 렌더→관리자 승인→인스타. 코드·컨테이너 완비. **미배포**: `deploy.sh` 에 `SOCIAL_INGEST_TOKEN`·스케줄러 잡·`--no-cpu-throttling` 반영 완료, 실제 배포와 인스타 계정 연동이 남음.
+
+## Phase 8 - 문서 업로드 트랙  ⬜
+사내 레거시 벤치마킹 결과 최대 갭. 진행 계획은 세션 플랜 문서 참조.
+- 8-A 문서 추출 인프라(`com.aixnative.document`) - PDF/DOCX/XLSX/PPTX/HWP → 텍스트. 무과금 `POST /api/documents/extract`. 기존 심화분석 10종이 코드 변경 없이 파일 입력을 얻는다.
+- 8-B AI 계약서 검토(`com.aixnative.contract`) - 조항별 리스크·미기재 공란·조문 정합성·협상 포인트.
+- 8-C 공고 분석(`com.aixnative.notice`) - 공매·매각·입찰 공고 정형 추출 + 2~4건 비교.
+
 ## 다음 과제 후보
 - 결제 라이브키 전환 + 환불/영수증 흐름 정식화(Phase 5 마무리).
 - 관리자 콘솔 사용자별 이벤트 필터(현재 무필터 top-200).

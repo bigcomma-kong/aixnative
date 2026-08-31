@@ -16,6 +16,11 @@ object ToolPricing {
         "SCREENING" to 1,
         // 1 - 자산관리(PM) 계약서 추출(온램프, 저장 프리필용)
         "LEASE_EXTRACT" to 1,
+        // 2 - 공고 분석(공매·매각·입찰). 추출은 단일 패스, 비교는 이미 추출된 결과만 다룬다.
+        "NOTICE_EXTRACT" to 2,
+        "NOTICE_COMPARE" to 2,
+        // 2 - 계약서 수정안(레드라인). 검토 결과를 받아 조항 문구만 쓰므로 검토보다 가볍다.
+        "CONTRACT_REVISE" to 2,
         // 2 - 표준(공공데이터 주입 단일 패스)
         "MARKET_STUDY" to 2,
         "BUILDING_RESEARCH" to 2,
@@ -28,6 +33,10 @@ object ToolPricing {
         // 3 - 핵심 산출물
         "UNDERWRITING" to 3,
         "DEV_FEASIBILITY" to 3,
+        // 3 - 계약서 검토(전문 투입 + 조항별 리스크·공란·정합성). 언더라이팅과 동급 난이도.
+        "CONTRACT_REVIEW" to 3,
+        // 3 - 계약 묶음 교차검토(문서 사이 정합성). 출력이 문서 수에 비례해 커진다.
+        "CONTRACT_SET_COMPARE" to 3,
         // 5 - 프리미엄 심화
         "IC_MEMO" to 5,
         "BOV" to 5,

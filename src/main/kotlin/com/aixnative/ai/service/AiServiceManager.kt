@@ -41,11 +41,20 @@ class AiServiceManager(
 
     /**
      * Run [prompt] against the best available provider, falling back on failure.
+     *
      * @param preferred optional provider name to try first.
+     *   ⚠ 값을 주면 후보가 그 하나로 좁혀져 **폴백이 사라진다**([selectCandidates]). 사내 레거시에서
+     *   문서 도구를 특정 provider 로 고정했다가 그쪽이 429 를 내는 순간 기능이 통째로 죽은 사고가 있었다.
+     *   특별한 이유가 없으면 null 로 두고 우선순위 라우팅에 맡길 것.
+     * @param budget 호출별 시간 예산. null 이면 전역 기본값([AiServiceProperties.providerTimeoutMs] /
+     *   [AiServiceProperties.overallDeadlineMs])을 쓴다. 문서 장문 분석처럼 오래 걸리는 호출만 넘긴다.
      */
-    fun complete(prompt: String, preferred: String? = null): AiResult {
+    fun complete(prompt: String, preferred: String? = null, budget: AiBudget? = null): AiResult {
         val candidates = selectCandidates(preferred)
         check(candidates.isNotEmpty()) { "설정된 AI 서비스가 없습니다. API 키를 설정하세요." }
+
+        val providerTimeoutMs = budget?.providerTimeoutMs ?: props.providerTimeoutMs
+        val overallDeadlineMs = budget?.overallDeadlineMs ?: props.overallDeadlineMs
 
         // 모든 프롬프트에 공통 표기 규칙 주입 — 모델이 한자를 섞어 쓰는 문제 차단(순한글 강제).
         val effectivePrompt = prompt + LANG_RULE
@@ -54,12 +63,12 @@ class AiServiceManager(
         var lastError: Exception? = null
 
         for (provider in candidates) {
-            val remaining = props.overallDeadlineMs - (System.currentTimeMillis() - startedAt)
+            val remaining = overallDeadlineMs - (System.currentTimeMillis() - startedAt)
             if (remaining <= 0) {
-                log.error("[AI] 전체 deadline({}ms) 초과 — 폴백 중단", props.overallDeadlineMs)
+                log.error("[AI] 전체 deadline({}ms) 초과 — 폴백 중단", overallDeadlineMs)
                 break
             }
-            val timeout = minOf(props.providerTimeoutMs, remaining)
+            val timeout = minOf(providerTimeoutMs, remaining)
             try {
                 log.info("[AI] {} 시도 (timeout {}ms / 남은 {}ms)", provider.name, timeout, remaining)
                 val text = callWithTimeout(provider, effectivePrompt, timeout)

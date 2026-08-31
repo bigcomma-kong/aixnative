@@ -27,6 +27,141 @@ export interface Me {
   emailVerified: boolean
 }
 
+/** 업로드 문서에서 뽑아낸 텍스트. 원본 파일은 서버에 남지 않으므로 이 텍스트를 분석 요청에 실어 보낸다. */
+export interface ExtractedDocument {
+  fileName: string
+  format: string
+  byteSize: number
+  charCount: number
+  pageCount: number | null
+  extractor: string
+  /** true 면 상한 때문에 앞부분만 담겼다 - 화면이 경고를 띄운다. */
+  truncated: boolean
+  text: string
+}
+
+/** 계약서 검토 관점 - 같은 조항도 어느 편에서 보느냐에 따라 유불리가 뒤집힌다. */
+export type ReviewPerspective = 'NEUTRAL' | 'LESSOR' | 'LESSEE' | 'BUYER' | 'SELLER'
+
+export interface ContractRiskItem {
+  clause?: string | null
+  severity?: string | null
+  issue?: string | null
+  evidence?: string | null
+  recommendation?: string | null
+}
+
+/** 계약서 검토 결과(AI 산출). 모델이 형식을 벗어나면 analysis 가 null 이고 analysisRaw 만 온다. */
+export interface ContractAnalysis {
+  contractTitle?: string | null
+  contractType?: string | null
+  assetType?: string | null
+  parties?: { role?: string | null; name?: string | null; businessNumber?: string | null }[]
+  contractDate?: string | null
+  effectiveDate?: string | null
+  expiryDate?: string | null
+  totalAmount?: string | null
+  paymentTerms?: string | null
+  terminationConditions?: string[]
+  penalties?: string | null
+  specialTerms?: string[]
+  disputeResolution?: string | null
+  keyObligations?: string[]
+  summary?: string | null
+  riskAssessment?: ContractRiskItem[]
+  missingProtections?: string[]
+  negotiationPoints?: string[]
+  blanks?: string[]
+  inconsistencies?: string[]
+  overallRisk?: string | null
+  reviewOpinion?: string | null
+}
+
+/** 조항별 수정안(레드라인). */
+export interface ContractReviseAnalysis {
+  title?: string | null
+  perspective?: string | null
+  revisions?: { ref?: string; severity?: string; issue?: string; original?: string; revised?: string; rationale?: string }[]
+  additions?: { ref?: string; clauseText?: string; rationale?: string }[]
+  blanksToFill?: { ref?: string; note?: string }[]
+  summary?: string | null
+}
+
+export interface ContractResponse<T = ContractAnalysis> {
+  runId: number
+  dealId: number
+  tool: string
+  perspective: ReviewPerspective
+  perspectiveLabel: string
+  analysis: T | null
+  analysisRaw: string | null
+  provider: string
+  creditBalance: number
+  disclaimer: string
+}
+
+export interface ContractSetCompareResponse {
+  runId: number
+  dealId: number
+  deal: Record<string, unknown> | null
+  analysisRaw: string | null
+  count: number
+  provider: string
+  creditBalance: number
+  disclaimer: string
+}
+
+/** 공고 추출 결과. `derived` 는 코드가 계산한 값(AI 산출 아님). */
+export interface NoticeExtraction {
+  notice_type?: string | null
+  issuer?: string | null
+  target?: { name?: string | null; address?: string | null; use?: string | null; area_m2?: number | null }
+  price?: { appraisal_krw?: number | null; min_bid_krw?: number | null; deposit_krw?: number | null; deposit_pct?: number | null }
+  items?: {
+    no?: number | null; unit?: string | null; address?: string | null; use?: string | null
+    area_m2?: number | null; appraisal_krw?: number | null; round_prices?: number[]; pyeong_price_krw?: number | null
+  }[]
+  rounds?: { round?: string | null; datetime?: string | null }[]
+  schedule?: { bid_start?: string | null; bid_end?: string | null; open_date?: string | null; contract_by?: string | null; payment_by?: string | null }
+  method?: string | null
+  qualification?: string | null
+  special_terms?: string[]
+  risks?: { severity?: string | null; field?: string | null; message?: string | null }[]
+  summary?: string | null
+  derived?: { pyeong_price_krw?: number | null; base_price_krw?: number | null; gross_yield_pct?: number | null; note?: string | null }
+}
+
+export interface NoticeExtractResponse {
+  runId: number
+  dealId: number
+  docName: string | null
+  extraction: NoticeExtraction | null
+  analysisRaw: string | null
+  provider: string
+  creditBalance: number
+  disclaimer: string
+}
+
+export interface NoticeCompareResponse {
+  runId: number
+  dealId: number
+  markdown: string
+  count: number
+  provider: string
+  creditBalance: number
+  disclaimer: string
+}
+
+/** 업로드 UI 안내값(서버가 단일 소스). */
+export interface DocumentLimits {
+  accept: string
+  supportedLabel: string
+  maxPdfMb: number
+  maxOfficeMb: number
+  maxHwpMb: number
+  maxTextMb: number
+}
+
 export type CreditReason = 'SIGNUP_GRANT' | 'AI_ANALYSIS' | 'PURCHASE' | 'ADMIN_ADJUST'
 
 export type UserStatus = 'ACTIVE' | 'DISABLED'
@@ -1076,17 +1211,30 @@ function normalizeDashes<T>(value: T): T {
   return value
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = tokenStore.get()
-  const res = await fetch(API_BASE + path, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  })
+/**
+ * 요청 상한. Cloud Run 이 300초에서 요청을 끊으므로 그보다 살짝 뒤에 둔다 - 서버가 먼저 응답(504)할
+ * 기회를 주고, 그마저 오지 않으면(연결이 끊긴 채 매달린 경우) 클라이언트가 스스로 포기한다.
+ * 이게 없으면 탭이 무한정 '분석 중' 상태로 남는다.
+ */
+const REQUEST_TIMEOUT_MS = 310_000
 
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal })
+  } catch (e: unknown) {
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new ApiError(408, '요청 시간이 초과되었습니다. 문서가 길면 더 걸릴 수 있으니 잠시 후 다시 시도해 주세요.')
+    }
+    throw new ApiError(0, '서버에 연결할 수 없습니다. 네트워크 상태를 확인해 주세요.')
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** ApiResponse 엔벨로프 언랩 + 401 좀비 세션 정리. JSON·multipart 요청이 공유한다. */
+async function unwrap<T>(res: Response, path: string, token: string | null): Promise<T> {
   // 토큰을 보냈는데 401 = 만료/무효 토큰. 좀비 세션 정리(랜딩 복귀). 인증 엔드포인트는 제외
   // (로그인 실패 등은 전역 로그아웃 대상이 아님). Spring 시큐리티 401 은 본문이 없으므로 파싱 전에 처리.
   if (res.status === 401) {
@@ -1101,6 +1249,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   try {
     body = (await res.json()) as ApiResponse<T>
   } catch {
+    // 프록시·게이트웨이가 낸 HTML 오류 페이지(504 등)는 JSON 이 아니다. 상태코드로 사유를 좁혀 준다.
+    if (res.status === 504 || res.status === 502) {
+      throw new ApiError(res.status, '서버 응답이 지연되어 연결이 끊겼습니다. 잠시 후 다시 시도해 주세요.')
+    }
     throw new ApiError(res.status, `서버 응답을 해석할 수 없습니다 (${res.status})`)
   }
 
@@ -1108,6 +1260,41 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new ApiError(res.status, body?.error ?? `요청 실패 (${res.status})`)
   }
   return normalizeDashes(body.data as T)
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = tokenStore.get()
+  const res = await fetchWithTimeout(
+    API_BASE + path,
+    {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    },
+    REQUEST_TIMEOUT_MS,
+  )
+  return unwrap<T>(res, path, token)
+}
+
+/**
+ * multipart/form-data 전송. **Content-Type 을 직접 넣지 않는다** - 브라우저가 boundary 를 포함해
+ * 스스로 설정해야 하며, 우리가 덮어쓰면 서버가 파트를 못 읽는다.
+ */
+async function requestForm<T>(path: string, form: FormData): Promise<T> {
+  const token = tokenStore.get()
+  const res = await fetchWithTimeout(
+    API_BASE + path,
+    {
+      method: 'POST',
+      body: form,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    },
+    REQUEST_TIMEOUT_MS,
+  )
+  return unwrap<T>(res, path, token)
 }
 
 /**
@@ -1354,13 +1541,72 @@ export const api = {
   adminSocialPublish: (id: number): Promise<SocialPost> =>
     request(`/api/admin/social/${id}/publish`, { method: 'POST' }),
 
-  /** STORY 이미지 재생성(새 AI 엔진 결과 즉시 확인용). 응답까지 수 초~분 소요 가능. */
-  adminSocialRegenerateImages: (id: number): Promise<SocialPost> =>
+  /**
+   * STORY 이미지 재생성(새 AI 엔진 결과 즉시 확인용).
+   * 수집과 마찬가지로 비동기 시작 - 즉시 반환하고 실제 생성·렌더는 백그라운드에서 돈다.
+   * 완료 확인은 목록 폴링(이미지 URL 에 버전 쿼리가 붙어 브라우저 캐시가 갱신된다).
+   */
+  adminSocialRegenerateImages: (id: number): Promise<SocialIngestTrigger> =>
     request(`/api/admin/social/${id}/regenerate-images`, { method: 'POST' }),
 
   /** 삭제. */
   adminSocialDelete: (id: number): Promise<{ deleted: boolean }> =>
     request(`/api/admin/social/${id}`, { method: 'DELETE' }),
+
+  // ── 문서 업로드(추출만, 무과금) ──
+  /**
+   * 파일 1건 → 정제된 텍스트. AI 를 부르지 않으므로 크레딧이 차감되지 않는다.
+   * 반환된 text 를 분석 요청(심화 분석·계약서 검토·공고 분석)의 텍스트 필드에 넣어 쓴다.
+   */
+  extractDocument: (file: File): Promise<ExtractedDocument> => {
+    const form = new FormData()
+    form.append('file', file)
+    return requestForm('/api/documents/extract', form)
+  },
+
+  /** 업로드 UI 안내값(허용 확장자·용량 상한). */
+  documentLimits: (): Promise<DocumentLimits> => request('/api/documents/limits'),
+
+  /**
+   * 지도 표시 설정(무인증). jsKey 는 브라우저 노출을 전제로 한 공개 키이며
+   * 보호는 카카오 콘솔의 도메인 등록으로 한다. 서버 시크릿인 REST 키는 내려오지 않는다.
+   */
+  residentialMapConfig: (): Promise<{ enabled: boolean; jsKey: string }> =>
+    request('/api/public/residential/map-config'),
+
+  // ── 계약서 검토 ──
+  /** 계약서 1건 검토(조항별 리스크·미기재 공란·조문 정합성). */
+  contractReview: (body: {
+    dealId?: number
+    dealName?: string
+    text: string
+    perspective?: ReviewPerspective
+    sourceFileName?: string
+  }): Promise<ContractResponse> =>
+    request('/api/contract/review', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** 검토 결과 → 조항별 수정안. 원문을 다시 보내지 않고 runId 로 참조한다. */
+  contractRevise: (runId: number, perspective?: ReviewPerspective): Promise<ContractResponse<ContractReviseAnalysis>> =>
+    request('/api/contract/revise', { method: 'POST', body: JSON.stringify({ runId, perspective }) }),
+
+  /** 같은 딜에 묶인 검토 결과 2~4건의 문서 사이 관계 심사. */
+  contractCompareSet: (runIds: number[]): Promise<ContractSetCompareResponse> =>
+    request('/api/contract/compare-set', { method: 'POST', body: JSON.stringify({ runIds }) }),
+
+  // ── 공고 분석 ──
+  /** 공매·매각·입찰 공고 → 정형 추출 + 코드 산출 평단가·수익률. */
+  noticeExtract: (body: {
+    dealId?: number
+    dealName?: string
+    text: string
+    sourceFileName?: string
+    monthlyRentKrw?: number
+  }): Promise<NoticeExtractResponse> =>
+    request('/api/notices/extract', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** 추출 결과 2~4건 비교(마크다운). */
+  noticeCompare: (runIds: number[]): Promise<NoticeCompareResponse> =>
+    request('/api/notices/compare', { method: 'POST', body: JSON.stringify({ runIds }) }),
 
   // ── 결제(크레딧 충전) ──
   /** 결제 SDK 초기화용 - clientKey + 활성 여부. */

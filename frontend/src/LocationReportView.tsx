@@ -4,6 +4,7 @@ import {
   type LocationReport, type MonthlyPrice, type PresaleNotice,
 } from './api'
 import { RentBarChart } from './RentBarChart'
+import { KakaoMap } from './KakaoMap'
 
 interface LocationReportViewProps {
   onWantMore?: () => void
@@ -155,6 +156,16 @@ function ReportBody({
           {geo.roadAddress ?? geo.jibunAddress ?? report.query}
           {geo.jibunAddress && geo.roadAddress ? ` · ${geo.jibunAddress}` : ''}
         </p>
+      )}
+
+      {/* 좌표가 있을 때만 지도를 그린다. juso 폴백으로 지오코딩되면 좌표가 없어(법정동코드만)
+          지도는 생략되고 나머지 리포트는 그대로 나온다. */}
+      {geo?.latitude != null && geo.longitude != null && (
+        <KakaoMap
+          latitude={geo.latitude}
+          longitude={geo.longitude}
+          label={geo.roadAddress ?? geo.jibunAddress ?? report.query}
+        />
       )}
 
       {nearby.length > 0 && (

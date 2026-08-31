@@ -3021,3 +3021,236 @@ a.hl-link:hover .hl-title { color: var(--hl-accent, var(--accent)); }
 
 /* 오늘의 딜 섹션 부제 - 거래 신호임을 명시(헤드라인과 성격 구분) */
 .mi-section-sub { margin: 0.15rem 0 0; font-size: 0.8rem; color: var(--muted, #64748b); }
+
+/* ============================================================
+   문서 업로드 드롭존 (FileDropzone)
+   붙여넣기 입력과 병존하는 보조 진입점이라, 폼을 압도하지 않게
+   점선 테두리 + 표면 대비만으로 존재감을 만든다. 상태(hover/drag/
+   busy)는 테두리 색과 배경 틴트로만 표현해 레이아웃이 흔들리지 않는다.
+   ============================================================ */
+.dropzone-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 1.35rem 1rem;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--r);
+  background: var(--surface-sunken);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.dropzone:hover,
+.dropzone:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  outline: none;
+}
+
+.dropzone:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.dropzone.on {
+  border-color: var(--accent);
+  border-style: solid;
+  background: var(--accent-tint);
+}
+
+.dropzone.off {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.dropzone-main {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.dropzone-sub {
+  font-size: 0.8rem;
+  color: var(--ink-faint);
+  line-height: 1.45;
+  word-break: keep-all;
+}
+
+.dropzone-msg {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+.dropzone-ok {
+  color: var(--ink-soft);
+}
+
+/* ============================================================
+   문서 검토 (DocReviewView) - 계약서 리스크 / 레드라인 / 공고 지표
+   기존 어휘(.sev-badge · .scr-section · .bullet-list · .table-scroll)를
+   재사용하고, 여기서는 이 화면에만 있는 형태(조항 인용 블록, 현행→수정
+   대비, 라벨-값 그리드)만 새로 정의한다.
+   ============================================================ */
+.doc-block { margin-top: 1.25rem; }
+.doc-block h4 {
+  margin: 0 0 0.55rem;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* 라벨-값 쌍. 좁은 화면에서는 한 줄로 접힌다. */
+.kv-grid {
+  display: grid;
+  grid-template-columns: minmax(6.5rem, auto) 1fr;
+  gap: 0.4rem 1rem;
+  margin: 0.9rem 0 0;
+  font-size: 0.88rem;
+}
+.kv-grid dt { color: var(--ink-faint); font-weight: 600; }
+.kv-grid dd { margin: 0; color: var(--ink); word-break: keep-all; }
+
+@media (max-width: 560px) {
+  .kv-grid { grid-template-columns: 1fr; gap: 0.15rem; }
+  .kv-grid dd { margin-bottom: 0.5rem; }
+}
+
+/* 리스크 항목 - 지적 하나가 [배지+제목 / 설명 / 원문 인용 / 권고] 한 덩어리로 읽혀야 한다. */
+.risk-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.9rem; }
+.risk-list > li {
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
+}
+.risk-list p { margin: 0.35rem 0 0; font-size: 0.88rem; line-height: 1.55; }
+
+.risk-head { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+.risk-head strong { font-size: 0.9rem; }
+
+/* 계약서 원문 인용 - 판단의 근거라 본문과 시각적으로 분리한다. */
+.risk-evidence {
+  margin: 0.45rem 0 0;
+  padding: 0.4rem 0.7rem;
+  border-left: 3px solid var(--line-strong);
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+  line-height: 1.55;
+  word-break: keep-all;
+}
+
+.risk-reco { color: var(--accent); font-weight: 600; }
+
+/* 레드라인 - 현행/수정 대비가 한눈에 보이도록 좌측 색 막대로 구분한다. */
+.redline {
+  margin-top: 0.9rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
+}
+.redline p { margin: 0.4rem 0 0; font-size: 0.88rem; line-height: 1.6; word-break: keep-all; }
+
+.redline-tag {
+  display: inline-block;
+  margin-right: 0.45rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--r-sm);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  vertical-align: 0.08em;
+}
+.redline-old { color: var(--ink-soft); text-decoration: line-through; text-decoration-color: var(--line-strong); }
+.redline-old .redline-tag { background: var(--no-tint); color: var(--no); text-decoration: none; }
+.redline-new { color: var(--ink); }
+.redline-new .redline-tag { background: var(--go-tint); color: var(--go); }
+
+/* 공고 개별 물건 표 - 넓으면 컨테이너 안에서만 가로 스크롤한다. */
+.doc-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.doc-table th,
+.doc-table td { padding: 0.45rem 0.6rem; border-top: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.doc-table thead th { border-top: none; color: var(--ink-faint); font-weight: 600; }
+
+/* ============================================================
+   동네 리포트 지도 (KakaoMap)
+   주소 바로 아래에 놓여 "여기가 어디인지"를 먼저 보여 준다.
+   지도는 보조 요소라 실패하면 컴포넌트가 아무것도 그리지 않는다.
+   ============================================================ */
+.map-wrap { position: relative; margin: 0.9rem 0 1.2rem; }
+
+.map-box {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+  background: var(--surface-sunken);
+}
+
+.map-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+/* 중심 핀 위 주소 말풍선 - 지도 타일 위에 얹히므로 대비를 확실히 준다. */
+.map-pin-label {
+  padding: 0.25rem 0.55rem;
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  color: oklch(99% 0 0);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+}
+
+/* 문서 검토 - 종류 세그먼트. use-steps 와 입력 카드 사이에 놓여 폭을 채우지 않는다. */
+.doc-mode-row { display: flex; justify-content: flex-start; margin: 0.9rem 0 1rem; }
+.doc-mode-row .seg { flex: 0 0 auto; }
+
+/* 지도 위 시설 핀 - 지하철·학교 등 '큼지막한' 정보만 얹는다.
+   타일 위에 놓이므로 카테고리 색으로 구분하고 흰 테두리로 대비를 만든다. */
+.map-poi {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  padding: 0.16rem 0.45rem;
+  border-radius: var(--r-pill);
+  border: 1.5px solid oklch(100% 0 0);
+  font-size: 0.7rem; font-weight: 700; white-space: nowrap;
+  color: oklch(99% 0 0);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-50%);
+}
+.map-poi.subway { background: oklch(48% 0.17 255); }
+.map-poi.school { background: oklch(50% 0.14 155); }
+.map-poi.mart   { background: oklch(55% 0.15 40); }
+.map-poi.hosp   { background: oklch(52% 0.16 20); }
+
+/* 지도 범례 - 무엇이 찍혀 있는지 알려 준다. */
+.map-legend {
+  display: flex; flex-wrap: wrap; gap: 0.5rem;
+  margin: 0.5rem 0 0; padding: 0;
+  list-style: none;
+  font-size: 0.76rem; color: var(--ink-soft);
+}
+.map-legend li { display: inline-flex; align-items: center; gap: 0.3rem; }
+.map-legend .dot { width: 0.62rem; height: 0.62rem; border-radius: 50%; display: inline-block; }
+.map-legend .dot.subway { background: oklch(48% 0.17 255); }
+.map-legend .dot.school { background: oklch(50% 0.14 155); }
+.map-legend .dot.mart   { background: oklch(55% 0.15 40); }
+.map-legend .dot.hosp   { background: oklch(52% 0.16 20); }

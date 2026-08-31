@@ -26,6 +26,9 @@ export const TOOL_LABEL: Record<string, string> = {
   TAX_PRICE_DIAGNOSIS: '세무·가격 진단', BOV_NARRATIVE: '매각 BOV', AM_QUARTERLY: '분기 자산보고',
   HOLD_SELL_REFI: '보유·매각·리파이', DEV_FEASIBILITY: '개발 타당성', MARKET_RESEARCH_DEEP: '심화 시장리서치',
   COUNTERPARTY_DD: '거래상대방 실사', PRICE_FORECAST: '가격 예측', MARKET_DEEP_REPORT: 'AI 심층 시장 리포트',
+  PRESALE_BRIEF: '동네 AI 브리핑', LEASE_EXTRACT: '임대차 계약서 추출', PM_AM_REPORT: 'AM 제출 보고서',
+  CONTRACT_REVIEW: '계약서 검토', CONTRACT_REVISE: '계약서 수정안', CONTRACT_SET_COMPARE: '계약 묶음 교차검토',
+  NOTICE_EXTRACT: '공고 분석', NOTICE_COMPARE: '공고 비교',
 }
 export const toolLabel = (t: string): string => TOOL_LABEL[canonicalTool(t)] ?? t
 

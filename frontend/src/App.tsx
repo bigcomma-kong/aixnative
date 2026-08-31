@@ -3,6 +3,7 @@ import { api, tokenStore, track, setUnauthorizedHandler, type AuthResult, type U
 import { LandingView } from './LandingView'
 import { UnderwriteView } from './UnderwriteView'
 import { DocAnalysisView } from './DocAnalysisView'
+import { DocReviewView } from './DocReviewView'
 import { MarketView } from './MarketView'
 import { LocationReportView } from './LocationReportView'
 import { MyView } from './MyView'
@@ -38,7 +39,7 @@ function consumeOAuthHash(): { token?: string; error?: string } {
 }
 
 type Plan = 'FREE' | 'PAID'
-type Tab = 'feed' | 'location' | 'mydeals' | 'underwrite' | 'advanced' | 'pm' | 'admin'
+type Tab = 'feed' | 'location' | 'mydeals' | 'underwrite' | 'advanced' | 'docreview' | 'pm' | 'admin'
 
 interface Session {
   email: string
@@ -206,6 +207,7 @@ function App() {
           <button aria-current={tab === 'location'} onClick={() => setTab('location')}>동네</button>
           <button aria-current={tab === 'underwrite'} onClick={() => setTab('underwrite')}>언더라이팅</button>
           <button aria-current={tab === 'advanced'} onClick={() => setTab('advanced')}>심화 분석</button>
+          <button aria-current={tab === 'docreview'} onClick={() => setTab('docreview')}>문서 검토</button>
           {isAdmin && (
             <button aria-current={tab === 'pm'} onClick={() => setTab('pm')}>
               자산관리<span className="nav-beta">BETA</span>
@@ -290,6 +292,13 @@ function App() {
             creditBalance={session.creditBalance}
             openDealId={openAdvancedDealId}
             onDealOpened={() => setOpenAdvancedDealId(undefined)}
+          />
+        )}
+        {tab === 'docreview' && (
+          <DocReviewView
+            onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
+            onNeedCredits={handleNeedCredits}
+            toolCosts={toolCosts}
           />
         )}
         {tab === 'pm' && isAdmin && (

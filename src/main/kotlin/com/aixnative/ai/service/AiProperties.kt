@@ -132,4 +132,40 @@ data class AiServiceProperties(
     val providerTimeoutMs: Long = 75_000,
     /** Overall deadline across all fallback attempts (ms). */
     val overallDeadlineMs: Long = 90_000,
+    /**
+     * HTTP read timeout (ms) for the shared AI client. Must sit **above** the largest overall
+     * deadline below — otherwise the socket dies before the router's own budget is spent and the
+     * longest analyses can never succeed. See [com.aixnative.common.config.RestClientConfig].
+     */
+    val readTimeoutMs: Long = 235_000,
+    /**
+     * 문서 기반 장문 분석(계약서 검토·공고 추출)용 예산. 전문을 통째로 넣고 조항별 리스크·정합성까지
+     * 내라고 하므로 일반 호출보다 훨씬 오래 걸린다(사내 레거시 실측 170~210초).
+     *
+     * 최악 경로가 Cloud Run 요청 상한(300초) 안에 들어와야 한다:
+     * 1차(190초) + repair 재시도(60초) = 250초 < 300초.
+     */
+    val docProviderTimeoutMs: Long = 170_000,
+    val docOverallDeadlineMs: Long = 190_000,
+    /** 파싱 실패 후 재요청(repair)용 짧은 예산 - 1차와 같은 값을 쓰면 합이 요청 상한을 넘는다. */
+    val repairProviderTimeoutMs: Long = 55_000,
+    val repairOverallDeadlineMs: Long = 60_000,
+) {
+    /** 문서 장문 분석 예산. */
+    fun docBudget(): AiBudget = AiBudget(docProviderTimeoutMs, docOverallDeadlineMs)
+
+    /** 파싱 실패 재시도 예산. */
+    fun repairBudget(): AiBudget = AiBudget(repairProviderTimeoutMs, repairOverallDeadlineMs)
+}
+
+/**
+ * 한 번의 AI 호출에 적용할 시간 예산. 도구마다 응답 길이·난이도가 달라 전역 기본값 하나로는
+ * "짧은 호출이 과하게 기다리거나, 긴 호출이 일찍 잘리거나" 둘 중 하나가 된다.
+ *
+ * @param providerTimeoutMs provider 1곳당 상한
+ * @param overallDeadlineMs 폴백까지 포함한 전체 상한
+ */
+data class AiBudget(
+    val providerTimeoutMs: Long,
+    val overallDeadlineMs: Long,
 )

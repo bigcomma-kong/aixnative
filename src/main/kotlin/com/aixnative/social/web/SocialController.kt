@@ -56,9 +56,26 @@ class SocialAdminController(
     @PostMapping("/{id}/publish")
     fun publish(@PathVariable id: Long): ApiResponse<SocialPostView> = ApiResponse.ok(service.publish(id))
 
-    /** STORY 게시물 이미지 재생성(관리자) - 새 이미지 엔진 결과를 즉시 확인·비교용. 응답까지 수 초~분 소요 가능. */
+    /**
+     * STORY 게시물 이미지 재생성(관리자) - 새 이미지 엔진 결과를 새 소재 없이 확인·비교용.
+     * 장면당 최악 60초대 x 장면 수 + Node 렌더라 **비동기**로 시작하고 즉시 반환한다(Cloud Run 300s 회피).
+     * 완료는 프론트가 목록 폴링으로 확인(이미지 URL 에 버전 쿼리가 붙어 캐시가 갱신된다).
+     */
     @PostMapping("/{id}/regenerate-images")
-    fun regenerateImages(@PathVariable id: Long): ApiResponse<SocialPostView> = ApiResponse.ok(service.regenerateImages(id))
+    fun regenerateImages(@PathVariable id: Long): ApiResponse<Map<String, Any>> {
+        service.assertRegenerable(id) // 잘못된 요청은 백그라운드로 넘기지 않고 즉시 400
+        val started = asyncRunner.triggerRegenerate(id)
+        return ApiResponse.ok(
+            mapOf(
+                "started" to started,
+                "message" to if (started) {
+                    "이미지를 다시 만들고 있습니다. 완료되면 목록이 자동 갱신됩니다(1~3분)."
+                } else {
+                    "이미 재생성이 진행 중입니다. 잠시 후 새로고침하세요."
+                },
+            ),
+        )
+    }
 
     @DeleteMapping("/{id}")
     fun delete(@PathVariable id: Long): ApiResponse<Map<String, Boolean>> {

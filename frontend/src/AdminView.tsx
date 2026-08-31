@@ -205,18 +205,21 @@ function SocialPanel() {
     finally { setBusyId(null) }
   }
 
-  /** STORY 이미지 재생성 - 수 초~분 소요. 완료 후 같은 URL 이라 캐시버스터(?r=)로 새 이미지 강제 로드. */
+  /**
+   * STORY 이미지 재생성 - 서버가 백그라운드로 돌리고 즉시 반환하므로(장면당 최악 60초대라 동기로는
+   * Cloud Run 요청 상한을 넘음) 수집과 같은 방식으로 목록을 폴링해 완료를 확인한다.
+   * 이미지 URL 에는 서버가 내용 해시 버전(?v=)을 붙여 주므로 브라우저 캐시가 자동으로 갱신된다.
+   */
   async function regen(id: number) {
     setBusyId(id); setError(null); setMsg(null)
     try {
-      const updated = await api.adminSocialRegenerateImages(id)
-      const bust = `?r=${Date.now()}`
-      replace({
-        ...updated,
-        imageUrl: updated.imageUrl ? updated.imageUrl + bust : updated.imageUrl,
-        imageUrls: updated.imageUrls.map((u) => u + bust),
-      })
-      setMsg('이미지를 재생성했습니다.')
+      const r = await api.adminSocialRegenerateImages(id)
+      setMsg(r.message)
+      // 최대 ~3분, 15초 간격. 이미지가 실제로 바뀌면 URL 버전이 달라져 화면이 갱신된다.
+      for (let i = 0; i < 12; i++) {
+        await new Promise((res) => setTimeout(res, 15_000))
+        try { setPosts(await api.adminSocialPosts()) } catch { /* 갱신 실패는 무시하고 계속 폴링 */ }
+      }
     } catch (e: unknown) {
       setError(e instanceof ApiError ? e.message : '이미지 재생성 실패')
     } finally {

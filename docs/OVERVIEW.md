@@ -7,7 +7,7 @@
 
 ## 1. 메뉴별 기능
 
-상단 네비게이션: 일반 사용자 4개(시장·언더라이팅·심화분석·마이페이지), 관리자는 자산관리(BETA)·관리자 탭이 추가로 노출.
+상단 네비게이션: 일반 사용자 5개(시장·**동네**·언더라이팅·심화분석·마이페이지), 관리자는 자산관리(BETA)·관리자 탭이 추가로 노출.
 
 ### 🟦 시장 (Market Intelligence) — `MarketFeedView`
 시장을 한눈에 보고 관심 딜로 바로 진입하는 **허브**. 데이터는 스케줄러가 자동 수집(무료).
@@ -15,6 +15,11 @@
 - **딜 카드 피드** (딜모니터링 강점): RSS·구글뉴스에서 모은 매각·우선협상 딜 카드. 자산유형/위치/출처 배지.
 - **이 딜 분석하기**: 카드 원문 → 심화 분석(딜 추출)으로 한 클릭 진입.
 - 관리자: **지금 수집**(즉시 실행) · 카드 직접 추가/삭제.
+
+### 🟦 동네 (동네 리포트) — `LocationReportView` *(무인증 공개)*
+주거·소비자 대상 **무료 유입구**. 도메인 `com.aixnative.residential`. 주소 1건 → 지오코딩(카카오/juso) → 주변 POI(네이버 지역검색)·단지 스펙(K-apt)·아파트 실거래(RTMS)·거시 금리를 **코드가 결정론으로 조립**. AI·크레딧 미사용이라 로그인 없이 랜딩에도 임베드된다.
+- **동네 AI 브리핑**(`PRESALE_BRIEF`, 2크레딧): 리포트 + 청약홈 분양공고를 근거로 한 AI 서술. 마이페이지에 저장·재열람.
+- 관련 마이그레이션: V26.
 
 ### 🟦 언더라이팅 (Underwriting) — `UnderwriteView`
 hero 기능. 입력(매입가·NOI·Cap·자본구조) → **ProForma 결정론 계산** + AI 내러티브.
@@ -46,6 +51,16 @@ hero 기능. 입력(매입가·NOI·Cap·자본구조) → **ProForma 결정론 
 
 ### 🟦 관리자 (Admin) — `AdminView` *(ADMIN 전용)*
 전체 사용자·분석 실행 모니터링 + 시장 피드 관리. `admin@aixnative.com` 가입 시 자동 ADMIN.
+7개 섹션: 대시보드/퍼널 · 접속 · 사용자·크레딧 · 크레딧 내역 · 분석 데이터 · 시장 피드 · **공감랭킹(소셜)**.
+
+### 🟦 공감랭킹 (소셜 자동게시) — `AdminView` 내 SocialPanel *(ADMIN 전용, 사용자 화면 없음)*
+도메인 `com.aixnative.social`. 구글 트렌드·네이버 랭킹뉴스·언론사 RSS·커뮤니티 핫글 수집 → Claude 각색(스토리 장면화) → 무료 AI 이미지(Pollinations → Gemini → 스톡 폴백) → Node satori 카드 렌더 → **관리자 승인** → 인스타그램 Content Publishing.
+- 수집·이미지 재생성은 모두 **비동기**(`AsyncIngestRunner`) — 분 단위라 동기로는 요청 상한을 넘는다. Cloud Run `--no-cpu-throttling` 필수.
+- 렌더된 카드는 `/cardnews/**` 로 **무인증 공개**(인스타 서버가 URL 을 fetch 해야 하므로).
+- 트리거: Cloud Scheduler → `POST /api/ingest/social-post`(헤더 `X-Ingest-Token`). 관련 마이그레이션: V22~V25.
+
+### 🟦 공개 SEO 인사이트 — `PublicInsightsController` *(무인증 서버 렌더)*
+`/insights`, `/insights/{slug}` 로 시장 인텔리전스를 SSR 해 크롤러에 노출. `SeoController` 가 `/robots.txt`·`/sitemap.xml` 제공. 검색 유입 → 가입 퍼널의 입구.
 
 ---
 
@@ -91,8 +106,11 @@ hero 기능. 입력(매입가·NOI·Cap·자본구조) → **ProForma 결정론 
 | 국토부 **RTMS** | `RtmsClient` | 상업·토지 실거래 comps | `DATA_GO_KR_API_KEY` |
 | **V-World** | `VWorldClient` | 개별공시지가·용도지역(PNU) | `VWORLD_API_KEY` (+`VWORLD_DOMAIN`) |
 | **도로명주소(juso)** | `JusoClient` | 주소→법정동코드+번지(PNU 조립 지오코더) | `JUSO_API_KEY` |
+| 국토부 **건축물대장** | `BuildingRegisterClient` | 표제부(연면적·용도·준공) | `DATA_GO_KR_API_KEY` |
 
 시군구코드(5자리)는 내장표 `LawdCode`. 미설정 소스는 graceful degrade(건너뜀).
+
+주거·동네 트랙(`com.aixnative.residential`)은 별도 클라이언트를 씁니다: **카카오 로컬**(`KakaoLocalClient`, 지오코딩) · **네이버 지역검색**(`NaverLocalClient`, 주변 POI) · **K-apt**(`KaptClient`, 공동주택 단지정보) · **청약홈 odcloud**(`CheongyakClient`, APT 분양공고).
 
 ### 3.3 거래상대방 실사 (`integration.bizhealth`) — `BizHealthClient`
 입력 = 사업자등록번호. 전부 `DATA_GO_KR_API_KEY`(공공데이터):

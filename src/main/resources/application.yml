@@ -16,6 +16,16 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:secret,h2}
 
+  # 문서 업로드 1차 방어선. 포맷별 세부 상한은 `document.*` 가 서비스단에서 다시 검사한다.
+  # file-size-threshold=0(전량 메모리): Cloud Run 의 /tmp 는 tmpfs(=RAM)라 디스크 스풀에 이득이 없고
+  # 임시파일 정리 부담만 생긴다.
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: ${MULTIPART_MAX_FILE_SIZE:15MB}
+      max-request-size: ${MULTIPART_MAX_REQUEST_SIZE:20MB}
+      file-size-threshold: 0
+
   # dev default = PostgreSQL. Override via env (DB_URL/DB_USER/DB_PASSWORD).
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/aixnative}
@@ -77,6 +87,28 @@ ai:
     auto-fallback: ${AI_AUTO_FALLBACK:true}
     provider-timeout-ms: ${AI_PROVIDER_TIMEOUT_MS:75000}
     overall-deadline-ms: ${AI_OVERALL_DEADLINE_MS:90000}
+    # HTTP read timeout. 아래 doc-overall-deadline 보다 반드시 커야 한다 — 소켓이 먼저 끊기면
+    # 라우터가 자기 예산을 쓰기도 전에 장문 분석이 매번 실패한다(RestClientConfig.aiRestClient).
+    read-timeout-ms: ${AI_READ_TIMEOUT_MS:235000}
+    # 문서 장문 분석(계약서 검토·공고 추출) 전용 예산. 최악 1차 190s + repair 60s = 250s < Cloud Run 300s.
+    doc-provider-timeout-ms: ${AI_DOC_PROVIDER_TIMEOUT_MS:170000}
+    doc-overall-deadline-ms: ${AI_DOC_OVERALL_DEADLINE_MS:190000}
+    # JSON 파싱 실패 후 재요청용 짧은 예산(1차와 같은 값을 쓰면 합이 요청 상한을 넘는다).
+    repair-provider-timeout-ms: ${AI_REPAIR_PROVIDER_TIMEOUT_MS:55000}
+    repair-overall-deadline-ms: ${AI_REPAIR_OVERALL_DEADLINE_MS:60000}
+
+# 문서 업로드 → 텍스트 추출(com.aixnative.document). 상한은 컨테이너 메모리와 함께 움직여야 하는 값들이라
+# 전부 설정으로 뺐다. Cloud Run 2Gi 기준 힙 ≈ 1.5GB, PDFBox 는 원본의 3~8배를 쓴다.
+document:
+  max-pdf-bytes: ${DOCUMENT_MAX_PDF_BYTES:15728640}       # 15MB
+  max-office-bytes: ${DOCUMENT_MAX_OFFICE_BYTES:10485760} # 10MB
+  max-hwp-bytes: ${DOCUMENT_MAX_HWP_BYTES:5242880}        # 5MB — 임시파일 경유(tmpfs=RAM)라 가장 엄격
+  max-text-bytes: ${DOCUMENT_MAX_TEXT_BYTES:2097152}      # 2MB
+  max-text-length: ${DOCUMENT_MAX_TEXT_LENGTH:200000}
+  max-pdf-pages: ${DOCUMENT_MAX_PDF_PAGES:300}
+  min-char-count: ${DOCUMENT_MIN_CHAR_COUNT:100}
+  max-concurrent: ${DOCUMENT_MAX_CONCURRENT:3}            # OOM 1순위 방어선
+  acquire-timeout-ms: ${DOCUMENT_ACQUIRE_TIMEOUT_MS:3000}
 
 claude:
   api:
@@ -244,6 +276,10 @@ marketdata:
 # (data.go.kr 에서 아파트 매매·공동주택 단지 API 활용신청 필요). 지오코딩·POI 는 카카오 REST 키.
 residential:
   kakao-rest-key: ${KAKAO_REST_API_KEY:}  # 🔑 값 → application-secret.yml (로그인용 카카오 앱 REST 키 재사용 가능)
+  # 카카오맵 JavaScript 키 - 지도 표시용. 브라우저에 그대로 전달되는 공개 키라 REST 키와 성격이 다르며,
+  # 보호는 카카오 콘솔의 "플랫폼 > Web 사이트 도메인" 등록으로 한다(운영 도메인 + localhost:5173 등록 필요).
+  # 빈 값이면 지도 영역 없이 리포트만 표시(graceful).
+  kakao-js-key: ${KAKAO_JS_KEY:}
   kapt-enabled: ${RESIDENTIAL_KAPT_ENABLED:true}
   cheongyak-enabled: ${RESIDENTIAL_CHEONGYAK_ENABLED:true}
 

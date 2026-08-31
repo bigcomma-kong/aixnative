@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { TrustBadge } from './TrustBadge'
+import { FileDropzone } from './FileDropzone'
 import { Markdown, DataTable } from './Markdown'
 import {
   api, ApiError, track, isBovCalc, isBizHealthCalc, isPriceForecastCalc,
@@ -756,6 +757,13 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts, cre
               <label htmlFor="docText">{calcMode || ddMode || forecastMode
                 ? <>추가 컨텍스트</>
                 : <>분석 대상 정보 <span className="req">*</span></>}</label>
+              {/* 파일 업로드는 붙여넣기를 대체하지 않고 보조한다 - 추출이 안 되는 문서(스캔본)에서
+                  사용자가 막히지 않도록 항상 textarea 폴백을 남겨 둔다. */}
+              <FileDropzone
+                disabled={busy}
+                label="IM·계약서·공고문 파일을 끌어다 놓거나 클릭해서 올리기"
+                onExtracted={(doc) => setDocumentText((prev) => (prev.trim() ? `${prev}\n\n${doc.text}` : doc.text))}
+              />
               <textarea id="docText" rows={calcMode || ddMode || forecastMode ? 5 : 6} value={documentText} onChange={(e) => setDocumentText(e.target.value)}
                 placeholder={calcMode || ddMode || forecastMode ? '정성 정보(포지셔닝·매도자 우선순위·인허가 상황 등)를 자유롭게 덧붙이면 서술 품질이 올라갑니다. 핵심 사실은 위 입력으로 확정합니다.' : meta.placeholder} />
             </div>
