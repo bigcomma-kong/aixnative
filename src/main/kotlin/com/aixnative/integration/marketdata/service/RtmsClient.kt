@@ -146,13 +146,26 @@ class RtmsClient(
     /**
      * RTMS 월별 역순 조회 공통 루프 — 최대 10건 수집, 403 이면 중단(graceful).
      * [endpoint] 만 다르고 페이로드 매핑은 [parse] 로 위임.
+     *
+     * ⚠ **월별 순차 호출이라 느린 응답이 그대로 누적된다.** data.go.kr 이 일시적으로 느려지면
+     * 개별 타임아웃(약 5초) x 12개월 = 1분이 되어 화면이 통째로 멈춘 것처럼 보인다(실제로 그랬다).
+     * 그래서 두 가지로 묶는다:
+     *  - [BUDGET_MS] 벽시계 예산 - 넘으면 남은 달을 건너뛰고 지금까지 모은 것만 돌려준다.
+     *  - [MAX_CONSECUTIVE_FAILURES] 연속 실패 - 소스가 죽은 상태에서 남은 달을 계속 두드리지 않는다.
+     * 실거래는 리포트의 **보조 정보**이므로, 없으면 그 섹션만 비고 리포트는 그대로 나가는 게 맞다.
      */
     private fun <T> fetchMonthly(endpoint: String, lawdCd: String, years: Int, parse: (JsonNode, String) -> T): List<T> {
         if (props.dataGoKrKey.isBlank() || lawdCd.isBlank()) return emptyList()
         val results = ArrayList<T>()
         val currentYear = LocalDate.now().year
+        val startedAt = System.currentTimeMillis()
+        var consecutiveFailures = 0
         var month = 0
         while (month < years * 12 && results.size < 10) {
+            if (System.currentTimeMillis() - startedAt > BUDGET_MS) {
+                log.warn("[RTMS] 시간예산({}ms) 초과 — {}개월에서 중단(수집 {}건)", BUDGET_MS, month, results.size)
+                break
+            }
             val date = LocalDate.now().minusMonths(month.toLong())
             month++
             if (date.year < currentYear - years) break
@@ -167,6 +180,7 @@ class RtmsClient(
                     .queryParam("numOfRows", "10")
                     .build(false).encode().toUri()
                 val body = rest.get().uri(uri).retrieve().body(String::class.java) ?: continue
+                consecutiveFailures = 0
                 val items = mapper.readTree(body).path("response").path("body").path("items").path("item")
                 when {
                     items.isArray -> for (item in items) {
@@ -180,8 +194,16 @@ class RtmsClient(
                     log.warn("[RTMS] 403 (lawdCd={}) — 월별 호출 중단", lawdCd)
                     break
                 }
+                if (++consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                    log.warn("[RTMS] 연속 {}회 실패 — 중단(lawdCd={}, 마지막: {})", consecutiveFailures, lawdCd, e.message)
+                    break
+                }
                 log.debug("[RTMS] {} 건너뜀: {}", dealYmd, e.message)
             } catch (e: Exception) {
+                if (++consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                    log.warn("[RTMS] 연속 {}회 실패 — 중단(lawdCd={}, 마지막: {})", consecutiveFailures, lawdCd, e.message)
+                    break
+                }
                 log.debug("[RTMS] {} 건너뜀: {}", dealYmd, e.message)
             }
         }
@@ -195,6 +217,15 @@ class RtmsClient(
         // (dealAmount·excluUseAr·floor·buildYear·aptNm·umdNm·dealYear/Month) - 리포트엔 일반으로 충분.
         const val APT_TRADE = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade"
         const val PYEONG_PER_SQM = 3.3058 // 1평 = 3.3058㎡ → 만원/㎡ * 3.3058 = 만원/평
+
+        /**
+         * 월별 순차 조회의 벽시계 상한(ms). 개별 타임아웃(약 5초)만으로는 12개월이 누적돼 1분이 된다.
+         * 정상일 때 12개월은 1초 안에 끝나므로 평상시엔 걸리지 않는다.
+         */
+        const val BUDGET_MS = 8_000L
+
+        /** 이만큼 연속으로 실패하면 소스가 죽은 것으로 보고 남은 달을 두드리지 않는다. */
+        const val MAX_CONSECUTIVE_FAILURES = 3
         val YM: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMM")
     }
 }
