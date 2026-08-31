@@ -109,10 +109,26 @@ class LocationReportService(
         cheongyak.recentNotices(region?.trim()?.ifBlank { null }, limit.coerceIn(1, 20))
 
     /**
-     * 지오코딩 - ① juso 직접(정식 주소) → ② 실패 시 네이버 장소해석(아파트명·랜드마크)으로 주소를 얻어 juso 재시도.
-     * 네이버가 준 주소도 juso 가 못 풀면(코드 없음) POI·주소만 채우고 단지·실거래는 생략(부분 결과).
+     * 지오코딩 - ⓪ 카카오 주소검색(좌표+법정동코드 동시) → ① juso → ② 네이버 장소해석(아파트명·랜드마크)
+     * 후 다시 카카오·juso. 어디서도 코드를 못 얻으면 주소·POI 만 채우고 단지·실거래는 생략(부분 결과).
+     *
+     * 카카오를 앞에 둔 이유는 juso(business.juso.go.kr)가 Cloud Run 송신 IP 에서 connect timeout 이
+     * 나기 때문이다. 폴백으로는 남겨 두되 정상 경로에서는 타지 않게 한다.
      */
     private fun geocode(query: String): GeoPoint? {
+        // ⓪ 카카오 주소검색 - 좌표와 법정동코드를 **한 번에** 준다.
+        //
+        // juso 를 1순위로 두던 구조를 바꾼 이유: juso(business.juso.go.kr)가 Cloud Run 송신 IP 에서
+        // connect timeout 으로 죽는다. 그러면 요청마다 5초씩 두 번(직접·네이버 후 재시도) 헛돌아
+        // 응답이 10초대로 늘고, 법정동코드를 못 얻어 단지·실거래가 통째로 비어 버린다.
+        // 카카오는 같은 정보를 한 번에 주므로 이쪽을 먼저 시도하고, juso 는 폴백으로 남긴다.
+        kakao.geocode(query)?.takeIf { it.bCode.isNotBlank() }?.let {
+            val addr = it.roadAddress ?: it.jibunAddress
+            return it.copy(
+                areaLabel = it.areaLabel ?: areaLabelOf(addr) ?: query,
+                region = shortSido(addr),
+            )
+        }
         // ① 정식 주소면 juso 가 바로 법정동코드 반환.
         juso.resolveParcel(query)?.let {
             return withCoords(
@@ -123,18 +139,31 @@ class LocationReportService(
                 it.roadAddr.ifBlank { null } ?: query,
             )
         }
-        // ② 아파트명 등 → 네이버로 주소 해석 후 juso 재시도.
+        // ② 아파트명·랜드마크 → 네이버로 주소를 얻은 뒤, 그 주소로 다시 코드·좌표를 푼다.
         val place = naver.resolvePlace(query) ?: return null
         val addr = place.jibunAddress ?: place.roadAddress
         val area = areaLabelOf(place.jibunAddress ?: place.roadAddress) ?: query
         val region = shortSido(place.jibunAddress ?: place.roadAddress)
+
+        // ②-a 카카오 먼저(코드+좌표 동시). 여기서도 juso 보다 앞에 두어 timeout 대기를 피한다.
+        if (addr != null) {
+            kakao.geocode(addr)?.takeIf { it.bCode.isNotBlank() }?.let {
+                return it.copy(
+                    roadAddress = place.roadAddress ?: it.roadAddress,
+                    jibunAddress = place.jibunAddress ?: it.jibunAddress,
+                    areaLabel = area,
+                    region = region,
+                )
+            }
+        }
+        // ②-b 카카오가 못 풀면 juso 로 코드만이라도.
         juso.resolveParcel(addr)?.let {
             return withCoords(
                 GeoPoint(null, null, it.admCd, place.roadAddress, place.jibunAddress, areaLabel = area, region = region),
                 addr ?: query,
             )
         }
-        // juso 도 실패: 코드 없이(bCode 빈값 → 단지·실거래 생략) 주소·POI 만.
+        // 둘 다 실패: 코드 없이(bCode 빈값 → 단지·실거래 생략) 주소·POI 만.
         return withCoords(
             GeoPoint(null, null, "", place.roadAddress, place.jibunAddress, areaLabel = area, region = region),
             addr ?: query,
