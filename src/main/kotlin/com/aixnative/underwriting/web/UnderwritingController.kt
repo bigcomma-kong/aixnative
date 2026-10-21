@@ -20,6 +20,7 @@ import com.aixnative.underwriting.domain.DocAnalysisType
 import com.aixnative.underwriting.domain.DocAnalyzeRequest
 import com.aixnative.underwriting.domain.DocAnalyzeResponse
 import com.aixnative.underwriting.service.ReportScope
+import com.aixnative.underwriting.service.ReportDocxWriter
 import com.aixnative.underwriting.service.ReportService
 import com.aixnative.underwriting.service.UnderwritingService
 
@@ -95,6 +96,21 @@ class UnderwritingController(
         @RequestParam(required = false, defaultValue = "ALL") scope: ReportScope,
     ): ResponseEntity<String> =
         ResponseEntity.ok().contentType(MediaType.TEXT_HTML).body(reportService.buildHtml(runId, scope))
+
+    /** 투자 보고서 Word(.docx) - 같은 합본을 실제 docx 로. 무료·테넌트 스코프. */
+    @GetMapping("/report/{runId}/docx")
+    fun reportDocx(
+        @PathVariable runId: Long,
+        @RequestParam(required = false, defaultValue = "ALL") scope: ReportScope,
+    ): ResponseEntity<ByteArray> {
+        val bytes = ReportDocxWriter.write(reportService.buildHtml(runId, scope))
+        val disposition = org.springframework.http.ContentDisposition.attachment()
+            .filename("aixnative-report-$runId.docx").build()
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+            .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+            .body(bytes)
+    }
 
     /** 읽기전용 공유 링크 발급(멱등). 토큰 반환 → 프런트가 {origin}/api/public/report/{token} 링크 구성. */
     @PostMapping("/report/{runId}/share")

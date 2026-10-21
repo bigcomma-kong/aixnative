@@ -142,7 +142,7 @@ function UsageResults() {
           </tbody>
         </table>
       )}
-      {open && <ResultModal run={open.run} result={open.result} request={open.request} onClose={() => setOpen(null)} />}
+      {open && <ResultModal run={open.run} result={open.result} request={open.request} onClose={() => setOpen(null)} followUp />}
     </div>
   )
 }

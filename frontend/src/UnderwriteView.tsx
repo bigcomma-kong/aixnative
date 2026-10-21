@@ -6,6 +6,8 @@ import {
 } from './api'
 import { CashflowChart } from './Chart'
 import { DealCompare } from './DealCompare'
+import { FollowUpPanel } from './FollowUpPanel'
+import { SensitivityCard } from './SensitivityCard'
 import { StageAnalysis, Verdict } from './StageAnalysis'
 import { canonicalTool } from './ResultModal'
 import { downloadUnderwritingXls } from './reportExport'
@@ -528,6 +530,11 @@ export function UnderwriteView({ onCreditBalance, onNeedCredits, toolCosts, cred
                 onReport={openReport}
                 reportBusy={reportBusy}
               />
+              {/* AI 단계 탭에서만 - 재무 탭은 AI 결과가 아니라 무료 계산이라 물을 근거가 없다. */}
+              {activeTab !== 'FINANCE' && results.runId != null && (
+                <FollowUpPanel key={results.runId} runId={results.runId} toolCosts={toolCosts}
+                  onCreditBalance={onCreditBalance} onNeedCredits={onNeedCredits} />
+              )}
             </>
           ) : (
             <div className="rp">
@@ -697,6 +704,12 @@ function ResultPanel({ results, stageMap, activeTab, onSelectTab, onReport, repo
               {reportBusy ? '보고서 여는 중…' : '투자 보고서 보기'}
             </button>
           )}
+          {results.runId && (
+            <button type="button" className="btn-ghost btn-report" title="투자 보고서를 Word(.docx)로 저장"
+              onClick={() => { void api.downloadReportDocx(results.runId as number, 'pipeline').catch(() => alert('Word 파일을 만들지 못했습니다.')) }}>
+              Word
+            </button>
+          )}
           {results.runId && <ShareButton runId={results.runId} />}
         </span>
       </div>
@@ -766,6 +779,8 @@ function ResultPanel({ results, stageMap, activeTab, onSelectTab, onReport, repo
               </tbody>
             </table>
           </section>
+
+          {results.inputs && <SensitivityCard inputs={results.inputs} />}
         </>
       ) : results.analysis ? (
         <>

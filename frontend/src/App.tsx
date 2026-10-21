@@ -14,6 +14,8 @@ import { Paywall } from './Paywall'
 import { Checkout } from './Checkout'
 import { SiteFooter } from './SiteFooter'
 import { FeedbackButton } from './FeedbackButton'
+import { TenantCreditPanel } from './TenantCreditPanel'
+import { CalculatorsPanel } from './CalculatorsPanel'
 import { PaymentResult, readPaymentCallback, type PaymentCallback } from './PaymentResult'
 
 /** 메일의 `/?reset=<token>` 링크로 진입했는지 - 부팅 시 한 번 읽는다. */
@@ -284,7 +286,7 @@ function App() {
             onDealOpened={() => setOpenDealId(undefined)}
           />
         )}
-        {tab === 'advanced' && (
+        {tab === 'advanced' && (<>
           <DocAnalysisView
             onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
             onNeedCredits={handleNeedCredits}
@@ -293,7 +295,13 @@ function App() {
             openDealId={openAdvancedDealId}
             onDealOpened={() => setOpenAdvancedDealId(undefined)}
           />
-        )}
+          <TenantCreditPanel
+            onCreditBalance={(balance) => patchSession({ creditBalance: balance })}
+            onNeedCredits={handleNeedCredits}
+            toolCosts={toolCosts}
+          />
+          <CalculatorsPanel />
+        </>)}
         {tab === 'docreview' && (
           <DocReviewView
             onCreditBalance={(balance) => patchSession({ creditBalance: balance })}

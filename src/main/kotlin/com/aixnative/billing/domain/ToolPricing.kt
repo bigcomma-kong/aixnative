@@ -16,9 +16,21 @@ object ToolPricing {
         "SCREENING" to 1,
         // 1 - 자산관리(PM) 계약서 추출(온램프, 저장 프리필용)
         "LEASE_EXTRACT" to 1,
+        // 1 - 분석 결과 후속 논의(저장된 결과만 근거, 새 데이터 조회 없음). 질문 1건·제안 1회 단위.
+        "FOLLOWUP_ASK" to 1,
+        "FOLLOWUP_SUGGEST" to 1,
+        // 2 - 반박 검토(독립 검토위원 관점 재검토 - 판정·지적·무효화 조건)
+        "CRITIQUE" to 2,
         // 2 - 공고 분석(공매·매각·입찰). 추출은 단일 패스, 비교는 이미 추출된 결과만 다룬다.
         "NOTICE_EXTRACT" to 2,
         "NOTICE_COMPARE" to 2,
+        // 2 - 공고 투자판단(실측 실거래·임대수익률·건물·공시지가 주입 + 코드 시세 대비)
+        "NOTICE_MARKET_VIEW" to 2,
+        // 2 - 매입의향서·임대차 정형 추출 검토(추출 + 코드 규칙 플래그). 전문 리스크 검토(3)보다 가볍다.
+        "LOI_REVIEW" to 2,
+        "LEASE_REVIEW" to 2,
+        // 2 - 계약서 판 비교(차이 검출은 코드, AI 는 변경 유형·사유 초안만). 차이가 없으면 AI 미호출·무과금.
+        "CONTRACT_VERSION_COMPARE" to 2,
         // 2 - 계약서 수정안(레드라인). 검토 결과를 받아 조항 문구만 쓰므로 검토보다 가볍다.
         "CONTRACT_REVISE" to 2,
         // 2 - 표준(공공데이터 주입 단일 패스)
@@ -32,6 +44,8 @@ object ToolPricing {
         "PRICE_FORECAST" to 2,
         // 3 - 핵심 산출물
         "UNDERWRITING" to 3,
+        // 3 - 임차인 신용·지급능력(DART 5개년 재무 + 코드 등급·10년 임대료 커버리지 + AI 서술)
+        "TENANT_CREDIT" to 3,
         "DEV_FEASIBILITY" to 3,
         // 3 - 계약서 검토(전문 투입 + 조항별 리스크·공란·정합성). 언더라이팅과 동급 난이도.
         "CONTRACT_REVIEW" to 3,

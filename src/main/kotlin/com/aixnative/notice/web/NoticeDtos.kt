@@ -29,3 +29,19 @@ data class NoticeCompareResponse(
     val creditBalance: Int,
     val disclaimer: String,
 )
+
+/**
+ * 공고 투자판단 응답. [view] 는 AI 판단(+코드가 계산한 수익률), [comparison] 은 코드가 계산한 시세 대비·회차,
+ * [marketFacts] 는 프롬프트에 주입된 실측 출처 목록이다.
+ */
+data class NoticeMarketViewResponse(
+    val runId: Long,
+    val dealId: Long,
+    val view: JsonNode?,
+    val analysisRaw: String?,
+    val comparison: JsonNode,
+    val marketFacts: List<String>,
+    val provider: String,
+    val creditBalance: Int,
+    val disclaimer: String,
+)

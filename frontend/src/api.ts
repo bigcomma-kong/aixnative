@@ -40,6 +40,42 @@ export interface ExtractedDocument {
   text: string
 }
 
+/** 분석 결과 후속 논의 턴. CRITIQUE 의 content 는 판정 JSON 문자열(parseCritique 로 해석). */
+export type FollowUpRole = 'USER' | 'AI' | 'SUGGEST' | 'CRITIQUE'
+
+export interface FollowUpTurn {
+  id: number
+  seq: number
+  role: FollowUpRole
+  content: string
+  provider: string | null
+  createdAt: string | null
+}
+
+export interface FollowUpThread {
+  runId: number
+  turns: FollowUpTurn[]
+  creditBalance: number
+}
+
+/** 반박 검토 결과(ENDORSE=동의 / REVISE=보완 권고 / CHALLENGE=재검토 필요). */
+export interface CritiqueResult {
+  verdict?: 'ENDORSE' | 'REVISE' | 'CHALLENGE' | string
+  confidence?: string
+  summary?: string
+  issues?: { severity?: string; point?: string; evidence?: string }[]
+  invalidation?: string[]
+}
+
+export function parseCritique(content: string): CritiqueResult | null {
+  try {
+    const v: unknown = JSON.parse(content)
+    return v && typeof v === 'object' ? (v as CritiqueResult) : null
+  } catch {
+    return null
+  }
+}
+
 /** 계약서 검토 관점 - 같은 조항도 어느 편에서 보느냐에 따라 유불리가 뒤집힌다. */
 export type ReviewPerspective = 'NEUTRAL' | 'LESSOR' | 'LESSEE' | 'BUYER' | 'SELLER'
 
@@ -75,6 +111,65 @@ export interface ContractAnalysis {
   inconsistencies?: string[]
   overallRisk?: string | null
   reviewOpinion?: string | null
+  /** 코드 실측 - 기간(초일 산입·만료일 포함). AI 서술과 무관하게 정확한 값. */
+  termFact?: ContractTermFact | null
+  /** 코드 실측 - 본문의 원 단위 금액(큰 것부터). */
+  moneyFacts?: ContractMoneyFact[] | null
+}
+
+export interface ContractTermFact {
+  start: string
+  end: string
+  months: number
+  days: number
+  totalDays: number
+  text: string
+  /** 계약서에 적힌 개월 수(모르면 null). */
+  statedMonths: number | null
+  /** 표기와 실측 일치 여부(표기를 모르면 null). */
+  statedMatches: boolean | null
+}
+
+export interface ContractMoneyFact {
+  label: string
+  won: number
+  text: string
+}
+
+/** 코드 규칙 엔진 플래그 - AI 판단이 아니라 같은 입력이면 항상 같은 결과. */
+export interface RuleFlag {
+  severity: 'HIGH' | 'MEDIUM' | 'LOW' | string
+  field: string
+  message: string
+}
+
+/** 매입의향서·임대차 정형 추출 결과. 필드는 문서 종류마다 다르므로 공통 부분만 타입으로 둔다. */
+export interface ExtractReviewAnalysis {
+  summary?: string | null
+  risks?: { severity?: string; field?: string; message?: string }[]
+  ruleFlags?: RuleFlag[]
+  _evidence?: Record<string, { quote?: string | null }>
+  [key: string]: unknown
+}
+
+export type ExtractReviewKind = 'LOI' | 'LEASE'
+
+export interface VersionCompareRow {
+  no: number
+  section: string
+  clauseRef: string
+  topic: string
+  /** 판 라벨 → 그 판 원문("(해당 문구 없음)" 포함). 원문은 코드가 채운다. */
+  texts: Record<string, string>
+  changeType: '수정' | '신설' | '삭제' | '이동' | '오탈자' | string
+  rationale: string
+}
+
+export interface VersionCompareAnalysis {
+  title: string
+  versions: string[]
+  summary: { mode: string; total: number; changed: number; identical: number; minor: number }
+  rows: VersionCompareRow[]
 }
 
 /** 조항별 수정안(레드라인). */
@@ -137,6 +232,118 @@ export interface NoticeExtractResponse {
   docName: string | null
   extraction: NoticeExtraction | null
   analysisRaw: string | null
+  provider: string
+  creditBalance: number
+  disclaimer: string
+}
+
+/** DART 고유번호 목록의 회사 1건. stockCode 가 있으면 상장사. */
+export interface DartCorp {
+  corpCode: string
+  corpName: string
+  stockCode: string | null
+}
+
+export interface TenantFinancialYear {
+  year: number
+  fsDiv: string
+  fsDivLabel: string
+  revenue: number | null
+  operatingIncome: number | null
+  netIncome: number | null
+  operatingCashFlow: number | null
+  totalEquity: number | null
+  totalAssets: number | null
+}
+
+export interface TenantSimYear {
+  year: number
+  operatingIncomeWon: number
+  annualRentWon: number
+  coverage: number
+  risk: '안전' | '양호' | '주의' | '경고' | '위험' | string
+}
+
+/** 임차인 신용 - calc 는 전부 코드 계산(AI 아님), analysis 는 AI 서술. */
+export interface TenantCreditResponse {
+  runId: number
+  dealId: number
+  calc: {
+    company: { corpName: string; corpClassLabel: string; ceoName: string | null; address: string | null } | null
+    corp: DartCorp
+    latestYear: number
+    fsDiv: string
+    history: TenantFinancialYear[]
+    ratios: {
+      debtRatio: number | null; currentRatio: number | null; quickRatio: number | null; operatingMargin: number | null
+      netMargin: number | null; roe: number | null; revenueGrowth: number | null; capitalImpaired: boolean
+    }
+    rating: { grade: string; score: number; stabilityScore: number; profitabilityScore: number; growthScore: number; description: string }
+    paymentCapacity: { rating: string; score: number; monthlyOperatingCashFlowWon: number | null; description: string }
+    codeRisks: string[]
+    simulation: {
+      monthlyRentWon: number
+      rentGrowthPct: number
+      currentCoverage: number
+      rates: { optimisticPct: number; basePct: number; pessimisticPct: number; rationale: string }
+      optimistic: TenantSimYear[]
+      base: TenantSimYear[]
+      pessimistic: TenantSimYear[]
+      breakEven: { optimistic: number | null; base: number | null; pessimistic: number | null }
+      assessment: string
+    } | null
+    source: string
+  }
+  analysis: {
+    verdict?: string
+    summary?: string
+    trend?: string
+    strengths?: string[]
+    concerns?: string[]
+    leaseTerms?: { depositMonths?: string | null; termYears?: string | null; guarantees?: string[] }
+    monitoring?: string[]
+  } | null
+  provider: string
+  creditBalance: number
+  disclaimer: string
+}
+
+/** 코드가 계산한 시세 대비 - AI 산출 아님. */
+export interface NoticeUnitComparison {
+  label: string
+  pyeongPriceKrw: number | null
+  vsMarketPct: number | null
+  firstRoundBelowMarket: number | null
+  roundCount: number
+}
+
+export interface NoticeMarketComparison {
+  marketPyeongKrw: number | null
+  compCount: number
+  units: NoticeUnitComparison[]
+  note: string
+}
+
+/** 공고 투자판단(AI). yield.gross_yield_pct 는 코드가 계산한 값. */
+export interface NoticeMarketView {
+  marketPrice?: { basis?: string; comment?: string }
+  perUnit?: { label?: string; verdict?: string; note?: string }[]
+  entryRound?: { round?: string | null; reason?: string }
+  yield?: { expected_monthly_rent_krw?: number | null; gross_yield_pct?: number | null; note?: string; rent_source?: string }
+  location?: { score?: string; reason?: string }
+  riskChecklist?: { item?: string; severity?: string }[]
+  acquisition?: { note?: string }
+  verdict?: string
+  opinion?: string
+}
+
+export interface NoticeMarketViewResponse {
+  runId: number
+  dealId: number
+  view: NoticeMarketView | null
+  analysisRaw: string | null
+  comparison: NoticeMarketComparison
+  marketFacts: string[]
   provider: string
   creditBalance: number
   disclaimer: string
@@ -391,6 +598,74 @@ export interface ProFormaResponse {
   scenarios: Scenario[]
   guidelineChecks: GuidelineSummary
   disclaimer: string
+  /** 27개 시나리오 + 토네이도(코드 계산). */
+  sensitivity?: SensitivityResult | null
+}
+
+export interface SensitivityResult {
+  baseIrrPct: number
+  grid: { exitCapPct: number; rentGrowthPct: number; loanRatePct: number; leveredIrrPct: number }[]
+  tornado: { variable: string; lowLabel: string; highLabel: string; lowIrrPct: number; highIrrPct: number; spreadPct: number }[]
+  p10IrrPct: number
+  p50IrrPct: number
+  p90IrrPct: number
+  negativeCount: number
+}
+
+export interface TaxCalcResponse<T> {
+  result: T
+  basis: string
+  disclaimer: string
+}
+
+export interface AcquisitionTaxResult {
+  type: string
+  priceWon: number
+  acquisitionTaxWon: number
+  eduTaxWon: number
+  ruralTaxWon: number
+  totalWon: number
+  effectivePct: number
+}
+
+export interface TransferTaxResult {
+  gainWon: number
+  longTermDeductionPct: number
+  longTermDeductionWon: number
+  basicDeductionWon: number
+  taxBaseWon: number
+  rateLabel: string
+  incomeTaxWon: number
+  localTaxWon: number
+  totalWon: number
+  effectivePctOfGain: number
+  notes: string[]
+}
+
+export interface AfterTaxResult {
+  entity: string
+  annualPreTaxIncomeWon: number
+  annualTaxWon: number
+  annualAfterTaxIncomeWon: number
+  cashOnCashPreTaxPct: number
+  cashOnCashAfterTaxPct: number
+  exitTaxWon: number
+  totalTaxWon: number
+  irrPreTaxPct: number | null
+  irrAfterTaxPct: number | null
+  taxDragPct: number | null
+  notes: string[]
+}
+
+export interface HoldingCostResponse {
+  result: {
+    land: { taxBaseWon: number; propertyTaxWon: number; urbanTaxWon: number; eduTaxWon: number; totalWon: number } | null
+    building: { stdValueWon: number; taxBaseWon: number; ageYears: number; totalWon: number } | null
+    jongbu: { publicValueWon: number; applicable: boolean; totalWon: number } | null
+    annualTotalWon: number
+    assumptions: string[]
+  }
+  autoFilled: string[]
 }
 
 export interface RiskItem {
@@ -1346,6 +1621,44 @@ export const api = {
   publicProforma: (input: UnderwriteInput): Promise<ProFormaResponse> =>
     request('/api/public/proforma', { method: 'POST', body: JSON.stringify(input) }),
 
+  /** 무료 계산기(무인증) - 취득세. */
+  calcAcquisitionTax: (priceWon: number, type: string): Promise<TaxCalcResponse<AcquisitionTaxResult>> =>
+    request('/api/public/calc/acquisition-tax', { method: 'POST', body: JSON.stringify({ priceWon, type }) }),
+
+  /** 무료 계산기(무인증) - 개인 양도소득세. */
+  calcTransferTax: (acquisitionWon: number, saleWon: number, expensesWon: number, holdYears: number): Promise<TaxCalcResponse<TransferTaxResult>> =>
+    request('/api/public/calc/transfer-tax', { method: 'POST', body: JSON.stringify({ acquisitionWon, saleWon, expensesWon, holdYears }) }),
+
+  /** 무료 계산기(무인증) - 세후 수익률. */
+  calcAfterTax: (body: {
+    purchaseWon: number; equityWon: number; annualNoiWon: number; annualInterestWon: number
+    saleWon: number; holdYears: number; corporate: boolean
+  }): Promise<TaxCalcResponse<AfterTaxResult>> =>
+    request('/api/public/calc/after-tax', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** 무료 계산기(로그인) - 보유세. 주소로 공시지가·건축물대장 자동 조회. */
+  calcHoldingCost: (body: {
+    address?: string; landPricePerSqm?: number; landAreaSqm?: number; totalFloorAreaSqm?: number; buildYear?: number
+  }): Promise<HoldingCostResponse> =>
+    request('/api/calc/holding-cost', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** 투자 보고서 Word(.docx) 내려받기 - 인증 헤더가 필요해 fetch 후 blob 저장. */
+  downloadReportDocx: async (runId: number, scope: 'all' | 'pipeline' | 'advanced' = 'all'): Promise<void> => {
+    const token = tokenStore.get()
+    const res = await fetch(
+      `${API_BASE}/api/underwriting/report/${runId}/docx?scope=${scope.toUpperCase()}`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    )
+    if (!res.ok) throw new ApiError(res.status, `Word 파일을 만들지 못했습니다 (${res.status})`)
+    const url = URL.createObjectURL(await res.blob())
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `aixnative-report-${runId}.docx`
+    a.click()
+    // 바로 해제하면 일부 브라우저에서 다운로드가 취소된다.
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  },
+
   /** 무인증 - 비회원 리드 캡처(이메일). source 로 유입 도구 구분. */
   captureLead: (email: string, source = 'FREE_PROFORMA', marketingOptIn = false): Promise<{ captured: boolean }> =>
     request('/api/public/lead', { method: 'POST', body: JSON.stringify({ email, source, marketingOptIn }) }),
@@ -1399,6 +1712,21 @@ export const api = {
   /** 읽기전용 공유 링크 발급(멱등). 토큰 반환 → 프런트가 origin 붙여 링크 구성. */
   shareReport: (runId: number): Promise<{ token: string }> =>
     request(`/api/underwriting/report/${runId}/share`, { method: 'POST' }),
+
+  /** 분석 결과 후속 논의 스레드(무료). */
+  followUpThread: (runId: number): Promise<FollowUpThread> => request(`/api/runs/${runId}/followup`),
+
+  /** 질문하기(과금 FOLLOWUP_ASK). */
+  followUpAsk: (runId: number, question: string): Promise<FollowUpThread> =>
+    request(`/api/runs/${runId}/followup/ask`, { method: 'POST', body: JSON.stringify({ question }) }),
+
+  /** AI 검토 포인트 제안(과금 FOLLOWUP_SUGGEST). */
+  followUpSuggest: (runId: number): Promise<FollowUpThread> =>
+    request(`/api/runs/${runId}/followup/suggest`, { method: 'POST' }),
+
+  /** 반박 검토(과금 CRITIQUE). */
+  followUpCritique: (runId: number): Promise<FollowUpThread> =>
+    request(`/api/runs/${runId}/followup/critique`, { method: 'POST' }),
 
   history: (): Promise<BillingHistory> => request('/api/billing/history'),
 
@@ -1589,6 +1917,23 @@ export const api = {
   contractRevise: (runId: number, perspective?: ReviewPerspective): Promise<ContractResponse<ContractReviseAnalysis>> =>
     request('/api/contract/revise', { method: 'POST', body: JSON.stringify({ runId, perspective }) }),
 
+  /** 매입의향서(LOI) 또는 임대차계약 정형 추출 + 코드 규칙 플래그. */
+  contractExtractReview: (kind: ExtractReviewKind, body: {
+    dealId?: number
+    dealName?: string
+    text: string
+    sourceFileName?: string
+  }): Promise<ContractResponse<ExtractReviewAnalysis>> =>
+    request(kind === 'LOI' ? '/api/contract/loi-review' : '/api/contract/lease-review', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** 같은 계약서의 판 2~4건 비교. 달라진 조항은 코드가 찾는다. 차이가 없으면 무과금. */
+  contractVersionCompare: (body: {
+    dealId?: number
+    dealName?: string
+    versions: { label?: string; text: string }[]
+  }): Promise<ContractResponse<VersionCompareAnalysis>> =>
+    request('/api/contract/version-compare', { method: 'POST', body: JSON.stringify(body) }),
+
   /** 같은 딜에 묶인 검토 결과 2~4건의 문서 사이 관계 심사. */
   contractCompareSet: (runIds: number[]): Promise<ContractSetCompareResponse> =>
     request('/api/contract/compare-set', { method: 'POST', body: JSON.stringify({ runIds }) }),
@@ -1603,6 +1948,24 @@ export const api = {
     monthlyRentKrw?: number
   }): Promise<NoticeExtractResponse> =>
     request('/api/notices/extract', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** 공고 추출 결과 → 주변 실거래·실측과 대조한 투자판단. 월 임대료를 알면 그 값으로 수익률을 계산한다. */
+  noticeMarketView: (runId: number, monthlyRentKrw?: number): Promise<NoticeMarketViewResponse> =>
+    request('/api/notices/market-view', { method: 'POST', body: JSON.stringify({ runId, monthlyRentKrw }) }),
+
+  /** 임차인 회사 검색(무료, DART 고유번호 목록). */
+  tenantCreditSearch: (q: string): Promise<DartCorp[]> =>
+    request(`/api/tenant-credit/search?q=${encodeURIComponent(q)}`),
+
+  /** 임차인 신용·지급능력(과금). company 는 회사명·종목코드·DART 고유번호. */
+  tenantCreditAnalyze: (body: {
+    company: string
+    monthlyRentWon?: number
+    rentGrowthPct?: number
+    dealId?: number
+    dealName?: string
+  }): Promise<TenantCreditResponse> =>
+    request('/api/tenant-credit/analyze', { method: 'POST', body: JSON.stringify(body) }),
 
   /** 추출 결과 2~4건 비교(마크다운). */
   noticeCompare: (runIds: number[]): Promise<NoticeCompareResponse> =>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { TrustBadge } from './TrustBadge'
 import { FileDropzone } from './FileDropzone'
+import { FollowUpPanel } from './FollowUpPanel'
 import { Markdown, DataTable } from './Markdown'
 import {
   api, ApiError, track, isBovCalc, isBizHealthCalc, isPriceForecastCalc,
@@ -786,8 +787,12 @@ export function DocAnalysisView({ onCreditBalance, onNeedCredits, toolCosts, cre
         <div className="card" id="doc-result">
           <DocStageStrip dealId={currentDealId} version={historyVersion} activeRunId={result?.runId} onOpen={openPastRun} />
           {result ? (
+<>
             <DocResult res={result} label={DOC_LABEL[result.analysisType] ?? result.analysisType}
               onReport={openReport} reportBusy={reportBusy} />
+            <FollowUpPanel key={result.runId} runId={result.runId} toolCosts={toolCosts}
+              onCreditBalance={onCreditBalance} onNeedCredits={onNeedCredits} />
+            </>
           ) : (
             <ResultPreview meta={meta} />
           )}
@@ -906,6 +911,10 @@ function DocResult({ res, label, onReport, reportBusy }: {
           <button type="button" className="btn-ghost btn-report" onClick={onReport} disabled={reportBusy}
             title="이 딜의 심화분석 전체를 합본 보고서로 보기 (PDF 저장은 보고서에서)">
             {reportBusy ? '보고서 여는 중…' : '보고서 보기'}
+          </button>
+          <button type="button" className="btn-ghost btn-report" title="심화분석 합본을 Word(.docx)로 저장"
+            onClick={() => { void api.downloadReportDocx(res.runId, 'advanced').catch(() => alert('Word 파일을 만들지 못했습니다.')) }}>
+            Word
           </button>
         </span>
       </div>

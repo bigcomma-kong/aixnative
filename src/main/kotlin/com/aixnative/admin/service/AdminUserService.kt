@@ -11,6 +11,7 @@ import com.aixnative.billing.repository.CreditLedgerRepository
 import com.aixnative.common.tenant.TenantContext
 import com.aixnative.common.web.BadRequestException
 import com.aixnative.common.web.NotFoundException
+import com.aixnative.followup.repository.FollowUpTurnRepository
 import com.aixnative.marketfeed.repository.DealWatchRepository
 import com.aixnative.marketfeed.repository.NewsSubscriberRepository
 import org.slf4j.LoggerFactory
@@ -28,6 +29,7 @@ class AdminUserService(
     private val tenants: TenantRepository,
     private val ledger: CreditLedgerRepository,
     private val runs: AiToolRunRepository,
+    private val followUps: FollowUpTurnRepository,
     private val watches: DealWatchRepository,
     private val emailTokens: EmailVerificationTokenRepository,
     private val resetTokens: PasswordResetTokenRepository,
@@ -56,6 +58,7 @@ class AdminUserService(
         // 연관 데이터 정리(FK 없음 → 고아 방지).
         ledger.deleteByUserId(id)
         runs.deleteByOwnerUserId(id)
+        followUps.deleteByOwnerUserId(id)
         watches.deleteByOwnerUserId(id)
         emailTokens.deleteByUserId(id)
         resetTokens.deleteByUserId(id)

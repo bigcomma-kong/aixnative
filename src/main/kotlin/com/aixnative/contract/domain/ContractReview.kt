@@ -26,10 +26,16 @@ object ContractTools {
     const val REVIEW = "CONTRACT_REVIEW"
     const val REVISE = "CONTRACT_REVISE"
     const val SET_COMPARE = "CONTRACT_SET_COMPARE"
+    const val LOI_REVIEW = "LOI_REVIEW"
+    const val LEASE_REVIEW = "LEASE_REVIEW"
+    const val VERSION_COMPARE = "CONTRACT_VERSION_COMPARE"
 }
 
 /** 텍스트 직접 입력 최소 길이 - 이보다 짧으면 검토할 내용이 없다. */
 const val MIN_CONTRACT_TEXT_LEN = 30
+
+/** 원문 최대 길이 - 업로드 추출 상한(200,000자)과 같다. 더 긴 본문은 어차피 프롬프트에서 잘린다. */
+const val MAX_CONTRACT_TEXT_LEN = 200_000
 
 /** 묶음 교차검토 대상 건수 범위. */
 const val SET_COMPARE_MIN = 2
@@ -44,7 +50,11 @@ data class ContractReviewRequest(
     val dealId: Long? = null,
     val dealName: String? = null,
     @field:NotBlank(message = "계약서 원문을 입력하거나 파일에서 불러와 주세요.")
-    @field:Size(min = MIN_CONTRACT_TEXT_LEN, message = "계약서 원문을 ${MIN_CONTRACT_TEXT_LEN}자 이상 입력해 주세요.")
+    @field:Size(
+        min = MIN_CONTRACT_TEXT_LEN,
+        max = MAX_CONTRACT_TEXT_LEN,
+        message = "계약서 원문은 ${MIN_CONTRACT_TEXT_LEN}자 이상 ${MAX_CONTRACT_TEXT_LEN}자 이하로 입력해 주세요.",
+    )
     val text: String = "",
     /** 검토 관점. 미지정이면 중립. */
     val perspective: String? = null,
@@ -61,4 +71,17 @@ data class ContractReviseRequest(
 /** 묶음 교차검토 요청 - 같은 딜에 묶인 검토 결과 2~4건. */
 data class ContractSetCompareRequest(
     val runIds: List<Long> = emptyList(),
+)
+
+/** 판(버전) 하나 - 라벨(예: 1차안·매도인 회신안)과 추출 텍스트. */
+data class ContractVersionInput(
+    val label: String? = null,
+    val text: String = "",
+)
+
+/** 판 비교 요청 - 협상 진행 순서대로 2~4건. */
+data class ContractVersionCompareRequest(
+    val dealId: Long? = null,
+    val dealName: String? = null,
+    val versions: List<ContractVersionInput> = emptyList(),
 )

@@ -219,6 +219,7 @@ export function MyDealsView({ onContinue, onContinueAdvanced, embedded }: MyDeal
           result={modal.result}
           request={modal.request}
           onClose={() => setModal(null)}
+          followUp
         />
       )}
 

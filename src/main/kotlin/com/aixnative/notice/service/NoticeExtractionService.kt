@@ -19,9 +19,13 @@ import com.aixnative.notice.domain.NOTICE_COMPARE_MIN
 import com.aixnative.notice.domain.NoticeCalculator
 import com.aixnative.notice.domain.NoticeCompareRequest
 import com.aixnative.notice.domain.NoticeExtractRequest
+import com.aixnative.notice.domain.NoticeMarketCalc
+import com.aixnative.notice.domain.NoticeMarketViewRequest
 import com.aixnative.notice.domain.NoticeTools
 import com.aixnative.notice.web.NoticeCompareResponse
 import com.aixnative.notice.web.NoticeExtractResponse
+import com.aixnative.notice.web.NoticeMarketViewResponse
+import com.aixnative.integration.marketdata.service.MarketDataService
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
@@ -46,6 +50,7 @@ class NoticeExtractionService(
     private val creditService: CreditService,
     private val aiToolRunService: AiToolRunService,
     private val objectMapper: ObjectMapper,
+    private val marketDataService: MarketDataService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -151,6 +156,92 @@ class NoticeExtractionService(
             disclaimer = Disclaimer.TEXT,
         )
     }
+
+    /**
+     * 공고 투자판단 - 추출 결과(runId)에 대표 주소의 실측(주변 실거래·임대수익률·건물·공시지가·금리)과
+     * 코드 계산(시세 대비·시세 이하 회차)을 붙여 "살 만한가"를 판단한다.
+     * 수익률은 AI 가 아니라 코드가 낸다 - 사용자가 준 월 임대료가 우선, 없으면 AI 가 추정한 월세로.
+     */
+    fun marketView(req: NoticeMarketViewRequest): NoticeMarketViewResponse {
+        requireAiConfigured()
+        val source = aiToolRunService.get(req.runId) // 테넌트 스코프 강제
+        if (source.tool != NoticeTools.EXTRACT) throw BadRequestException("공고 추출 결과에만 투자판단을 할 수 있습니다.")
+        val extraction = nodeOf(source.resultJson, "extraction")
+            ?: throw BadRequestException("추출 결과를 읽을 수 없습니다. 공고 분석을 다시 실행해 주세요.")
+
+        val address = text(extraction.at("/target/address"))
+            ?: extraction.path("items").firstNotNullOfOrNull { text(it.get("address")) }
+            ?: throw BadRequestException("공고에서 물건 주소를 찾지 못해 실거래와 대조할 수 없습니다.")
+        val use = text(extraction.at("/target/use"))
+
+        // 실측 수집(각 소스 graceful - 실패하면 그 줄만 빠진다). 주소 하나로 여러 공공 API 를 부른다.
+        val facts = listOf(
+            marketDataService.marketFacts(address, use),
+            marketDataService.buildingFactLine(address),
+            marketDataService.landValuationFactLine(address),
+        ).filter { it.isNotBlank() }
+        val stats = marketDataService.compStats(address)
+        val comparison = NoticeMarketCalc.compare(extraction, stats?.medianPyeongManwon, stats?.count ?: 0)
+
+        val context = "[공고 추출 요약]\n" + objectMapper.writeValueAsString(slimExtraction(extraction)) +
+            "\n\n[실측 데이터]" + facts.joinToString("").ifBlank { "\n(조회된 실측 없음)" } +
+            "\n" + NoticeMarketCalc.factBlock(comparison)
+        val prompt = NoticePrompts.marketView(context)
+        val (parsed, raw, provider) = chargeAndCall(NoticeTools.MARKET_VIEW, prompt, MARKET_VIEW_KEYS)
+
+        val basePrice = extraction.at("/derived/base_price_krw").takeIf { it.isNumber }?.asLong()
+        val view = (parsed as? ObjectNode)?.also { v ->
+            val y = (v.get("yield") as? ObjectNode) ?: v.putObject("yield")
+            val aiRent = y.get("expected_monthly_rent_krw")?.takeIf { it.isNumber }?.asLong()
+            val rent = req.monthlyRentKrw?.takeIf { it > 0 } ?: aiRent
+            val pct = NoticeCalculator.grossYieldPct(rent, basePrice)
+            if (pct != null) y.put("gross_yield_pct", pct) else y.putNull("gross_yield_pct")
+            y.put("rent_source", if (req.monthlyRentKrw != null && req.monthlyRentKrw > 0) "사용자 입력" else "AI 추정 월세")
+        } ?: parsed
+        val comparisonNode = objectMapper.valueToTree<JsonNode>(comparison)
+        val factLines = facts.flatMap { it.split("\n") }.map { it.trim() }.filter { it.startsWith("[") }
+
+        val payload = linkedMapOf<String, Any?>(
+            "tool" to NoticeTools.MARKET_VIEW,
+            "sourceRunId" to req.runId,
+            "view" to view,
+            "analysisRaw" to if (view == null) raw else null,
+            "comparison" to comparisonNode,
+            "marketFacts" to factLines,
+            "provider" to provider,
+            "disclaimer" to Disclaimer.TEXT,
+        )
+        val run = aiToolRunService.record(
+            tool = NoticeTools.MARKET_VIEW,
+            status = RunStatus.SUCCESS,
+            requestHash = sha256(prompt),
+            dealName = source.dealName,
+            dealId = source.dealId,
+            requestJson = objectMapper.writeValueAsString(mapOf("sourceRunId" to req.runId, "monthlyRentKrw" to req.monthlyRentKrw)),
+            resultJson = objectMapper.writeValueAsString(payload),
+        )
+        val current = TenantContext.require()
+        return NoticeMarketViewResponse(
+            runId = run.id ?: 0,
+            dealId = run.dealId ?: 0,
+            view = view,
+            analysisRaw = if (view == null) raw else null,
+            comparison = comparisonNode,
+            marketFacts = factLines,
+            provider = provider,
+            creditBalance = creditService.balance(current.tenantId, current.userId),
+            disclaimer = Disclaimer.TEXT,
+        )
+    }
+
+    /** 투자판단 프롬프트용 - 판단에 쓰는 필드만(요약·리스크 원문 장문 제외로 토큰 절약). */
+    private fun slimExtraction(e: JsonNode): Map<String, JsonNode?> =
+        listOf("notice_type", "target", "price", "items", "rounds", "schedule", "qualification", "special_terms", "derived")
+            .associateWith { e.get(it) }
+            .filterValues { it != null && !it.isNull }
+
+    private fun text(n: JsonNode?): String? =
+        n?.takeIf { !it.isNull && !it.isMissingNode }?.asText()?.trim()?.takeIf { it.isNotEmpty() && it != "null" }
 
     /**
      * 코드가 파생값을 계산해 추출 결과에 덧붙인다 - 물건별 평단가, 그리고 (월 임대료를 알면) 총수익률.
@@ -263,6 +354,7 @@ class NoticeExtractionService(
 
     private companion object {
         val EXTRACT_KEYS = arrayOf("target", "schedule", "summary", "notice_type")
+        val MARKET_VIEW_KEYS = arrayOf("verdict", "opinion", "marketPrice")
         const val REPAIR_HINT =
             "\n\n[재요청] 직전 응답이 형식을 벗어났습니다. 설명·코드펜스 없이 위 스키마의 JSON 객체 하나만 출력하세요."
         const val EXCERPT_CHARS = 500

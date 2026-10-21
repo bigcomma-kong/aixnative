@@ -13,7 +13,15 @@ import com.aixnative.common.tenant.TenantContext
 import com.aixnative.common.web.BadRequestException
 import com.aixnative.common.web.InsufficientCreditsException
 import com.aixnative.common.web.ServiceUnavailableException
+import com.aixnative.contract.domain.ContractClauseParser
+import com.aixnative.contract.domain.ContractMoneyCalculator
 import com.aixnative.contract.domain.ContractReviewRequest
+import com.aixnative.contract.domain.ContractTermCalculator
+import com.aixnative.contract.domain.ContractVersionCompareRequest
+import com.aixnative.contract.domain.ContractVersionDiff
+import com.aixnative.contract.domain.LeaseFlagRules
+import com.aixnative.contract.domain.LoiFlagRules
+import com.aixnative.contract.domain.RuleFlag
 import com.aixnative.contract.domain.ContractSetCompareRequest
 import com.aixnative.contract.domain.ContractTools
 import com.aixnative.contract.domain.MIN_CONTRACT_TEXT_LEN
@@ -24,6 +32,8 @@ import com.aixnative.contract.web.ContractResponse
 import com.aixnative.contract.web.ContractSetCompareResponse
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.node.ObjectNode
+import com.fasterxml.jackson.databind.node.TextNode
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.security.MessageDigest
@@ -61,9 +71,13 @@ class ContractReviewService(
         }
         val perspective = ReviewPerspective.of(req.perspective)
         val docName = req.sourceFileName?.trim()?.takeIf { it.isNotBlank() } ?: req.dealName
-        val prompt = ContractPrompts.review(text.take(MAX_PROMPT_CHARS), docName, perspective)
+        val promptText = text.take(MAX_PROMPT_CHARS)
+        // 금액·기간은 코드가 실측해 사실로 주입한다(AI 산술 오류로 금액 100배·없는 기간 모순이 실린 레거시 사고).
+        val factBlocks = ContractMoneyCalculator.factBlock(promptText) + ContractTermCalculator.factBlock(promptText)
+        val prompt = ContractPrompts.review(promptText, docName, perspective, factBlocks)
 
-        val (parsed, raw, provider) = chargeAndCall(ContractTools.REVIEW, prompt, REVIEW_KEYS)
+        val (rawParsed, raw, provider) = chargeAndCall(ContractTools.REVIEW, prompt, REVIEW_KEYS)
+        val parsed = rawParsed?.let { withContractFacts(it, promptText) }
 
         val payload = linkedMapOf<String, Any?>(
             "tool" to ContractTools.REVIEW,
@@ -85,6 +99,178 @@ class ContractReviewService(
             resultJson = objectMapper.writeValueAsString(payload),
         )
         return response(run.id, run.dealId, ContractTools.REVIEW, parsed, raw, provider, perspective)
+    }
+
+    /** 매입의향서(LOI) - 핵심 조항 정형 추출 + 규칙 엔진 플래그(계약금 비율·유효기간·우선협상권 등). */
+    fun loiReview(req: ContractReviewRequest): ContractResponse =
+        extractionReview(req, ContractTools.LOI_REVIEW, LOI_KEYS, ContractPrompts::loiReview) { LoiFlagRules.evaluate(it) }
+
+    /** 임대차계약 - 12개 핵심 조항 정형 추출 + 규칙 엔진 플래그(인상률·렌트프리·보증금 배수 등). */
+    fun leaseReview(req: ContractReviewRequest): ContractResponse =
+        extractionReview(req, ContractTools.LEASE_REVIEW, LEASE_KEYS, ContractPrompts::leaseReview) { LeaseFlagRules.evaluate(it) }
+
+    /**
+     * 정형 추출형 검토 공통 흐름: AI 추출 → 코드 규칙 플래그(ruleFlags) → 기록.
+     * 규칙 플래그는 AI 와 무관하게 같은 입력이면 같은 결과라, AI 가 놓친 거래 통념 위반을 안정적으로 잡는다.
+     */
+    private fun extractionReview(
+        req: ContractReviewRequest,
+        tool: String,
+        identityKeys: Array<String>,
+        promptOf: (String, String?, String) -> String,
+        rules: (JsonNode) -> List<RuleFlag>,
+    ): ContractResponse {
+        requireAiConfigured()
+        val text = req.text.trim()
+        if (text.length < MIN_CONTRACT_TEXT_LEN) {
+            throw BadRequestException("문서 원문을 ${MIN_CONTRACT_TEXT_LEN}자 이상 입력하거나 파일에서 불러와 주세요.")
+        }
+        val docName = req.sourceFileName?.trim()?.takeIf { it.isNotBlank() } ?: req.dealName
+        val promptText = text.take(MAX_PROMPT_CHARS)
+        val factBlocks = ContractMoneyCalculator.factBlock(promptText) + ContractTermCalculator.factBlock(promptText)
+        val prompt = promptOf(promptText, docName, factBlocks)
+
+        val (parsed, raw, provider) = chargeAndCall(tool, prompt, identityKeys)
+        val analysis = (parsed as? ObjectNode)?.also { it.set<JsonNode>("ruleFlags", objectMapper.valueToTree(rules(it))) }
+            ?: parsed
+        val perspective = ReviewPerspective.NEUTRAL
+
+        val payload = linkedMapOf<String, Any?>(
+            "tool" to tool,
+            "perspective" to perspective.name,
+            "perspectiveLabel" to perspective.label,
+            "docName" to docName,
+            "analysis" to analysis,
+            "analysisRaw" to if (analysis == null) raw else null,
+            "provider" to provider,
+            "disclaimer" to Disclaimer.TEXT,
+        )
+        val run = aiToolRunService.record(
+            tool = tool,
+            status = RunStatus.SUCCESS,
+            requestHash = sha256(prompt),
+            dealName = req.dealName,
+            dealId = req.dealId,
+            requestJson = redactedRequestJson(req, text, perspective),
+            resultJson = objectMapper.writeValueAsString(payload),
+        )
+        return response(run.id, run.dealId, tool, analysis, raw, provider, perspective)
+    }
+
+    /**
+     * 같은 계약서의 판(버전) 2~4건 비교. 달라진 조항 검출은 코드([ContractVersionDiff])가 하고,
+     * AI 는 달라진 조항에 변경 유형·사유 초안만 붙인다. 원문은 코드가 채우므로 AI 가 문구를 바꿔 쓸 수 없다.
+     * 차이가 없으면 AI 를 부르지 않고 무과금으로 "차이 없음"을 돌려준다.
+     */
+    fun versionCompare(req: ContractVersionCompareRequest): ContractResponse {
+        if (req.versions.size > VERSION_MAX) throw BadRequestException("판 비교는 최대 ${VERSION_MAX}건입니다.")
+        val inputs = req.versions.filter { it.text.isNotBlank() }
+        if (inputs.size !in VERSION_MIN..VERSION_MAX) {
+            throw BadRequestException("판 비교는 계약서 ${VERSION_MIN}~${VERSION_MAX}건이 필요합니다.")
+        }
+        val labels = mutableListOf<String>()
+        val versions = inputs.mapIndexed { i, v ->
+            val text = v.text.trim()
+            if (text.length < MIN_CONTRACT_TEXT_LEN) throw BadRequestException("${i + 1}번째 판의 본문이 너무 짧습니다.")
+            if (text.length > VERSION_MAX_CHARS) throw BadRequestException("${i + 1}번째 판이 너무 깁니다(${text.length}자). 별첨을 줄여 주세요.")
+            val label = uniqueLabel(v.label?.trim()?.take(MAX_LABEL_LEN)?.takeIf { it.isNotEmpty() } ?: "${i + 1}차안", labels).also { labels += it }
+            ContractVersionDiff.Version(label, ContractClauseParser.parse(text))
+        }
+        val structured = versions.all { it.clauses.size >= 2 }
+        val result = when {
+            structured -> ContractVersionDiff.diff(versions)
+            versions.size == 2 -> ContractVersionDiff.diffParagraphs(labels[0], inputs[0].text, labels[1], inputs[1].text)
+            else -> throw BadRequestException("조·항 구조를 인식하지 못했습니다. 3건 이상은 '제1조' 형식 계약서만 비교할 수 있고, 2건이면 문단 단위로 비교합니다.")
+        }
+        val summary = linkedMapOf(
+            "mode" to result.mode, "total" to result.total, "changed" to result.changed.size,
+            "identical" to result.identical, "minor" to result.minor,
+        )
+        val fallbackTitle = req.dealName?.takeIf { it.isNotBlank() } ?: "계약서 판 비교"
+
+        if (result.changed.isEmpty()) {
+            val empty = objectMapper.valueToTree<JsonNode>(
+                linkedMapOf("title" to fallbackTitle, "versions" to labels, "summary" to summary, "rows" to emptyList<Any>()),
+            )
+            return recordVersionCompare(req, empty, "", "none", labels, inputs.map { it.text.length }, sha256(labels.joinToString()))
+        }
+
+        requireAiConfigured()
+        val payloadJson = objectMapper.writeValueAsString(
+            linkedMapOf(
+                "preamble" to inputs[0].text.trim().take(300),
+                "versions" to labels.map { mapOf("label" to it) },
+                // AI 에는 조항별 앞부분·최대 건수만 보낸다(원가 상한). 표의 원문은 아래에서 코드가 전체를 채운다.
+                "clauses" to result.changed.take(VERSION_AI_MAX_CLAUSES).map { c ->
+                    mapOf("ref" to c.ref, "heading" to c.heading, "texts" to c.texts.mapValues { (_, t) -> t?.take(VERSION_AI_CLAUSE_CHARS) })
+                },
+            ),
+        )
+        val prompt = ContractPrompts.versionCompare(payloadJson)
+        val (parsed, raw, provider) = chargeAndCall(ContractTools.VERSION_COMPARE, prompt, VERSION_KEYS)
+
+        // 행은 코드가 조립한다 - AI 가 ref 를 빠뜨려도 표는 항상 완성되고, 원문은 파서 것만 쓴다.
+        val byRef = parsed?.path("rows")?.filter { it.isObject }
+            ?.associateBy { ContractVersionDiff.normRef(it.path("ref").asText(it.path("clauseRef").asText(""))) }
+            .orEmpty()
+        val rows = result.changed.mapIndexed { idx, c ->
+            val llm = byRef[ContractVersionDiff.normRef(c.ref)]
+            fun llmText(key: String) = llm?.path(key)?.asText("")?.trim().orEmpty()
+            linkedMapOf(
+                "no" to idx + 1,
+                "section" to llmText("section"),
+                "clauseRef" to c.ref,
+                "topic" to llmText("topic").ifEmpty { c.heading },
+                "texts" to c.texts.mapValues { (_, t) -> t ?: "(해당 문구 없음)" },
+                "changeType" to ContractVersionDiff.resolveChangeType(llmText("changeType"), c.texts),
+                "rationale" to llmText("rationale").ifEmpty { "확인 필요" },
+            )
+        }
+        val analysis = objectMapper.valueToTree<JsonNode>(
+            linkedMapOf(
+                "title" to (parsed?.path("title")?.asText("")?.takeIf { it.isNotBlank() } ?: fallbackTitle),
+                "versions" to labels,
+                "summary" to summary,
+                "rows" to rows,
+            ),
+        )
+        return recordVersionCompare(req, analysis, raw, provider, labels, inputs.map { it.text.length }, sha256(prompt))
+    }
+
+    private fun recordVersionCompare(
+        req: ContractVersionCompareRequest,
+        analysis: JsonNode,
+        raw: String,
+        provider: String,
+        labels: List<String>,
+        charCounts: List<Int>,
+        hash: String,
+    ): ContractResponse {
+        val perspective = ReviewPerspective.NEUTRAL
+        val payload = linkedMapOf<String, Any?>(
+            "tool" to ContractTools.VERSION_COMPARE,
+            "analysis" to analysis,
+            "provider" to provider,
+            "disclaimer" to Disclaimer.TEXT,
+        )
+        val run = aiToolRunService.record(
+            tool = ContractTools.VERSION_COMPARE,
+            status = RunStatus.SUCCESS,
+            requestHash = hash,
+            dealName = req.dealName,
+            dealId = req.dealId,
+            // 원문은 남기지 않는다(검토와 같은 원칙) - 판 라벨과 글자 수만.
+            requestJson = objectMapper.writeValueAsString(
+                mapOf("dealName" to req.dealName, "versions" to labels.zip(charCounts).map { (l, n) -> mapOf("label" to l, "charCount" to n) }),
+            ),
+            resultJson = objectMapper.writeValueAsString(payload),
+        )
+        return response(run.id, run.dealId, ContractTools.VERSION_COMPARE, analysis, raw, provider, perspective)
+    }
+
+    private fun uniqueLabel(label: String, used: List<String>): String {
+        if (label !in used) return label
+        return generateSequence(2) { it + 1 }.map { "$label ($it)" }.first { it !in used }
     }
 
     /**
@@ -262,6 +448,56 @@ class ContractReviewService(
             ),
         )
 
+    /**
+     * 검토 결과에 코드 실측값을 심는다.
+     *  - 만원 아래를 버려 쓴 금액('30억4,687만원')은 실측 원문 숫자로 되돌린다(실측과 하나로 맞을 때만).
+     *  - termFact: 기간 실측. 본문 표기를 못 찾으면 AI 가 뽑은 효력일·만료일로 검산(개월 표기는 모름).
+     *  - moneyFacts: 금액 실측 - 화면이 AI 서술과 무관하게 정확한 금액을 보여 주도록.
+     * 계산이 정확해도 입력 날짜가 틀릴 수 있으므로 화면은 start/end 를 함께 보여 원문과 대조하게 한다.
+     */
+    private fun withContractFacts(node: JsonNode, text: String): JsonNode {
+        val money = ContractMoneyCalculator.extract(text)
+        val restored = if (money.isEmpty()) node else restoreMoney(node, money)
+        val obj = restored as? ObjectNode ?: return restored
+
+        val term = ContractTermCalculator.extract(text).firstOrNull()
+            ?: ContractTermCalculator.ofIso(obj.path("effectiveDate").asText(null), obj.path("expiryDate").asText(null))
+        if (term != null) {
+            obj.set<ObjectNode>(
+                "termFact",
+                objectMapper.valueToTree(
+                    linkedMapOf(
+                        "start" to term.start.toString(),
+                        "end" to term.end.toString(),
+                        "months" to term.months,
+                        "days" to term.days,
+                        "totalDays" to term.totalDays,
+                        "text" to term.termText,
+                        "statedMonths" to term.statedMonths,
+                        "statedMatches" to term.statedMonths?.let { term.matchesStated },
+                    ),
+                ),
+            )
+        }
+        if (money.isNotEmpty()) {
+            obj.set<ObjectNode>(
+                "moneyFacts",
+                objectMapper.valueToTree(money.map { mapOf("label" to it.label, "won" to it.won, "text" to it.fullText) }),
+            )
+        }
+        return obj
+    }
+
+    /** JSON 트리를 새로 만들며 문자열 값의 만원 절삭 금액만 되돌린다. */
+    private fun restoreMoney(node: JsonNode, facts: List<ContractMoneyCalculator.MoneyFact>): JsonNode = when {
+        node.isTextual -> TextNode(ContractMoneyCalculator.restoreTruncated(node.asText(), facts) ?: node.asText())
+        node.isObject -> objectMapper.createObjectNode().also { out ->
+            node.fields().forEach { (k, v) -> out.set<JsonNode>(k, restoreMoney(v, facts)) }
+        }
+        node.isArray -> objectMapper.createArrayNode().also { out -> node.forEach { out.add(restoreMoney(it, facts)) } }
+        else -> node
+    }
+
     /** result_json 안의 `analysis` 노드만 꺼낸다(수정안·교차검토의 입력). */
     private fun analysisNodeOf(resultJson: String?): JsonNode? {
         val root = runCatching { objectMapper.readTree(resultJson ?: return null) }.getOrNull() ?: return null
@@ -288,6 +524,20 @@ class ContractReviewService(
         val REVIEW_KEYS = arrayOf("summary", "parties", "riskAssessment", "contractType")
         val REVISE_KEYS = arrayOf("revisions", "summary", "title")
         val SET_COMPARE_KEYS = arrayOf("dealSummary", "consistency", "documents")
+        val LOI_KEYS = arrayOf("buyer", "seller", "purchase_price")
+        val LEASE_KEYS = arrayOf("lessor", "lessee", "rent", "term")
+        val VERSION_KEYS = arrayOf("rows", "title")
+
+        const val VERSION_MIN = 2
+        const val VERSION_MAX = 4
+        const val MAX_LABEL_LEN = 40
+
+        /** 판 비교 AI 입력 상한 - 조항 수 x 조항당 글자. 넘는 조항은 AI 초안 없이 코드 기본값(수정·확인 필요)으로 표에 남는다. */
+        const val VERSION_AI_MAX_CLAUSES = 60
+        const val VERSION_AI_CLAUSE_CHARS = 1_200
+
+        /** 판 비교는 AI 가 전문을 읽지 않고 코드만 파싱하므로 상한을 검토보다 크게 둔다. */
+        const val VERSION_MAX_CHARS = 150_000
 
         /** 재요청 시 덧붙이는 한 줄 - 1차 실패 원인 대부분이 형식 이탈이라 형식만 다시 못박는다. */
         const val REPAIR_HINT =

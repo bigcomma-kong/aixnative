@@ -86,6 +86,9 @@
 | ENV | 기본값 | 용도 |
 |---|---|---|
 | `CLAUDE_OAUTH_TOKEN` | (빈 값) | 구독 OAuth 토큰(`sk-ant-oat...`, `claude setup-token` 발급). 설정 시 Bearer 인증 |
+| `CLAUDE_OAUTH_TOKENS` | (빈 값) | 추가 OAuth 토큰(쉼표 구분). `CLAUDE_OAUTH_TOKEN` 과 합쳐 2개 이상이면 라운드로빈 + 429/만료 시 다음 토큰 |
+| `CLAUDE_BATCH_MODEL` | `claude-haiku-4-5-20251001` | 배치(마켓 브리핑 등 무과금 백그라운드) 전용 모델 |
+| `CLAUDE_BATCH_MAX_TOKENS` | `4096` | 배치 모델 최대 출력 토큰 |
 | `CLAUDE_API_KEY` | (빈 값) | Anthropic API 키(`sk-ant-api...`, 신규). OAuth 미설정 시 사용 |
 | `CLAUDE_API_URL` | `https://api.anthropic.com/v1/messages` | 엔드포인트 |
 | `CLAUDE_API_MODEL` | `claude-opus-4-8` | 모델 |
@@ -108,6 +111,7 @@
 | `VWORLD_DOMAIN` | (V-World 키에 등록한 운영 도메인, 예: `aixnative.com`) | ⚠️ **필수.** V-World 키는 등록 도메인에 묶여 있고, 서버 호출은 Referer 가 없어 이 값을 `domain` 파라미터로 보내야 인증 통과. 미설정 시 `ned/data`·일부 `req/data` 가 `INCORRECT_KEY`. (별도 NED 활용신청·data.go.kr 불필요 — 도메인만 맞으면 동작.) |
 | `VWORLD_NED_ENABLED` | (true/false, 기본 false) | **개별공시지가**(`ned/data`) 호출 on/off. `VWORLD_API_KEY`+`VWORLD_DOMAIN`+`JUSO_API_KEY`(PNU용) 갖춰지면 `true`. 미설정 시 공시지가 줄만 생략, 용도지역은 정상. |
 | `JUSO_API_KEY` | [business.juso.go.kr](https://business.juso.go.kr) (도로명주소) | 주소→법정동코드+번지(PNU 조립용 지오코더, V-World 전제) |
+| `DART_API_KEY` | [opendart.fss.or.kr](https://opendart.fss.or.kr) (금융감독원) | **임차인 신용 심사**(사업보고서 5개년 재무 → 등급·지급능력·10년 임대료 커버리지). 미설정 시 그 기능만 503 안내 |
 
 > 각 소스 독립(하나만 넣어도 그 부분 동작). 주소→시군구코드(5)는 **내장 표(`LawdCode`)** — Kakao 불필요. **용도지역**은 `VWORLD_API_KEY` + `VWORLD_DOMAIN` 으로 동작(V-World 자체 지오코더 — juso 불필요). **개별공시지가**는 PNU(19)가 필요해 `JUSO_API_KEY` + `VWORLD_NED_ENABLED=true` 추가. **공통 전제 = `VWORLD_DOMAIN`**(키 등록 도메인) 일치 — 이게 빠지면 전부 INCORRECT_KEY.
 >

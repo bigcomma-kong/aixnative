@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { FileDropzone } from './FileDropzone'
+import { FollowUpPanel } from './FollowUpPanel'
+import { ExtractReviewPanel, VersionComparePanel } from './ContractExtraPanels'
 import { Markdown } from './Markdown'
 import { TrustBadge } from './TrustBadge'
 import {
   api, ApiError, track,
   type ContractAnalysis, type ContractResponse, type ContractReviseAnalysis,
-  type NoticeExtraction, type ReviewPerspective,
+  type NoticeExtraction, type NoticeMarketViewResponse, type ReviewPerspective,
 } from './api'
 
 interface DocReviewViewProps {
@@ -16,7 +18,7 @@ interface DocReviewViewProps {
   toolCosts?: Record<string, number>
 }
 
-type Mode = 'contract' | 'notice'
+type Mode = 'contract' | 'extract' | 'version' | 'notice'
 
 const PERSPECTIVES: { id: ReviewPerspective; label: string }[] = [
   { id: 'NEUTRAL', label: '중립' },
@@ -76,13 +78,16 @@ export function DocReviewView({ onCreditBalance, onNeedCredits, toolCosts }: Doc
       <div className="doc-mode-row">
         <div className="seg" role="group" aria-label="문서 종류">
           <button type="button" aria-pressed={mode === 'contract'} onClick={() => setMode('contract')}>계약서 검토</button>
+          <button type="button" aria-pressed={mode === 'extract'} onClick={() => setMode('extract')}>LOI·임대차</button>
+          <button type="button" aria-pressed={mode === 'version'} onClick={() => setMode('version')}>판 비교</button>
           <button type="button" aria-pressed={mode === 'notice'} onClick={() => setMode('notice')}>공고 분석</button>
         </div>
       </div>
 
-      {mode === 'contract'
-        ? <ContractPanel onCreditBalance={onCreditBalance} onNeedCredits={onNeedCredits} toolCosts={toolCosts} />
-        : <NoticePanel onCreditBalance={onCreditBalance} onNeedCredits={onNeedCredits} toolCosts={toolCosts} />}
+      {mode === 'contract' && <ContractPanel onCreditBalance={onCreditBalance} onNeedCredits={onNeedCredits} toolCosts={toolCosts} />}
+      {mode === 'extract' && <ExtractReviewPanel onCreditBalance={onCreditBalance} onNeedCredits={onNeedCredits} toolCosts={toolCosts} />}
+      {mode === 'version' && <VersionComparePanel onCreditBalance={onCreditBalance} onNeedCredits={onNeedCredits} toolCosts={toolCosts} />}
+      {mode === 'notice' && <NoticePanel onCreditBalance={onCreditBalance} onNeedCredits={onNeedCredits} toolCosts={toolCosts} />}
     </>
   )
 }
@@ -203,6 +208,10 @@ function ContractPanel({ onCreditBalance, onNeedCredits, toolCosts }: DocReviewV
           {revision && <RevisionResult data={revision} />}
         </div>
       )}
+      {result?.analysis && (
+        <FollowUpPanel key={result.runId} runId={result.runId} toolCosts={toolCosts}
+          onCreditBalance={onCreditBalance} onNeedCredits={onNeedCredits} />
+      )}
     </>
   )
 }
@@ -246,6 +255,8 @@ function ContractResult({ res }: { res: ContractResponse }) {
         {a.disputeResolution && (<><dt>분쟁 해결</dt><dd>{a.disputeResolution}</dd></>)}
       </dl>
 
+      <CodeFacts a={a} />
+
       {a.riskAssessment && a.riskAssessment.length > 0 && (
         <section className="scr-section doc-block">
           <h4>리스크 조항 {a.riskAssessment.length}건</h4>
@@ -278,6 +289,39 @@ function ContractResult({ res }: { res: ContractResponse }) {
       )}
       <p className="disclaimer">{res.disclaimer}</p>
     </div>
+  )
+}
+
+/**
+ * 코드 실측 - 금액·기간은 AI 서술과 별개로 코드가 원문에서 계산한 값이다.
+ * 계산이 맞아도 원문 날짜가 틀릴 수 있어 시작·종료일을 함께 보여 대조하게 한다.
+ */
+function CodeFacts({ a }: { a: ContractAnalysis }) {
+  const t = a.termFact
+  const money = a.moneyFacts ?? []
+  if (!t && money.length === 0) return null
+  return (
+    <section className="scr-section doc-block code-facts">
+      <h4>코드 실측 <span className="rule-tag">AI 계산 아님</span></h4>
+      <dl className="kv-grid">
+        {t && (<>
+          <dt>계약 기간</dt>
+          <dd>
+            {t.start} ~ {t.end} · <b>{t.text}</b> (총 {t.totalDays.toLocaleString()}일)
+            {t.statedMonths != null && (
+              <span className={`sev-badge ${t.statedMatches ? 'go' : 'no'}`} style={{ marginLeft: '0.4rem' }}>
+                계약서 표기 {t.statedMonths}개월 {t.statedMatches ? '일치' : '불일치'}
+              </span>
+            )}
+          </dd>
+        </>)}
+        {money.map((m) => (
+          <div key={`${m.label}-${m.won}`} className="kv-pair">
+            <dt>{m.label || '금액'}</dt><dd>{m.text}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   )
 }
 
@@ -329,12 +373,15 @@ function NoticePanel({ onCreditBalance, onNeedCredits, toolCosts }: DocReviewVie
   const [extraction, setExtraction] = useState<NoticeExtraction | null>(null)
   const [raw, setRaw] = useState<string | null>(null)
   const [disclaimer, setDisclaimer] = useState('')
+  const [runId, setRunId] = useState<number | null>(null)
+  const [view, setView] = useState<NoticeMarketViewResponse | null>(null)
+  const [viewBusy, setViewBusy] = useState(false)
 
   const canSubmit = text.trim().length >= MIN_TEXT_LEN && !busy
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    setBusy(true); setError(null); setExtraction(null); setRaw(null)
+    setBusy(true); setError(null); setExtraction(null); setRaw(null); setRunId(null); setView(null)
     try {
       track('notice_extract_submit')
       const rent = Number(monthlyRent.replace(/[^0-9]/g, ''))
@@ -347,12 +394,30 @@ function NoticePanel({ onCreditBalance, onNeedCredits, toolCosts }: DocReviewVie
       setExtraction(res.extraction)
       setRaw(res.analysisRaw)
       setDisclaimer(res.disclaimer)
+      setRunId(res.runId)
       onCreditBalance(res.creditBalance)
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 402) onNeedCredits()
       setError(err instanceof ApiError ? err.message : '공고 분석에 실패했습니다.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function runMarketView() {
+    if (!runId) return
+    setViewBusy(true); setError(null)
+    try {
+      const rent = Number(monthlyRent.replace(/[^0-9]/g, ''))
+      const res = await api.noticeMarketView(runId, rent > 0 ? rent : undefined)
+      setView(res)
+      onCreditBalance(res.creditBalance)
+      track('analysis_done', { path: 'notice', meta: 'NOTICE_MARKET_VIEW' })
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 402) onNeedCredits()
+      setError(err instanceof ApiError ? err.message : '투자판단에 실패했습니다.')
+    } finally {
+      setViewBusy(false)
     }
   }
 
@@ -406,6 +471,22 @@ function NoticePanel({ onCreditBalance, onNeedCredits, toolCosts }: DocReviewVie
         </div>
       )}
       {extraction && <NoticeResult data={extraction} disclaimer={disclaimer} />}
+
+      {extraction && runId != null && (
+        <div className="card">
+          <div className="actions">
+            <button type="button" className="btn-primary" disabled={viewBusy} onClick={() => void runMarketView()}>
+              {viewBusy ? '실거래와 대조 중…' : `주변 시세와 대조한 투자판단 · ${costLabel(toolCosts?.NOTICE_MARKET_VIEW)}`}
+            </button>
+            <p className="hint">물건 주소로 주변 실거래·임대수익률·건축물대장·공시지가를 조회해 시세 대비 위치와 적정 진입 회차를 판단합니다. 시세 대비·회차·수익률은 코드가 계산합니다.</p>
+          </div>
+          {view && <NoticeMarketViewCard res={view} />}
+        </div>
+      )}
+      {runId != null && (
+        <FollowUpPanel key={view?.runId ?? runId} runId={view?.runId ?? runId} toolCosts={toolCosts}
+          onCreditBalance={onCreditBalance} onNeedCredits={onNeedCredits} />
+      )}
     </>
   )
 }
@@ -490,6 +571,85 @@ function NoticeResult({ data, disclaimer }: { data: NoticeExtraction; disclaimer
       <StringList title="특약·부대조건" items={data.special_terms} />
       {disclaimer && <p className="disclaimer">{disclaimer}</p>}
     </div>
+  )
+}
+
+const VERDICT_TONE: Record<string, string> = { 매력적: 'go', 조건부: 'cond', 주의: 'no', 저평가: 'go', 적정: 'cond', 고평가: 'no' }
+
+function NoticeMarketViewCard({ res }: { res: NoticeMarketViewResponse }) {
+  const c = res.comparison
+  const v = res.view
+  const won = (n?: number | null) => (n != null ? `${Math.round(n).toLocaleString()}원` : '-')
+  return (
+    <section className="scr-section doc-block">
+      <div className="risk-head">
+        <h4 style={{ margin: 0 }}>투자판단</h4>
+        {v?.verdict && <span className={`sev-badge ${VERDICT_TONE[v.verdict] ?? 'cond'}`}>{v.verdict}</span>}
+      </div>
+      {v?.opinion && <p>{v.opinion}</p>}
+
+      <h4>시세 대비 <span className="rule-tag">코드 계산</span></h4>
+      <p className="field-hint">{c.note}{c.marketPyeongKrw != null ? ` 시세 ${won(c.marketPyeongKrw)}/평.` : ''}</p>
+      <div className="table-scroll">
+        <table className="doc-table">
+          <thead><tr><th>물건</th><th>평단가</th><th>시세 대비</th><th>시세 이하 회차</th><th>AI 판단</th></tr></thead>
+          <tbody>
+            {c.units.map((u, i) => {
+              const ai = v?.perUnit?.find((p) => p.label === u.label) ?? v?.perUnit?.[i]
+              return (
+                <tr key={`${u.label}-${i}`}>
+                  <td>{u.label}</td>
+                  <td>{u.pyeongPriceKrw != null ? `${won(u.pyeongPriceKrw)}/평` : '-'}</td>
+                  <td>{u.vsMarketPct != null ? `${u.vsMarketPct > 0 ? '+' : ''}${u.vsMarketPct}%` : '판단 보류'}</td>
+                  <td>{u.roundCount > 0 ? (u.firstRoundBelowMarket != null ? `${u.firstRoundBelowMarket}차 / ${u.roundCount}회` : '없음') : '-'}</td>
+                  <td>{ai?.verdict ?? '-'}{ai?.note ? ` · ${ai.note}` : ''}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {v && (
+        <dl className="kv-grid">
+          {v.entryRound?.round && (<><dt>적정 진입 회차</dt><dd>{v.entryRound.round}{v.entryRound.reason ? ` - ${v.entryRound.reason}` : ''}</dd></>)}
+          {v.yield && (<>
+            <dt>예상 수익률</dt>
+            <dd>
+              {v.yield.gross_yield_pct != null
+                ? `${v.yield.gross_yield_pct}% (코드 계산, 월세 ${won(v.yield.expected_monthly_rent_krw)} · ${v.yield.rent_source ?? ''})`
+                : '산출 불가'}
+              {v.yield.note ? ` - ${v.yield.note}` : ''}
+            </dd>
+          </>)}
+          {v.location?.score && (<><dt>입지</dt><dd>{v.location.score}{v.location.reason ? ` - ${v.location.reason}` : ''}</dd></>)}
+          {v.marketPrice?.comment && (<><dt>시세 해석</dt><dd>{v.marketPrice.comment}</dd></>)}
+          {v.acquisition?.note && (<><dt>부대비용</dt><dd>{v.acquisition.note}</dd></>)}
+        </dl>
+      )}
+
+      {v?.riskChecklist && v.riskChecklist.length > 0 && (
+        <ul className="risk-list" style={{ marginTop: '0.9rem' }}>
+          {v.riskChecklist.map((r, i) => (
+            <li key={`${r.item}-${i}`}>
+              <div className="risk-head">
+                <span className={`sev-badge ${severityClass(r.severity)}`}>{r.severity}</span>
+                <strong>{r.item}</strong>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {!v && res.analysisRaw && <Markdown md={res.analysisRaw} />}
+
+      {res.marketFacts.length > 0 && (
+        <details className="facts-details">
+          <summary>조회한 실측 데이터 {res.marketFacts.length}건</summary>
+          <ul className="bullet-list">{res.marketFacts.map((f, i) => <li key={i}>{f}</li>)}</ul>
+        </details>
+      )}
+      <p className="disclaimer">{res.disclaimer}</p>
+    </section>
   )
 }
 

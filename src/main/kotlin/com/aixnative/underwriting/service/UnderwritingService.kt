@@ -73,6 +73,7 @@ class UnderwritingService(
             scenarios = ProFormaCalculator.scenarios(inputs),
             guidelineChecks = GuidelineEvaluator.evaluate(inputs, result),
             disclaimer = Disclaimer.TEXT,
+            sensitivity = com.aixnative.underwriting.domain.SensitivityAnalyzer.analyze(inputs),
         )
     }
 

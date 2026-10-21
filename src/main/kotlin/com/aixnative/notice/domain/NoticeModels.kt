@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Size
 object NoticeTools {
     const val EXTRACT = "NOTICE_EXTRACT"
     const val COMPARE = "NOTICE_COMPARE"
+    const val MARKET_VIEW = "NOTICE_MARKET_VIEW"
 }
 
 /** 공고 원문 최소 길이. */
@@ -34,4 +35,10 @@ data class NoticeExtractRequest(
 /** 공고 2~4건 비교 요청 - 원문이 아니라 추출 결과 runId 로 참조(테넌트 스코프 자동 보장). */
 data class NoticeCompareRequest(
     val runIds: List<Long> = emptyList(),
+)
+
+/** 공고 투자판단 요청 - 추출 결과 runId 참조. 월 임대료를 알면 그 값으로, 모르면 AI 추정 월세로 수익률을 계산한다. */
+data class NoticeMarketViewRequest(
+    val runId: Long = 0,
+    val monthlyRentKrw: Long? = null,
 )

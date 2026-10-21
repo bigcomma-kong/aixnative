@@ -72,6 +72,8 @@ data class ProFormaResponse(
     val scenarios: List<ProFormaCalculator.Scenario>,
     val guidelineChecks: GuidelineEvaluator.Summary,
     val disclaimer: String,
+    /** 27개 시나리오 격자 + 토네이도(코드 계산). 무료 계산에 포함 - AI 미사용. */
+    val sensitivity: com.aixnative.underwriting.domain.SensitivityAnalyzer.Result? = null,
 )
 
 /** 분석 결과 = ProForma(코드 확정) + 선택 단계의 AI 분석. 1 크레딧 소비. */

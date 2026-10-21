@@ -5,6 +5,7 @@ import com.aixnative.common.web.ApiResponse
 import com.aixnative.contract.domain.ContractReviewRequest
 import com.aixnative.contract.domain.ContractReviseRequest
 import com.aixnative.contract.domain.ContractSetCompareRequest
+import com.aixnative.contract.domain.ContractVersionCompareRequest
 import com.aixnative.contract.service.ContractReviewService
 import jakarta.validation.Valid
 import org.springframework.web.bind.annotation.PostMapping
@@ -30,6 +31,24 @@ class ContractController(
     @PostMapping("/review")
     fun review(@Valid @RequestBody req: ContractReviewRequest): ApiResponse<ContractResponse> =
         ApiResponse.ok(service.review(req))
+
+    /** 매입의향서(LOI) 핵심 조항 추출 + 규칙 플래그. */
+    @RequiresCredit
+    @PostMapping("/loi-review")
+    fun loiReview(@Valid @RequestBody req: ContractReviewRequest): ApiResponse<ContractResponse> =
+        ApiResponse.ok(service.loiReview(req))
+
+    /** 임대차계약 12조항 추출 + 규칙 플래그. */
+    @RequiresCredit
+    @PostMapping("/lease-review")
+    fun leaseReview(@Valid @RequestBody req: ContractReviewRequest): ApiResponse<ContractResponse> =
+        ApiResponse.ok(service.leaseReview(req))
+
+    /** 같은 계약서의 판 2~4건 비교 - 달라진 조항은 코드가 찾고 AI 는 변경 유형·사유만. 차이가 없으면 무과금. */
+    @RequiresCredit
+    @PostMapping("/version-compare")
+    fun versionCompare(@RequestBody req: ContractVersionCompareRequest): ApiResponse<ContractResponse> =
+        ApiResponse.ok(service.versionCompare(req))
 
     /** 검토 결과 → 조항별 수정안(레드라인). */
     @RequiresCredit

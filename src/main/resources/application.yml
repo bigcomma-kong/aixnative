@@ -118,12 +118,20 @@ claude:
     # 종합 분석(IC메모·시장조사 등)이 잘리지 않도록 8192. provider-timeout 75s 내 완주 가능.
     max-tokens: ${CLAUDE_MAX_TOKENS:8192}
   # 구독 OAuth 토큰(sk-ant-oat...). 설정 시 Bearer 인증 사용(x-api-key 대신).
+  # tokens 는 쉼표 구분 추가 토큰(선택) - token 과 합쳐 2개 이상이면 호출마다 라운드로빈하고
+  # 한 토큰이 429/만료로 죽으면 다음 토큰으로 넘어간다(배치가 사용자 분석 한도를 갉아먹지 않게).
   oauth:
-    token: ${CLAUDE_OAUTH_TOKEN:}  # 🔑 값 → application-secret.yml
+    token: ${CLAUDE_OAUTH_TOKEN:}    # 🔑 값 → application-secret.yml
+    tokens: ${CLAUDE_OAUTH_TOKENS:}  # 🔑 값 → application-secret.yml
+  # 배치(무인) 전용 모델 - 마켓 브리핑처럼 사용자 크레딧이 안 걸리는 백그라운드 작업용.
+  # 사용자 과금 분석은 위 api.model(Opus) 유지, 매일 도는 배치만 저렴한 모델로 분리해 운영비 억제.
+  batch:
+    model: ${CLAUDE_BATCH_MODEL:claude-haiku-4-5-20251001}
+    max-tokens: ${CLAUDE_BATCH_MAX_TOKENS:4096}
   priority: ${CLAUDE_PRIORITY:0}
 
-# 무료 AI(Mistral) - 신규 키만(env). 스케줄 배치 수집 보강(마켓 브리핑)에 직접 사용 → Claude 과금 격리.
-# 미설정 시 브리핑은 자동 생략(딜 카드 수집은 그대로). priority 가 Claude(0)보다 높아 일반 라우터는 Claude 우선.
+# Mistral - 무료 티어 종료(2026-09)로 마켓 브리핑은 Claude 배치 모델로 전환됨.
+# 라우터 폴백 후보로만 남겨 둔다(키 미설정이면 자동 비활성). priority 가 Claude(0)보다 높아 항상 Claude 우선.
 mistral:
   api:
     key: ${MISTRAL_API_KEY:}  # 🔑 값 → application-secret.yml
@@ -195,6 +203,9 @@ social:
   # 스토리 모드 커뮤니티 핫글 대상(인기/베스트 게시판 목록 페이지). 각 핫글 1건 = 스토리 게시물 1건.
   # 정적 스크랩이라 봇차단/JS 렌더 사이트는 graceful 빈결과. 항상 리스크 HIGH(관리자 승인 단계 판단).
   # 프록시(scraping.api.key) 설정 시 주거IP 경유로 접근. 미설정이면 대부분 Cloud Run IP 차단으로 빈결과.
+  # 커뮤니티 핫글 스토리 on/off. 아래 대상 목록은 yml 리스트라 env 로 비울 수 없어 별도 스위치를 둔다.
+  # false 면 스크랩 자체를 건너뛴다(트렌드·네이버 스토리는 각자 플래그로 독립 동작).
+  community-story-enabled: ${SOCIAL_COMMUNITY_STORY_ENABLED:true}
   community-story-targets:
     - label: "에펨코리아 포텐"
       url: "https://www.fmkorea.com/best"
@@ -260,6 +271,11 @@ oauth:
 # juso 지오코더(무료)로 법정동코드(10)+번지 획득 후 V-World 조회.
 #   VWORLD_API_KEY  V-World 국토정보 (개별공시지가·용도지역)  api.vworld.kr
 #   JUSO_API_KEY    도로명주소 검색 API (주소→법정동코드+번지)  business.juso.go.kr
+# OpenDART(금융감독원 전자공시) - 임차인 신용·지급능력(사업보고서 재무). 무료 신규 발급: opendart.fss.or.kr
+# 미설정이면 임차인 신용 분석만 비활성(503 안내), 나머지 기능은 영향 없음.
+dart:
+  api-key: ${DART_API_KEY:}  # 🔑 값 → application-secret.yml
+
 marketdata:
   ecos-key: ${ECOS_API_KEY:}  # 🔑 값 → application-secret.yml
   reb-key: ${REB_RONE_API_KEY:}  # 🔑 값 → application-secret.yml

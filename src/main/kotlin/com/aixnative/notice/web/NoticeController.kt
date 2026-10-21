@@ -4,6 +4,7 @@ import com.aixnative.billing.service.RequiresCredit
 import com.aixnative.common.web.ApiResponse
 import com.aixnative.notice.domain.NoticeCompareRequest
 import com.aixnative.notice.domain.NoticeExtractRequest
+import com.aixnative.notice.domain.NoticeMarketViewRequest
 import com.aixnative.notice.service.NoticeExtractionService
 import jakarta.validation.Valid
 import org.springframework.web.bind.annotation.PostMapping
@@ -25,6 +26,12 @@ class NoticeController(
     @PostMapping("/extract")
     fun extract(@Valid @RequestBody req: NoticeExtractRequest): ApiResponse<NoticeExtractResponse> =
         ApiResponse.ok(service.extract(req))
+
+    /** 추출 결과 → 주변 실거래·실측과 대조한 투자판단(시세 대비·적정 회차·수익률). */
+    @RequiresCredit
+    @PostMapping("/market-view")
+    fun marketView(@RequestBody req: NoticeMarketViewRequest): ApiResponse<NoticeMarketViewResponse> =
+        ApiResponse.ok(service.marketView(req))
 
     /** 추출 결과 2~4건 비교(매력도·우선순위, 마크다운). */
     @RequiresCredit

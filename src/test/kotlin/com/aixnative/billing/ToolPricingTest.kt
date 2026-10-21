@@ -12,6 +12,8 @@ class ToolPricingTest {
         assertEquals(1, ToolPricing.costOf("UNDERWRITING_GUIDE"))
         assertEquals(1, ToolPricing.costOf("SCREENING"))
         assertEquals(1, ToolPricing.costOf("LEASE_EXTRACT"))
+        assertEquals(1, ToolPricing.costOf("FOLLOWUP_ASK"))
+        assertEquals(1, ToolPricing.costOf("FOLLOWUP_SUGGEST"))
         // 2 - standard
         assertEquals(2, ToolPricing.costOf("MARKET_STUDY"))
         assertEquals(2, ToolPricing.costOf("COUNTERPARTY_DD"))
@@ -19,6 +21,7 @@ class ToolPricingTest {
         assertEquals(2, ToolPricing.costOf("NOTICE_EXTRACT"))
         assertEquals(2, ToolPricing.costOf("NOTICE_COMPARE"))
         assertEquals(2, ToolPricing.costOf("CONTRACT_REVISE"))
+        assertEquals(2, ToolPricing.costOf("CRITIQUE"))
         // 3 - core
         assertEquals(3, ToolPricing.costOf("UNDERWRITING"))
         assertEquals(3, ToolPricing.costOf("DEV_FEASIBILITY"))
@@ -46,7 +49,7 @@ class ToolPricingTest {
     @Test
     fun `all returns the full price table`() {
         val all = ToolPricing.all()
-        assertEquals(23, all.size)
+        assertEquals(31, all.size)
         assertEquals(5, all["BOV"])
         assertEquals(3, all["CONTRACT_REVIEW"])
         assertEquals(2, all["NOTICE_EXTRACT"])

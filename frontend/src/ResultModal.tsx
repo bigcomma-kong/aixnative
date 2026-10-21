@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import type { Analysis, MarketDeepReport, RunSummary } from './api'
 import { StageAnalysis, Verdict } from './StageAnalysis'
 import { Markdown } from './Markdown'
+import { FollowUpPanel } from './FollowUpPanel'
 import { DeepReportContent } from './DeepReportPanel'
 import { downloadDeepReportDoc, printDeepReport } from './reportExport'
 
@@ -29,6 +30,8 @@ export const TOOL_LABEL: Record<string, string> = {
   PRESALE_BRIEF: '동네 AI 브리핑', LEASE_EXTRACT: '임대차 계약서 추출', PM_AM_REPORT: 'AM 제출 보고서',
   CONTRACT_REVIEW: '계약서 검토', CONTRACT_REVISE: '계약서 수정안', CONTRACT_SET_COMPARE: '계약 묶음 교차검토',
   NOTICE_EXTRACT: '공고 분석', NOTICE_COMPARE: '공고 비교',
+  LOI_REVIEW: '매입의향서 검토', LEASE_REVIEW: '임대차계약 검토', CONTRACT_VERSION_COMPARE: '계약서 판 비교',
+  NOTICE_MARKET_VIEW: '공고 투자판단', TENANT_CREDIT: '임차인 신용 심사',
 }
 export const toolLabel = (t: string): string => TOOL_LABEL[canonicalTool(t)] ?? t
 
@@ -48,8 +51,10 @@ const RECOMMEND_LABEL: Record<string, string> = {
 }
 
 /** 사용 내역·관리자 → 분석 결과 모달. 도구 무관하게 결과 JSON 을 읽기 좋게 렌더(개발 지식 불필요). */
-export function ResultModal({ run, result, request, subtitle, onClose }: {
+export function ResultModal({ run, result, request, subtitle, onClose, followUp = false }: {
   run: RunSummary; result: any; request?: any; subtitle?: string; onClose: () => void
+  /** 본인 분석일 때만 true - 후속 논의(질문·반박 검토) 패널 노출. 관리자 열람 화면은 false. */
+  followUp?: boolean
 }) {
   // 언더라이팅·문서 결과는 핵심 내용이 result.analysis 에, 시장 심층 리포트는 최상위에 있다.
   const a = (result?.analysis ?? result) ?? {}
@@ -235,6 +240,8 @@ export function ResultModal({ run, result, request, subtitle, onClose }: {
           )}
 
           {!isDeepReport && disclaimer && <p className="rm-disc">{disclaimer}</p>}
+
+          {followUp && run.status === 'SUCCESS' && <FollowUpPanel key={run.id} runId={run.id} />}
         </div>
       </div>
     </div>
