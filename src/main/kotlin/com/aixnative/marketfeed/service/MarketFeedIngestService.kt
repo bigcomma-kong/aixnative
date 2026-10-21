@@ -16,7 +16,7 @@ import com.aixnative.marketfeed.domain.NewsItem
  *  1) 공개 RSS·구글뉴스에서 기사 수집(결정론·무료),
  *  2) 정규화·중복제거·노이즈 필터·최근시간 필터,
  *  3) 딜 카드([MarketFeedItem])로 적재(DB 중복은 dedup_key 로 차단),
- *  4) (선택) 무료 AI 마켓 브리핑 합성 — [briefingGenerator] 가 있고 키가 설정된 경우만.
+ *  4) (선택) Claude 배치 모델로 마켓 브리핑 합성 — [briefingGenerator] 가 있고 키가 설정된 경우만.
  *
  * Claude 미사용(과금 분석은 사용자 클릭 시에만). 브리핑은 무료 제공자에 격리.
  */
@@ -88,7 +88,7 @@ class MarketFeedIngestService(
         // CRE 전문 매체(SPI 등) 자체 RSS → '헤드라인 카드'로 시장 피드에 적재(딜 관련성 게이트 없이 뉴스 카드).
         ingestOutletHeadlines(errors)
 
-        // 마켓 브리핑(무료 AI) — graceful. 입력 = 단일 fetch(filtered)가 아니라 **누적 DB 최근 풀**(cutoff 이내 저장 카드).
+        // 마켓 브리핑(Claude 배치 모델) — graceful. 입력 = 단일 fetch(filtered)가 아니라 **누적 DB 최근 풀**(cutoff 이내 저장 카드).
         // → 하루 수집이 스로틀나도 어제까지 쌓인 카드가 남아 분석 건수가 15건으로 무너지지 않는다.
         val briefingPool = repository
             .findByPublishedAtAfterOrderByPublishedAtDescIdDesc(cutoff, PageRequest.of(0, BRIEFING_POOL_MAX))
@@ -96,6 +96,9 @@ class MarketFeedIngestService(
         var briefingDone = false
         var briefingProvider: String? = null
         if (props.briefingEnabled && briefingPool.isNotEmpty()) {
+            // ⚠ 이 runCatching 이 성립하려면 generate() 가 **REQUIRES_NEW** 여야 한다. 같은 트랜잭션에
+            // 참여하면 여기서 삼킨 예외가 트랜잭션을 rollback-only 로 남겨 커밋 때 터지고, 위에서 적재한
+            // 기사까지 전부 롤백된다(2026-09 실제 장애). 전파 수준을 바꾸려면 이 지점도 같이 고칠 것.
             runCatching { briefingGenerator.generate(briefingPool) }
                 .onSuccess { res -> briefingDone = res != null; briefingProvider = res }
                 .onFailure { errors += "브리핑 실패: ${it.message}"; log.warn("[ingest] 브리핑 실패", it) }

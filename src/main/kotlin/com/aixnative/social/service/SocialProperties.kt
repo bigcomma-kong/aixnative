@@ -57,6 +57,13 @@ data class SocialProperties(
      */
     val communityStoryTargets: List<CommunityTarget> = emptyList(),
     /**
+     * 커뮤니티 핫글 스토리 소스 on/off. 대상 목록([communityStoryTargets])이 yml 리스트라
+     * env 로 비울 수가 없어, 트렌드·네이버와 같은 방식의 단일 스위치를 둔다.
+     * false 면 [CommunityHotSource] 가 스크랩 자체를 건너뛴다(프록시 크레딧·실행시간 절약).
+     * env(SOCIAL_COMMUNITY_STORY_ENABLED).
+     */
+    val communityStoryEnabled: Boolean = true,
+    /**
      * 랭킹 카드(유튜브·트렌드·뉴스 TOP N 묶음) 생성 여부. 기본 off - 「지금 수집·생성」은 커뮤니티
      * 이미지 스토리만 만든다(사용자 요구). env(SOCIAL_RANKING_ENABLED=true)로 재활성 가능.
      */

@@ -7,6 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 data class ClaudeProperties(
     val api: Api,
     val oauth: Oauth = Oauth(),
+    val batch: Batch = Batch(),
     val priority: Int = 0,
 ) {
     data class Api(
@@ -19,10 +20,25 @@ data class ClaudeProperties(
     /**
      * Subscription OAuth access token (`sk-ant-oat...`, issued via `claude setup-token`).
      * When set, the client authenticates with `Authorization: Bearer` + the oauth beta
-     * header instead of `x-api-key`. Personal/single-token mode (round-robin omitted).
+     * header instead of `x-api-key`.
+     *
+     * [tokens] 는 쉼표로 구분한 추가 토큰(선택). [token] 과 합쳐 2개 이상이면 호출마다
+     * 라운드로빈으로 번갈아 쓰고, 한 토큰이 429/만료로 실패하면 다음 토큰으로 넘어간다.
+     * 하루 1회 배치가 사용자 분석과 같은 토큰의 한도를 갉아먹지 않게 하는 용도.
      */
     data class Oauth(
         val token: String = "",
+        val tokens: String = "",
+    )
+
+    /**
+     * 배치(무인) 호출 전용 설정 - 마켓 브리핑처럼 사용자 크레딧이 걸리지 않는 백그라운드 작업용.
+     * 사용자 과금 분석은 [Api.model](Opus)을 그대로 쓰고, 배치만 저렴한 모델로 분리해 운영비를 억제한다.
+     * 빈 값이면 [Api.model] 로 폴백.
+     */
+    data class Batch(
+        val model: String = "claude-haiku-4-5-20251001",
+        val maxTokens: Int = 4096,
     )
 }
 

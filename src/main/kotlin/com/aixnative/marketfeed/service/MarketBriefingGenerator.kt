@@ -1,38 +1,45 @@
 package com.aixnative.marketfeed.service
 
-import com.aixnative.ai.service.MistralClient
+import com.aixnative.ai.service.ClaudeClient
 import com.aixnative.marketfeed.domain.MarketBriefing
 import com.aixnative.marketfeed.repository.MarketBriefingRepository
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDate
 import com.aixnative.marketfeed.domain.NewsItem
 
 /**
- * 마켓 브리핑 합성 — 무료 [MistralClient] **직접** 호출(Claude 폴백 격리, 과금 0).
+ * 마켓 브리핑 합성 — [ClaudeClient] **직접** 호출(라우터 미경유).
+ * 사용자 크레딧이 걸리지 않는 배치라 저렴한 배치 모델([ClaudeClient.completeBatch])을 쓰고,
  * 키 미설정 시 [generate] 가 null 반환(graceful, 딜 카드 수집은 그대로 진행).
  *
  * 입력 = 수집·필터된 기사 풀, 출력 = 헤드라인·전망·토픽섹션·워치리스트·리스크(JSON) 1건 저장.
+ *
+ * ⚠ 트랜잭션은 반드시 **REQUIRES_NEW** — 호출자([MarketFeedIngestService.ingest])의 트랜잭션에
+ * 참여하면 여기서 난 예외가 그 트랜잭션을 rollback-only 로 마킹하고, 호출자가 runCatching 으로
+ * 삼켜도 커밋 시점에 UnexpectedRollbackException 이 터지면서 **그날 수집한 기사까지 통째로 롤백**된다.
+ * (2026-09-06~09-10 브리핑·수집 동시 유실의 실제 원인. 브리핑 실패는 브리핑만 실패해야 한다.)
  */
 @Component
 class MarketBriefingGenerator(
-    private val mistralClient: MistralClient,
+    private val claudeClient: ClaudeClient,
     private val repository: MarketBriefingRepository,
     private val objectMapper: ObjectMapper,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    /** @return 사용한 제공자명(예: "Mistral") 또는 null(무료 AI 미설정/실패로 생략). */
-    @Transactional
+    /** @return 사용한 제공자명("Claude") 또는 null(AI 미설정/응답 파싱 실패로 생략). */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun generate(articles: List<NewsItem>): String? {
-        if (!mistralClient.isConfigured()) {
-            log.info("[briefing] 무료 AI(Mistral) 미설정 — 브리핑 생략(딜 카드는 적재됨)")
+        if (!claudeClient.isConfigured()) {
+            log.info("[briefing] Claude 미설정 — 브리핑 생략(딜 카드는 적재됨)")
             return null
         }
         val sample = articles.take(MAX_ARTICLES)
-        val raw = mistralClient.complete(buildPrompt(sample))
+        val raw = claudeClient.completeBatch(buildPrompt(sample))
         val json = extractJson(raw) ?: run {
             log.warn("[briefing] 응답에서 JSON 추출 실패")
             return null
@@ -46,11 +53,11 @@ class MarketBriefingGenerator(
             watchlistJson = node.path("watchlist").takeIf { it.isArray }?.toString() ?: "[]",
             risksJson = node.path("risks").takeIf { it.isArray }?.toString() ?: "[]",
             articleCount = articles.size,
-            aiProvider = "Mistral",
+            aiProvider = "Claude",
         )
         repository.save(briefing)
-        log.info("[briefing] 생성 완료 (기사 {}건, Mistral)", articles.size)
-        return "Mistral"
+        log.info("[briefing] 생성 완료 (기사 {}건, Claude)", articles.size)
+        return "Claude"
     }
 
     private fun buildPrompt(articles: List<NewsItem>): String {

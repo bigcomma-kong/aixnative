@@ -21,6 +21,8 @@ class CommunityHotSource(
     private val log = LoggerFactory.getLogger(javaClass)
 
     override fun produce(): List<StoryDraft> {
+        // 스위치가 먼저 - 대상 목록보다 앞에서 끊어야 스크랩(프록시 크레딧)이 아예 안 나간다.
+        if (!props.communityStoryEnabled) return emptyList()
         if (props.communityStoryTargets.isEmpty()) return emptyList()
         return props.communityStoryTargets.flatMap { target ->
             runCatching { scrapeList(target.url, target.label) }

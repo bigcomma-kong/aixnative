@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 
 /**
  * 시장 인텔리전스 자동 수집 설정. 수집 자체는 키 0개(공개 RSS·구글뉴스)로 동작하고,
- * 마켓 브리핑 합성만 무료 Mistral 키가 있을 때 켜진다(graceful).
+ * 마켓 브리핑 합성만 Claude 키가 있을 때 켜진다(graceful).
  *
  * 트리거는 Cloud Run(min-instances=0)에 맞춰 Cloud Scheduler → 토큰 보호 엔드포인트 방식.
  * [ingestToken] 미설정 시 인입 엔드포인트는 비활성(403) — 관리자 수동 트리거만 가능.
@@ -21,7 +21,7 @@ data class MarketFeedProperties(
     val maxCards: Int = 90,
     /** 구글뉴스 섹터 딜 검색 사용. */
     val googleNewsEnabled: Boolean = true,
-    /** 마켓 브리핑(AI 다이제스트) 생성 시도. 무료 AI 미설정 시 자동 생략. */
+    /** 마켓 브리핑(AI 다이제스트) 생성 시도. Claude 미설정 시 자동 생략. */
     val briefingEnabled: Boolean = true,
 ) {
     val ingestEndpointEnabled: Boolean get() = ingestToken.isNotBlank()
