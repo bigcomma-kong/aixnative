@@ -19,7 +19,7 @@ PROJECT_ID="${PROJECT_ID:-}"                  # 필수: 본인 GCP 프로젝트 
 REGION="${REGION:-asia-northeast3}"           # 서울
 AR_REPO="${AR_REPO:-aixnative}"               # Artifact Registry 저장소
 SERVICE="${SERVICE:-aixnative}"               # Cloud Run 서비스명
-SQL_INSTANCE="${SQL_INSTANCE:-aixnative-pg}"  # Cloud SQL 인스턴스
+SQL_INSTANCE="${SQL_INSTANCE:-aixnative}"     # Cloud SQL 인스턴스(2026-11 비용절감으로 교체, 구 aixnative-pg 삭제)
 DB_NAME="${DB_NAME:-aixnative}"
 DB_USER="${DB_USER:-aixnative}"
 SQL_TIER="${SQL_TIER:-db-f1-micro}"           # 최저가. 상용 트래픽 시 상향
@@ -69,10 +69,12 @@ gcloud artifacts repositories create "$AR_REPO" \
 ### ── 3. 이미지 빌드 (Cloud Build — 로컬 Docker 불필요) ────────────
 gcloud builds submit --tag "$IMAGE" .
 
-### ── 4. Cloud SQL (PostgreSQL 16) ────────────────────────────────
+### ── 4. Cloud SQL (PostgreSQL 17, 공유코어) ─────────────────────
 gcloud sql instances describe "$SQL_INSTANCE" >/dev/null 2>&1 || \
 gcloud sql instances create "$SQL_INSTANCE" \
-  --database-version=POSTGRES_16 --tier="$SQL_TIER" --region="$REGION" --storage-auto-increase
+  --database-version=POSTGRES_17 --edition=ENTERPRISE --tier="$SQL_TIER" --region="$REGION" \
+  --storage-type=SSD --storage-size=10 --no-backup
+# 공유코어(db-f1-micro)는 생성 시에만 고를 수 있다 - 전용코어로 만든 인스턴스는 나중에 공유코어로 못 바꾼다.
 
 gcloud sql databases describe "$DB_NAME" --instance="$SQL_INSTANCE" >/dev/null 2>&1 || \
 gcloud sql databases create "$DB_NAME" --instance="$SQL_INSTANCE"
@@ -132,10 +134,11 @@ gcloud run deploy "$SERVICE" \
   --add-cloudsql-instances="$ICN" \
   --set-env-vars="^|^${ENV_VARS}" \
   --set-secrets="$SECRET_MAP" \
-  --cpu=1 --memory=2Gi --min-instances=0 --max-instances=4 --port=8080 \
-  --no-cpu-throttling
-# --no-cpu-throttling: 응답을 반환한 뒤에도 백그라운드 작업(소셜 수집·이미지 재생성, AsyncIngestRunner)이
-#   완주하려면 CPU 상시 할당이 필요하다. 기본(요청 중에만 CPU)이면 응답 직후 워커가 얼어붙는다.
+  --cpu=1 --memory=2Gi --min-instances=0 --max-instances=2 --port=8080 \
+  --cpu-throttling
+# --cpu-throttling: 요청 처리 중에만 CPU/메모리 과금(유휴 인스턴스 무과금). 시장 수집·리마인더는 요청 안에서
+#   동기로 끝나므로 문제없다. 소셜 자동게시(AsyncIngestRunner, 응답 후 백그라운드)는 미사용이라 포기(2026-11).
+# --max-instances=2: db-f1-micro 동시접속 한도(~25) 대비 Hikari 풀(인스턴스당 10) 상한.
 # --memory=2Gi: 문서 업로드(PDFBox/POI)는 원본의 3~8배 힙을 쓴다. 1Gi(힙 약 768MB)에서는 동시 처리 시
 #   OOMKilled 위험. 2Gi 로 여유를 두되 동시 추출은 서비스단 세마포어로 별도 제한한다.
 
@@ -160,29 +163,9 @@ else
     --attempt-deadline=300s >/dev/null
 fi
 
-### ── 8b. Cloud Scheduler (공감랭킹 소셜 자동 수집 트리거) ──────────
-# 시장 데이터와 같은 방식. 토큰은 별개(SOCIAL_INGEST_TOKEN)라 한쪽이 새도 다른 쪽은 안전하다.
-# 수집 자체는 앱이 비동기로 돌리고 즉시 200 을 반환하므로 attempt-deadline 은 짧아도 된다.
-SOCIAL_JOB="${SOCIAL_JOB:-aixnative-social-post}"
-SOCIAL_URI="${URL}/api/ingest/social-post"
-if gcloud scheduler jobs describe "$SOCIAL_JOB" --location="$REGION" >/dev/null 2>&1; then
-  gcloud scheduler jobs update http "$SOCIAL_JOB" --location="$REGION" \
-    --schedule="$SOCIAL_CRON" --time-zone="Asia/Seoul" \
-    --uri="$SOCIAL_URI" --http-method=POST \
-    --update-headers="X-Ingest-Token=${SOCIAL_INGEST_TOKEN}" \
-    --attempt-deadline=60s >/dev/null
-else
-  gcloud scheduler jobs create http "$SOCIAL_JOB" --location="$REGION" \
-    --schedule="$SOCIAL_CRON" --time-zone="Asia/Seoul" \
-    --uri="$SOCIAL_URI" --http-method=POST \
-    --headers="X-Ingest-Token=${SOCIAL_INGEST_TOKEN}" \
-    --attempt-deadline=60s >/dev/null
-fi
-
 echo ""
 echo "✅ 배포 완료: $URL"
 echo "→ 첫 관리자: $URL 접속 후 admin@aixnative.com 으로 회원가입하면 자동 ADMIN 권한."
 echo "→ 시장 자동수집: '${SCHED_JOB}' 스케줄러 등록(${INGEST_CRON}, Asia/Seoul). 관리자 '지금 수집'으로 즉시 실행 가능."
-echo "→ 공감랭킹 수집: '${SOCIAL_JOB}' 스케줄러 등록(${SOCIAL_CRON}, Asia/Seoul). 승인 워크플로우는 관리자 콘솔에서."
 echo "→ API 키(Claude·Mistral·Toss·소셜·시장데이터)는 application-secret.yml 값으로 이미지에 반영됨. 키 바꾸려면 그 파일 수정 후 재배포."
 echo "→ 도메인 연결: deploy/README.md 의 '도메인 매핑' 참고."
