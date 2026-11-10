@@ -70,6 +70,17 @@ class ClaudeClientTest {
     }
 
     @Test
+    fun `disables thinking so reasoning does not eat the output budget`() {
+        val (client, server) = fixture(props(apiKey = "sk-ant-api-x"))
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(url))
+            .andExpect(jsonPath("$.thinking.type").value("disabled"))
+            .andRespond(withSuccess(ok("본문"), MediaType.APPLICATION_JSON))
+
+        assertEquals("본문", client.complete("prompt"))
+        server.verify()
+    }
+
+    @Test
     fun `batch calls use the cheaper batch model, not the analysis model`() {
         val (client, server) = fixture(props(apiKey = "sk-ant-api-x"))
         server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(url))

@@ -87,11 +87,11 @@
 |---|---|---|
 | `CLAUDE_OAUTH_TOKEN` | (빈 값) | 구독 OAuth 토큰(`sk-ant-oat...`, `claude setup-token` 발급). 설정 시 Bearer 인증 |
 | `CLAUDE_OAUTH_TOKENS` | (빈 값) | 추가 OAuth 토큰(쉼표 구분). `CLAUDE_OAUTH_TOKEN` 과 합쳐 2개 이상이면 라운드로빈 + 429/만료 시 다음 토큰 |
-| `CLAUDE_BATCH_MODEL` | `claude-haiku-4-5-20251001` | 배치(마켓 브리핑 등 무과금 백그라운드) 전용 모델 |
+| `CLAUDE_BATCH_MODEL` | `claude-haiku-5-5` | 배치(마켓 브리핑 등 무과금 백그라운드) 전용 모델 |
 | `CLAUDE_BATCH_MAX_TOKENS` | `4096` | 배치 모델 최대 출력 토큰 |
 | `CLAUDE_API_KEY` | (빈 값) | Anthropic API 키(`sk-ant-api...`, 신규). OAuth 미설정 시 사용 |
 | `CLAUDE_API_URL` | `https://api.anthropic.com/v1/messages` | 엔드포인트 |
-| `CLAUDE_API_MODEL` | `claude-opus-4-8` | 모델 |
+| `CLAUDE_API_MODEL` | `claude-haiku-5-5` | 모델 |
 | `CLAUDE_MAX_TOKENS` | `4096` | 최대 토큰 |
 | `CLAUDE_PRIORITY` | `0` | 라우터 우선순위(낮을수록 우선) |
 | `AI_AUTO_FALLBACK` | `true` | provider 폴백 on/off |

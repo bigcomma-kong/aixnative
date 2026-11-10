@@ -86,6 +86,10 @@ class ClaudeClient(
             put("model", model)
             put("max_tokens", maxTokens)
             put("messages", listOf(mapOf("role" to "user", "content" to prompt)))
+            // 5세대 모델(haiku-5-5 등)은 thinking 이 기본 켜짐 - 출력 한도의 절반 이상을 추론에 써서
+            // 본문이 max_tokens 에서 잘린다(실측: 8192 중 5326 소모). 분석 지시가 프롬프트에 구조화돼
+            // 있어 추론 없이도 품질이 충분하므로 명시적으로 끈다.
+            put("thinking", THINKING_DISABLED)
             // OAuth(구독) 토큰은 첫 system 블록이 이 식별 문구여야 인증을 통과한다.
             // 실제 분석 지시문은 user 프롬프트에 그대로 담겨 있어 결과 품질에는 영향이 없다.
             if (hasOauth()) put("system", OAUTH_SYSTEM)
@@ -185,6 +189,7 @@ class ClaudeClient(
     companion object {
         private const val ANTHROPIC_VERSION = "2023-06-01"
         private const val OAUTH_BETA = "oauth-2025-04-20"
+        private val THINKING_DISABLED = mapOf("type" to "disabled")
         private const val OAUTH_SYSTEM = "You are Claude Code, Anthropic's official CLI for Claude."
         // 일시 오류 재시도(5xx/429). 총 시도 = 1 + MAX_RETRIES. 백오프 = BACKOFF * (시도회차).
         private const val MAX_RETRIES = 2

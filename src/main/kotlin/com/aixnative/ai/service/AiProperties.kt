@@ -13,7 +13,7 @@ data class ClaudeProperties(
     data class Api(
         val key: String = "",
         val url: String = "https://api.anthropic.com/v1/messages",
-        val model: String = "claude-opus-4-8",
+        val model: String = "claude-haiku-5-5",
         val maxTokens: Int = 8192,
     )
 
@@ -37,7 +37,7 @@ data class ClaudeProperties(
      * 빈 값이면 [Api.model] 로 폴백.
      */
     data class Batch(
-        val model: String = "claude-haiku-4-5-20251001",
+        val model: String = "claude-haiku-5-5",
         val maxTokens: Int = 4096,
     )
 }

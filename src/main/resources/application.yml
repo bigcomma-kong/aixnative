@@ -114,7 +114,7 @@ claude:
   api:
     key: ${CLAUDE_API_KEY:}  # 🔑 값 → application-secret.yml
     url: ${CLAUDE_API_URL:https://api.anthropic.com/v1/messages}
-    model: ${CLAUDE_API_MODEL:claude-opus-4-8}
+    model: ${CLAUDE_API_MODEL:claude-haiku-5-5}
     # 종합 분석(IC메모·시장조사 등)이 잘리지 않도록 8192. provider-timeout 75s 내 완주 가능.
     max-tokens: ${CLAUDE_MAX_TOKENS:8192}
   # 구독 OAuth 토큰(sk-ant-oat...). 설정 시 Bearer 인증 사용(x-api-key 대신).
@@ -126,7 +126,7 @@ claude:
   # 배치(무인) 전용 모델 - 마켓 브리핑처럼 사용자 크레딧이 안 걸리는 백그라운드 작업용.
   # 사용자 과금 분석은 위 api.model(Opus) 유지, 매일 도는 배치만 저렴한 모델로 분리해 운영비 억제.
   batch:
-    model: ${CLAUDE_BATCH_MODEL:claude-haiku-4-5-20251001}
+    model: ${CLAUDE_BATCH_MODEL:claude-haiku-5-5}
     max-tokens: ${CLAUDE_BATCH_MAX_TOKENS:4096}
   priority: ${CLAUDE_PRIORITY:0}
 
